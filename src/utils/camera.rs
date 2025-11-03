@@ -1,5 +1,6 @@
 use bevy::{input::mouse::MouseMotion, prelude::*};
 
+use crate::utils::constants::camera_3d_constants;
 
 pub struct Camera3dFpovPlugin;
 
@@ -20,15 +21,15 @@ impl Plugin for Camera3dFpovPlugin{
 pub fn camera_3d_fpov_keyboard(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    // Query for the camera's transform
     mut camera_query: Query<&mut Transform, With<Camera3d>>,
 ) {
+    // Get Camera3D Transform
     let Ok(mut transform) = camera_query.single_mut() else {
         // No camera, or more than one camera
         return;
     };
 
-    let speed: f32 = 5.0 * time.delta_secs();
+    let speed: f32 = camera_3d_constants::CAMERA_3D_SPEED * time.delta_secs();
 
     // Get the camera's local axes
     let strafe_vector = transform.local_x();
@@ -82,7 +83,7 @@ pub fn camera_3d_fpov_mouse(
     let mut yaw = 0.0;
     let mut pitch = 0.0;
 
-    let sensitivity = 0.2 * time.delta_secs();
+    let sensitivity = camera_3d_constants::CAMERA_3D_SENSITIVITY * time.delta_secs();
 
     for event in mouse_motion_events.read() {
         yaw -= event.delta.x * sensitivity;

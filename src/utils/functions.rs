@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 
-use crate::objects::{FaceMarker, GameState, Pyramid};
+use crate::utils::objects::{FaceMarker, GameState, Pyramid};
 
 use crate::log;
 
-/// Function for defining the winning situatiom
+/// Function for defining the winning situation
 pub fn check_face_alignment(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,

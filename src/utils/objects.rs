@@ -23,3 +23,5 @@ pub struct FaceMarker {
     pub color: Color,
     pub normal: Vec3, // <-- ADDED: Store the face's normal
 }
+
+

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::log;
-use crate::objects::{FaceMarker, GameState, Pyramid, RotationSpeed};
+use crate::utils::objects::{FaceMarker, GameState, Pyramid, RotationSpeed};
 
 /// Systems
 pub fn setup(

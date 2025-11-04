@@ -14,7 +14,7 @@ impl Plugin for Camera3dFpovPlugin {
 /// Rotates around the origin with A/D and zooms in/out with W/S
 pub fn camera_3d_fpov_inputs(
     keyboard: Res<ButtonInput<KeyCode>>,
-    time: Res<Time>,
+    timer: Res<Time<Fixed>>,
     mut camera_query: Query<&mut Transform, With<Camera3d>>,
 ) {
     let Ok(mut transform) = camera_query.single_mut() else {
@@ -22,8 +22,8 @@ pub fn camera_3d_fpov_inputs(
     };
 
     // Orbit parameters
-    let speed = camera_3d_constants::CAMERA_3D_SPEED * time.delta_secs();
-    let zoom_speed = camera_3d_constants::CAMERA_3D_SPEED * 2.0 * time.delta_secs();
+    let speed = camera_3d_constants::CAMERA_3D_SPEED_X * timer.delta_secs();
+    let zoom_speed = camera_3d_constants::CAMERA_3D_SPEED_Z * timer.delta_secs();
 
     let (mut yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
     let mut radius = transform.translation.xz().length();
@@ -37,7 +37,7 @@ pub fn camera_3d_fpov_inputs(
     // Check if *any* key is pressed
     let changed = left || right || up || down;
 
-    // --- Update angles and radius ---
+    // Update angles and radius
     if left  { yaw += speed; }
     if right { yaw -= speed; }
 

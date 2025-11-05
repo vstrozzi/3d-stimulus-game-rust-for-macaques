@@ -1,8 +1,23 @@
 use bevy::prelude::*;
 
 use crate::log;
-use crate::utils::objects::{FaceMarker, GameState, Pyramid, RotationSpeed};
-use crate::utils::constants::camera_3d_constants::{CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z};
+use crate::utils::objects::{FaceMarker, GameState, Pyramid};
+use crate::utils::constants::{
+    camera_3d_constants::{
+        CAMERA_3D_INITIAL_X,
+        CAMERA_3D_INITIAL_Y,
+        CAMERA_3D_INITIAL_Z,
+    },
+    object_constants::GROUND_Y,
+    pyramid_constants::{
+        PYRAMID_BASE_RADIUS,
+        PYRAMID_HEIGHT,
+        PYRAMID_COLORS,
+        PYRAMID_TARGET_FACE_INDEX,
+        PYRAMID_ANGLE_OFFSET_RAD,
+        PYRAMID_ANGLE_INCREMENT_RAD
+    },
+};
 
 /// Plugin for handling setup
 pub struct SetupPlugin;
@@ -13,7 +28,7 @@ impl Plugin for SetupPlugin {
     }
 }
 
-/// Systems
+/// Setup the scene
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -25,6 +40,18 @@ pub fn setup(
         Camera3d::default(),
         // Start at fixed position looking at the origin
         Transform::from_xyz(CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+
+    // Ground plane
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::WHITE,
+            perceptual_roughness: 1.0,
+            ..default()
+        })),
+        Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
     // Light
@@ -40,40 +67,63 @@ pub fn setup(
     // Ambient light
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 100.0, // Bevy 0.17.0 uses a 0-100 scale here
+        brightness: 50.0, // Bevy 0.17.0 uses a 0-100 scale here
         affects_lightmapped_meshes: true,
     });
 
-    // Create pyramid - 3 triangular faces
-    let pyramid_height = 2.0;
-    let base_size = 3.0;
-
-    // Define vertices for pyramid
-    let top = Vec3::new(0.0, pyramid_height, 0.0);
-    let base_corners = [
-        Vec3::new(-base_size / 3.0, -1.0, -base_size / 3.0),
-        Vec3::new(base_size / 3.0, -1.0, -base_size / 3.0),
-        Vec3::new(base_size / 3.0,-1.0, base_size / 3.0),
-    ];
-
-    // Face colors - one will be the target (red with marker)
-    let face_colors = [
-        Color::srgb(1.0, 0.2, 0.2), // Red - TARGET FACE
-        Color::srgb(0.2, 0.5, 1.0), // Blue
-        Color::srgb(0.2, 1.0, 0.3), // Green
-    ];
+    // Spawn Pyramid by borrowing commands, meshes, materials
+    spawn_pyramid(&mut commands, &mut meshes, &mut materials);
 
     let target_face = 0; // Red face is the target
 
-    // Create 3 triangular faces
+    // Initialize game state
+    commands.insert_resource(GameState {
+        start_time: time.elapsed(),
+        is_playing: true,
+        target_face_index: target_face,
+        attempts: 0,
+    });
+
+    log!("🎮 Pyramid Game Started!");
+    log!("🎯 Find and center the RED face with the white marker");
+    log!("⌨️  Use Arrow Keys or WASD to rotate");
+    log!("␣  Press SPACE when the target face is centered");
+}
+
+
+/// Spawn a pyramid composed of 3 triangular faces
+pub fn spawn_pyramid(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>){
+
+    // Define top vertex for pyramid
+    let top = Vec3::new(0.0, PYRAMID_HEIGHT, 0.0);
+    // Build symmetric triangular vertices for base
+    let mut base_corners: [Vec3; 3] = [Vec3::ZERO; 3];
+    let mut prev_xz = Vec2::new(PYRAMID_BASE_RADIUS* PYRAMID_ANGLE_OFFSET_RAD.cos(), PYRAMID_BASE_RADIUS * PYRAMID_ANGLE_OFFSET_RAD.sin());
+    base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
+    // Compute constants
+    let pyramid_angle_increment_cos: f32 = PYRAMID_ANGLE_INCREMENT_RAD.cos();
+    let pyramid_angle_increment_sin: f32 = PYRAMID_ANGLE_INCREMENT_RAD.sin();
+    for i in 1..3{
+        // Construct new corner by rotating from previous on 2D base-circle of pyramid in xz-plane
+        let x = prev_xz.x * pyramid_angle_increment_cos - prev_xz.y * pyramid_angle_increment_sin;
+        let z = prev_xz.y * pyramid_angle_increment_cos + prev_xz.x * pyramid_angle_increment_sin;
+
+        prev_xz = Vec2::new(x, z);
+        // Save new vertex
+        base_corners[i] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
+    }
+
+    // Create triangular faces independently
     for i in 0..3 {
         let next = (i + 1) % 3;
 
+        // Create triangular mesh for face
         let mut mesh = Mesh::new(
             bevy::mesh::PrimitiveTopology::TriangleList,
             Default::default(),
         );
 
+        // Define positions
         let positions = vec![
             top.to_array(),
             base_corners[i].to_array(),
@@ -93,10 +143,10 @@ pub fn setup(
             vec![[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]],
         );
 
-        let mut material_color = face_colors[i];
+        let mut material_color = PYRAMID_COLORS[i];
 
         // Add a small square marker to the target face
-        if i == target_face {
+        if i == PYRAMID_TARGET_FACE_INDEX {
             material_color = Color::srgb(1.0, 0.3, 0.3);
         }
 
@@ -112,39 +162,10 @@ pub fn setup(
             Pyramid,
             FaceMarker {
                 face_index: i,
-                color: face_colors[i],
+                color: PYRAMID_COLORS[i],
                 normal: normal, // <-- Store the calculated normal
             },
         ));
     }
 
-    // Add small cube marker on target face
-    let face_center = (top + base_corners[target_face] + base_corners[1]) / 3.0;
-    let marker_offset = (face_center - Vec3::new(0.0, -10.0, 0.0)).normalize() * 0.1;
-
-    commands.spawn((
-        Mesh3d(meshes.add(Cuboid::new(0.2, 0.2, 0.2))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            emissive: LinearRgba::rgb(2.0, 2.0, 2.0),
-            ..default()
-        })),
-        Transform::from_translation(face_center + marker_offset),
-        Pyramid,
-    ));
-
-    // Initialize game state
-    commands.insert_resource(GameState {
-        start_time: time.elapsed(),
-        is_playing: true,
-        target_face_index: target_face,
-        attempts: 0,
-    });
-
-    commands.insert_resource(RotationSpeed(1.0));
-
-    log!("🎮 Pyramid Game Started!");
-    log!("🎯 Find and center the RED face with the white marker");
-    log!("⌨️  Use Arrow Keys or WASD to rotate");
-    log!("␣  Press SPACE when the target face is centered");
 }

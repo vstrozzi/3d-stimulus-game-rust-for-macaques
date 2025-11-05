@@ -1,5 +1,5 @@
 use bevy::{prelude::*};
-use crate::utils::constants::camera_3d_constants::{self, MAX_RADIUS, MIN_RADIUS};
+use crate::utils::constants::camera_3d_constants::{CAMERA_3D_SPEED_X, CAMERA_3D_SPEED_Z, MIN_RADIUS, MAX_RADIUS, CAMERA_3D_INITIAL_Y};
 
 pub struct Camera3dFpovPlugin;
 
@@ -22,8 +22,8 @@ pub fn camera_3d_fpov_inputs(
     };  
 
     // Orbit parameters
-    let speed = camera_3d_constants::CAMERA_3D_SPEED_X * timer.delta_secs();
-    let zoom_speed = camera_3d_constants::CAMERA_3D_SPEED_Z * timer.delta_secs();
+    let speed = CAMERA_3D_SPEED_X * timer.delta_secs();
+    let zoom_speed = CAMERA_3D_SPEED_Z * timer.delta_secs();
 
     let (mut yaw, _, _) = transform.rotation.to_euler(EulerRot::YXZ);
     let mut radius = transform.translation.xz().length();
@@ -38,8 +38,8 @@ pub fn camera_3d_fpov_inputs(
     let changed = left || right || up || down;
 
     // Update angles and radius
-    if left  { yaw += speed; }
-    if right { yaw -= speed; }
+    if left  { yaw -= speed; }
+    if right { yaw += speed; }
 
     if up    { radius -= zoom_speed; }
     if down  { radius += zoom_speed; }
@@ -52,7 +52,7 @@ pub fn camera_3d_fpov_inputs(
     if changed {
         transform.translation = Vec3::new(
         radius * yaw.sin(),
-        0.0,  // keep same height
+        CAMERA_3D_INITIAL_Y,  // keep same height
         radius * yaw.cos(),
         );
     }

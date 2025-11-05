@@ -10,9 +10,6 @@ pub struct GameState {
     pub attempts: u32,
 }
 
-#[derive(Resource)]
-pub struct RotationSpeed(pub f32);
-
 /// Components
 #[derive(Component)]
 pub struct Pyramid;

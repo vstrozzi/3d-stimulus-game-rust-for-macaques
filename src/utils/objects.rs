@@ -20,3 +20,7 @@ pub struct FaceMarker {
     pub color: Color,
     pub normal: Vec3,
 }
+
+// All the entities in the game that are cleared and respawn by setup
+#[derive(Component)]
+pub struct GameEntity;

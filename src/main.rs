@@ -1,14 +1,13 @@
 use bevy::{
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     window::*,
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin}};
+};
 
 use monkey_3d_game::utils::{
-    camera::Camera3dFpovPlugin,
-    constants::game_constants::REFRESH_RATE_HZ,
-    functions::FunctionsPlugin,
-    inputs::InputsPlugin,
-    setup::SetupPlugin,
+    camera::Camera3dFpovPlugin, constants::game_constants::REFRESH_RATE_HZ,
+    debug_functions::DebugFunctionsPlugin, game_functions::GameFunctionsPlugin,
+    inputs::InputsPlugin, setup::SetupPlugin,
 };
 
 /// Main application function
@@ -24,7 +23,7 @@ fn main() {
         #[cfg(not(target_arch = "wasm32"))]
         mode: WindowMode::Fullscreen(MonitorSelection::Primary, VideoModeSelection::Current),
         // Enable vsync
-        present_mode: PresentMode::AutoVsync,   
+        present_mode: PresentMode::AutoVsync,
         ..default()
     });
 
@@ -36,20 +35,22 @@ fn main() {
     });
 
     App::new()
-        .add_plugins((DefaultPlugins.set(WindowPlugin {
-            primary_window: window,
-            primary_cursor_options: cursor,
-            ..default()
-        }),
-        // DEBUG PLUGINS
-        LogDiagnosticsPlugin::default(),
-        FrameTimeDiagnosticsPlugin::default(),
+        .add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: window,
+                primary_cursor_options: cursor,
+                ..default()
+            }),
+            // DEBUG PLUGINS
+            LogDiagnosticsPlugin::default(),
+            FrameTimeDiagnosticsPlugin::default(),
         ))
         // My Plugin
         .add_plugins(SetupPlugin)
-        .add_plugins(FunctionsPlugin)
+        .add_plugins(GameFunctionsPlugin)
         .add_plugins(Camera3dFpovPlugin)
         .add_plugins(InputsPlugin)
+        .add_plugins(DebugFunctionsPlugin)
         // Timer for physics (fixed timestep timer)
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
         .run();

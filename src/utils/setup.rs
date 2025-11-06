@@ -1,23 +1,15 @@
 use bevy::prelude::*;
 
 use crate::log;
-use crate::utils::objects::{FaceMarker, GameState, Pyramid};
 use crate::utils::constants::{
-    camera_3d_constants::{
-        CAMERA_3D_INITIAL_X,
-        CAMERA_3D_INITIAL_Y,
-        CAMERA_3D_INITIAL_Z,
-    },
+    camera_3d_constants::{CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z},
     object_constants::GROUND_Y,
     pyramid_constants::{
-        PYRAMID_BASE_RADIUS,
+        PYRAMID_ANGLE_INCREMENT_RAD, PYRAMID_ANGLE_OFFSET_RAD, PYRAMID_BASE_RADIUS, PYRAMID_COLORS,
         PYRAMID_HEIGHT,
-        PYRAMID_COLORS,
-        PYRAMID_TARGET_FACE_INDEX,
-        PYRAMID_ANGLE_OFFSET_RAD,
-        PYRAMID_ANGLE_INCREMENT_RAD
     },
 };
+use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid};
 
 /// Plugin for handling setup
 pub struct SetupPlugin;
@@ -39,9 +31,14 @@ pub fn setup(
     commands.spawn((
         Camera3d::default(),
         // Start at fixed position looking at the origin
-        Transform::from_xyz(CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(
+            CAMERA_3D_INITIAL_X,
+            CAMERA_3D_INITIAL_Y,
+            CAMERA_3D_INITIAL_Z,
+        )
+        .looking_at(Vec3::ZERO, Vec3::Y),
+        GameEntity,
     ));
-
 
     // Ground plane
     commands.spawn((
@@ -52,6 +49,7 @@ pub fn setup(
             ..default()
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
+        GameEntity,
     ));
 
     // Light
@@ -62,6 +60,7 @@ pub fn setup(
             ..default()
         },
         Transform::from_xyz(2.0, 2.0, -2.0),
+        GameEntity,
     ));
 
     // Ambient light
@@ -90,20 +89,25 @@ pub fn setup(
     log!("␣  Press SPACE when the target face is centered");
 }
 
-
 /// Spawn a pyramid composed of 3 triangular faces
-pub fn spawn_pyramid(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>){
-
+pub fn spawn_pyramid(
+    commands: &mut Commands,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+) {
     // Define top vertex for pyramid
     let top = Vec3::new(0.0, PYRAMID_HEIGHT, 0.0);
     // Build symmetric triangular vertices for base
     let mut base_corners: [Vec3; 3] = [Vec3::ZERO; 3];
-    let mut prev_xz = Vec2::new(PYRAMID_BASE_RADIUS* PYRAMID_ANGLE_OFFSET_RAD.cos(), PYRAMID_BASE_RADIUS * PYRAMID_ANGLE_OFFSET_RAD.sin());
+    let mut prev_xz = Vec2::new(
+        PYRAMID_BASE_RADIUS * PYRAMID_ANGLE_OFFSET_RAD.cos(),
+        PYRAMID_BASE_RADIUS * PYRAMID_ANGLE_OFFSET_RAD.sin(),
+    );
     base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
     // Compute constants
     let pyramid_angle_increment_cos: f32 = PYRAMID_ANGLE_INCREMENT_RAD.cos();
     let pyramid_angle_increment_sin: f32 = PYRAMID_ANGLE_INCREMENT_RAD.sin();
-    for i in 1..3{
+    for i in 1..3 {
         // Construct new corner by rotating from previous on 2D base-circle of pyramid in xz-plane
         let x = prev_xz.x * pyramid_angle_increment_cos - prev_xz.y * pyramid_angle_increment_sin;
         let z = prev_xz.y * pyramid_angle_increment_cos + prev_xz.x * pyramid_angle_increment_sin;
@@ -113,47 +117,44 @@ pub fn spawn_pyramid(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>,
         base_corners[i] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
     }
 
-    // Create triangular faces independently
+    // Create triangular faces meshes independently
     for i in 0..3 {
         let next = (i + 1) % 3;
 
-        // Create triangular mesh for face
+        // Create triangular Mesh for face
         let mut mesh = Mesh::new(
             bevy::mesh::PrimitiveTopology::TriangleList,
             Default::default(),
         );
 
-        // Define positions
+        // Define positions of the face-triangle's vertices
         let positions = vec![
-            top.to_array(),
+            top.to_array(), // Top vertex
             base_corners[i].to_array(),
             base_corners[next].to_array(),
         ];
 
-        // Calculate normal
+        // Calculate normal vector on the 2-D plane on the face for the lighting and shading
         let v1 = base_corners[i] - top;
         let v2 = base_corners[next] - top;
-        let normal = v1.cross(v2).normalize(); // <-- This is the face's normal
+        let normal = v1.cross(v2).normalize();
+
+        // Save the normal of each vertex (same)
         let normals = vec![normal.to_array(); 3];
 
+        // Insert the positions, normals, and UVs for each vertex into the mesh
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         mesh.insert_attribute(
             Mesh::ATTRIBUTE_UV_0,
-            vec![[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]],
+            vec![[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]], // How to derive the texture to put into the triangular shape (flipped vertically)
         );
 
-        let mut material_color = PYRAMID_COLORS[i];
-
-        // Add a small square marker to the target face
-        if i == PYRAMID_TARGET_FACE_INDEX {
-            material_color = Color::srgb(1.0, 0.3, 0.3);
-        }
-
+        // Spawn the face entity with mesh, material, transform, and components
         commands.spawn((
             Mesh3d(meshes.add(mesh)),
             MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: material_color,
+                base_color: PYRAMID_COLORS[i],
                 cull_mode: None, // Disable backface culling - render both sides
                 double_sided: true,
                 ..default()
@@ -163,9 +164,9 @@ pub fn spawn_pyramid(commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>,
             FaceMarker {
                 face_index: i,
                 color: PYRAMID_COLORS[i],
-                normal: normal, // <-- Store the calculated normal
+                normal: normal,
             },
+            GameEntity,
         ));
     }
-
 }

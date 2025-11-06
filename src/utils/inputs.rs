@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
-use bevy::window::{WindowMode, PrimaryWindow, CursorOptions, MonitorSelection, VideoModeSelection, CursorGrabMode};
+use bevy::window::{
+    CursorGrabMode, CursorOptions, MonitorSelection, PrimaryWindow, VideoModeSelection, WindowMode,
+};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -22,15 +24,18 @@ pub fn toggle_display_cursor_mode_ring(window: &mut Window, cursor: &mut CursorO
     DISPLAY_RING_IDX.store(next, Ordering::SeqCst);
 
     let (mode, grab, visible) = match next {
-        1
-         => (WindowMode::Windowed, CursorGrabMode::None, true),
-        0 => (WindowMode::Fullscreen(MonitorSelection::Current, VideoModeSelection::Current), CursorGrabMode::Locked, false),
+        1 => (WindowMode::Windowed, CursorGrabMode::None, true),
+        0 => (
+            WindowMode::Fullscreen(MonitorSelection::Current, VideoModeSelection::Current),
+            CursorGrabMode::Locked,
+            false,
+        ),
         _ => unreachable!(),
     };
 
     #[cfg(not(target_arch = "wasm32"))]
     {
-    window.mode = mode;
+        window.mode = mode;
     }
 
     cursor.grab_mode = grab;
@@ -41,13 +46,13 @@ pub fn toggle_display_cursor_mode_ring(window: &mut Window, cursor: &mut CursorO
 pub fn handle_keyboard_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    mut cursor: Query<&mut CursorOptions>,)
- { 
+    mut cursor: Query<&mut CursorOptions>,
+) {
     // If escape is pressed, cycle between release cursor and size of window
     if keyboard.just_pressed(KeyCode::Escape) {
         let mut window = windows.single_mut().unwrap();
         let mut cursor = cursor.single_mut().unwrap();
         println!("our window mode is {:?}", window.mode);
-        toggle_display_cursor_mode_ring(&mut window, &mut cursor );
+        toggle_display_cursor_mode_ring(&mut window, &mut cursor);
     }
 }

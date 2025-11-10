@@ -4,7 +4,7 @@ use std::time::Duration;
 use rand_chacha::ChaCha8Rng;
 /// Pyramid types
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyramidType {
     Type1,
     Type2,

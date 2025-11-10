@@ -85,6 +85,7 @@ pub fn setup(
 // Initialize game state resource with random values
 pub fn setup_game_state(commands: &mut Commands, time: &Res<Time>) -> GameState {
     // Create Random Structure
+    #[allow(unused_assignments)]
     let mut random_seed = 0;
     unsafe{ 
         SEED += 1;
@@ -102,8 +103,17 @@ pub fn setup_game_state(commands: &mut Commands, time: &Res<Time>) -> GameState 
     );
 
     let pyramid_start_orientation_radius = random_gen.random_range(PYRAMID_ANGLE_OFFSET_RAD_MIN..PYRAMID_ANGLE_OFFSET_RAD_MAX);
-    let pyramid_target_face_index = random_gen.next_u64() % 3;
+    let pyramid_target_face_index = 0;
 
+    let mut pyramid_colors =  PYRAMID_COLORS;
+    // Set same colors for two sides if Type2
+    if pyramid_type == PyramidType::Type2 {
+        if random_gen.next_u64() % 2 == 0 {
+            pyramid_colors[1] = pyramid_colors[2];
+        } else {
+            pyramid_colors[2] = pyramid_colors[1];
+        }
+    }
     let game_state = GameState {
         random_seed: random_seed,
         random_gen: Some(random_gen),
@@ -112,7 +122,7 @@ pub fn setup_game_state(commands: &mut Commands, time: &Res<Time>) -> GameState 
         pyramid_height: pyramid_height,
         pyramid_target_face_index: pyramid_target_face_index as usize,
         pyramid_start_orientation_radius: pyramid_start_orientation_radius,
-        pyramid_color_faces: PYRAMID_COLORS,
+        pyramid_color_faces: pyramid_colors,
         
         is_playing: true,
         is_started: false,
@@ -125,6 +135,7 @@ pub fn setup_game_state(commands: &mut Commands, time: &Res<Time>) -> GameState 
         attempts: 0,
         cosine_alignment: None,
     };
+
 
     println!("{:?}", game_state);
     // Initialize game state
@@ -142,9 +153,6 @@ pub fn spawn_pyramid(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     game_state: &GameState,
 ) {
-
-    println!("{:?}", game_state);
-
     // Define top vertex for pyramid
     let top = Vec3::new(0.0, game_state.pyramid_height, 0.0);
     // Build symmetric triangular vertices for base
@@ -214,7 +222,7 @@ pub fn spawn_pyramid(
             FaceMarker {
                 face_index: i,
                 color: game_state.pyramid_color_faces[i],
-                normal: normal,
+                normal: if game_state.pyramid_type == PyramidType::Type1 {normal} else {-normal},
             },
             GameEntity,
         ));

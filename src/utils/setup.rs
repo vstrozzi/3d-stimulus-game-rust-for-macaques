@@ -4,12 +4,16 @@ use crate::log;
 use crate::utils::constants::{
     camera_3d_constants::{CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z},
     object_constants::GROUND_Y,
-    pyramid_constants::{
-        PYRAMID_ANGLE_INCREMENT_RAD, PYRAMID_ANGLE_OFFSET_RAD, PYRAMID_BASE_RADIUS, PYRAMID_COLORS,
-        PYRAMID_HEIGHT,
+    pyramid_constants::*,
+    game_constants::{
+        SEED
     },
 };
-use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid};
+use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid, PyramidType};
+
+use rand::{Rng, RngCore, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+
 
 /// Plugin for handling setup
 pub struct SetupPlugin;
@@ -70,23 +74,65 @@ pub fn setup(
         affects_lightmapped_meshes: true,
     });
 
-    // Spawn Pyramid by borrowing commands, meshes, materials
-    spawn_pyramid(&mut commands, &mut meshes, &mut materials);
-
-    let target_face = 0; // Red face is the target
-
     // Initialize game state
-    commands.insert_resource(GameState {
-        start_time: time.elapsed(),
-        is_playing: true,
-        target_face_index: target_face,
-        attempts: 0,
-    });
+    let game_state = setup_game_state(&mut commands, &time);
+    // Spawn Pyramid by borrowing commands, meshes, materials
+    spawn_pyramid(&mut commands, &mut meshes, &mut materials, &game_state);
 
     log!("🎮 Pyramid Game Started!");
-    log!("🎯 Find and center the RED face with the white marker");
-    log!("⌨️  Use Arrow Keys or WASD to rotate");
-    log!("␣  Press SPACE when the target face is centered");
+}
+
+// Initialize game state resource with random values
+pub fn setup_game_state(commands: &mut Commands, time: &Res<Time>) -> GameState {
+    // Create Random Structure
+    let mut random_seed = 0;
+    unsafe{ 
+        SEED += 1;
+        random_seed = SEED;
+    }
+    let mut random_gen = ChaCha8Rng::seed_from_u64(random_seed);
+
+    // Define the random pyramid parameters
+    let pyramid_type = if random_gen.next_u64() % 2 == 0 { PyramidType::Type1 } else { PyramidType::Type2 };
+    let pyramid_base_radius = random_gen.random_range(
+        PYRAMID_BASE_RADIUS_MIN..=PYRAMID_BASE_RADIUS_MAX,
+    );
+    let pyramid_height = random_gen.random_range(
+        PYRAMID_HEIGHT_MIN..=PYRAMID_HEIGHT_MAX,
+    );
+
+    let pyramid_start_orientation_radius = random_gen.random_range(PYRAMID_ANGLE_OFFSET_RAD_MIN..PYRAMID_ANGLE_OFFSET_RAD_MAX);
+    let pyramid_target_face_index = random_gen.next_u64() % 3;
+
+    let game_state = GameState {
+        random_seed: random_seed,
+        random_gen: Some(random_gen),
+        pyramid_type: pyramid_type,
+        pyramid_base_radius: pyramid_base_radius,
+        pyramid_height: pyramid_height,
+        pyramid_target_face_index: pyramid_target_face_index as usize,
+        pyramid_start_orientation_radius: pyramid_start_orientation_radius,
+        pyramid_color_faces: PYRAMID_COLORS,
+        
+        is_playing: true,
+        is_started: false,
+        is_won: false,
+        is_changed: true,
+
+        start_time: Some(time.elapsed()),
+        end_time: None,
+
+        attempts: 0,
+        cosine_alignment: None,
+    };
+
+    println!("{:?}", game_state);
+    // Initialize game state
+    let cloned_game_state = game_state.clone();
+    commands.insert_resource(game_state);
+
+    return cloned_game_state;
+    
 }
 
 /// Spawn a pyramid composed of 3 triangular faces
@@ -94,14 +140,18 @@ pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    game_state: &GameState,
 ) {
+
+    println!("{:?}", game_state);
+
     // Define top vertex for pyramid
-    let top = Vec3::new(0.0, PYRAMID_HEIGHT, 0.0);
+    let top = Vec3::new(0.0, game_state.pyramid_height, 0.0);
     // Build symmetric triangular vertices for base
     let mut base_corners: [Vec3; 3] = [Vec3::ZERO; 3];
     let mut prev_xz = Vec2::new(
-        PYRAMID_BASE_RADIUS * PYRAMID_ANGLE_OFFSET_RAD.cos(),
-        PYRAMID_BASE_RADIUS * PYRAMID_ANGLE_OFFSET_RAD.sin(),
+        game_state.pyramid_base_radius * game_state.pyramid_start_orientation_radius.cos(),
+        game_state.pyramid_base_radius * game_state.pyramid_start_orientation_radius.sin(),
     );
     base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
     // Compute constants
@@ -154,7 +204,7 @@ pub fn spawn_pyramid(
         commands.spawn((
             Mesh3d(meshes.add(mesh)),
             MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: PYRAMID_COLORS[i],
+                base_color: game_state.pyramid_color_faces[i],
                 cull_mode: None, // Disable backface culling - render both sides
                 double_sided: true,
                 ..default()
@@ -163,7 +213,7 @@ pub fn spawn_pyramid(
             Pyramid,
             FaceMarker {
                 face_index: i,
-                color: PYRAMID_COLORS[i],
+                color: game_state.pyramid_color_faces[i],
                 normal: normal,
             },
             GameEntity,

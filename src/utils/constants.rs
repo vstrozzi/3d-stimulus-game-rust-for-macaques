@@ -20,10 +20,16 @@ pub mod object_constants {
 pub mod pyramid_constants {
     use bevy::prelude::Color;
 
-    pub const PYRAMID_BASE_RADIUS: f32 = 1.0;
-    pub const PYRAMID_HEIGHT: f32 = 2.0;
-    pub const PYRAMID_ANGLE_OFFSET_RAD: f32 = 75.0 * (std::f32::consts::PI / 180.0);
-    pub static PYRAMID_ANGLE_INCREMENT_RAD: f32 = 120.0 * (std::f32::consts::PI / 180.0);
+    pub const PYRAMID_BASE_RADIUS_MIN: f32 = 1.0;
+    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 1.0;
+
+    pub const PYRAMID_HEIGHT_MIN: f32 = 2.0;
+    pub const PYRAMID_HEIGHT_MAX: f32 = 2.0;
+
+    pub static PYRAMID_ANGLE_OFFSET_RAD_MIN: f32 = 0.0 * (std::f32::consts::PI / 180.0);
+    pub static PYRAMID_ANGLE_OFFSET_RAD_MAX: f32 = 360.0 * (std::f32::consts::PI / 180.0);
+
+    pub const PYRAMID_ANGLE_INCREMENT_RAD: f32 = 120.0 * (std::f32::consts::PI / 180.0);
 
     pub const PYRAMID_COLORS: [Color; 3] = [
         Color::srgb(1.0, 0.2, 0.2),
@@ -37,4 +43,7 @@ pub mod pyramid_constants {
 /// Game constants
 pub mod game_constants {
     pub const REFRESH_RATE_HZ: f64 = 60.0; // Hz
+
+    pub static mut SEED: u64 = 420;
+    pub const COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD: f32 = -0.9; // Cosine of angle between camera forward and face normal
 }

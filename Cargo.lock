@@ -2970,6 +2970,8 @@ dependencies = [
  "bevy",
  "console",
  "log",
+ "rand",
+ "rand_chacha",
  "web-sys",
 ]
 

@@ -20,6 +20,12 @@ pub fn camera_3d_fpov_inputs(
     mut camera_query: Query<&mut Transform, With<Camera3d>>,
     game_state: ResMut<GameState>,
 ) {
+
+    // Don't update if game state is stopped or not yet started
+    if !game_state.is_playing || !game_state.is_started {
+        return;
+    }
+
     let Ok(mut transform) = camera_query.single_mut() else {
         return;
     };
@@ -38,7 +44,7 @@ pub fn camera_3d_fpov_inputs(
     let down = keyboard.pressed(KeyCode::ArrowDown) || keyboard.pressed(KeyCode::KeyS);
 
     // Check if *any* key is pressed
-    let mut changed = left || right || up || down;
+    let changed = left || right || up || down;
 
     // Update angles and radius
     if left {
@@ -58,10 +64,6 @@ pub fn camera_3d_fpov_inputs(
     // Clamp zoom range
     radius = radius.clamp(MIN_RADIUS, MAX_RADIUS);
 
-    // Don't update if game state is stopped
-    if !game_state.is_playing {
-        changed = false;
-    }
 
     // Compute new position relative to the origin
     if changed {

@@ -7,7 +7,7 @@ use bevy::{
 use monkey_3d_game::utils::{
     camera::Camera3dFpovPlugin, constants::game_constants::REFRESH_RATE_HZ,
     debug_functions::DebugFunctionsPlugin, game_functions::GameFunctionsPlugin,
-    inputs::InputsPlugin, setup::SetupPlugin,
+    inputs::InputsPlugin, setup::SetupPlugin, objects::GameState,
 };
 
 /// Main application function
@@ -23,7 +23,7 @@ fn main() {
         #[cfg(not(target_arch = "wasm32"))]
         mode: WindowMode::Fullscreen(MonitorSelection::Primary, VideoModeSelection::Current),
         // Enable vsync
-        present_mode: PresentMode::AutoVsync,
+        present_mode: PresentMode::AutoNoVsync,
         ..default()
     });
 
@@ -53,5 +53,6 @@ fn main() {
         .add_plugins(DebugFunctionsPlugin)
         // Timer for physics (fixed timestep timer)
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
+        .insert_resource(GameState::default())
         .run();
 }

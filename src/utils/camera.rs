@@ -1,5 +1,5 @@
 use crate::utils::constants::camera_3d_constants::{
-    CAMERA_3D_INITIAL_Y, CAMERA_3D_SPEED_X, CAMERA_3D_SPEED_Z, MAX_RADIUS, MIN_RADIUS,
+    CAMERA_3D_INITIAL_Y, CAMERA_3D_SPEED_X, CAMERA_3D_SPEED_Z, CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
 use crate::utils::objects::GameState;
 use bevy::prelude::*;
@@ -62,7 +62,7 @@ pub fn camera_3d_fpov_inputs(
     }
 
     // Clamp zoom range
-    radius = radius.clamp(MIN_RADIUS, MAX_RADIUS);
+    radius = radius.clamp(CAMERA_3D_MIN_RADIUS, CAMERA_3D_MAX_RADIUS);
 
 
     // Compute new position relative to the origin

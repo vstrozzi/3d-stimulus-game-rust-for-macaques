@@ -21,9 +21,9 @@ fn main() {
         prevent_default_event_handling: false,
         // Set fullscreen on default (not working on wasm)
         #[cfg(not(target_arch = "wasm32"))]
-        mode: WindowMode::Fullscreen(MonitorSelection::Primary, VideoModeSelection::Current),
+        mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
         // Enable vsync
-        present_mode: PresentMode::AutoNoVsync,
+        present_mode: PresentMode::AutoVsync,
         ..default()
     });
 
@@ -45,6 +45,7 @@ fn main() {
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
         ))
+        
         // My Plugin
         .add_plugins(SetupPlugin)
         .add_plugins(GameFunctionsPlugin)

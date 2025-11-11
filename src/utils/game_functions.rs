@@ -6,8 +6,6 @@ use crate::utils::constants::game_constants::{COSINE_ALIGNMENT_CAMERA_FACE_THRES
 /// Plugin for handling functions
 pub struct GameFunctionsPlugin;
 
-
-
 impl Plugin for GameFunctionsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
@@ -103,11 +101,12 @@ pub fn check_face_alignment(
         for (face_transform, face_marker) in &face_query {
             // Get face normal in world space
             // The local normal is stored in `face_marker.normal`
-            let face_normal = (face_transform.rotation * (face_marker.normal)).normalize();
-
-            // Calculate alignment (dot product)
-            // A perfect alignment is -1.0 (camera forward = -face normal)
-            let alignment = face_normal.dot(*camera_forward);
+            let face_normal = (face_transform.rotation * (face_marker.normal )).normalize();
+            
+            // Project down to XZ plane
+            let face_normal_xz = Vec3::new(face_normal.x, 0.0, face_normal.z).normalize();
+            // Calculate alignment (dot product) of camera direction and face normal
+            let alignment = face_normal_xz.dot(*camera_forward);
 
             if alignment < best_alignment {
                 best_alignment = alignment;
@@ -168,10 +167,8 @@ pub fn game_ui(
     // Game is started but not yet playing
     else if game_state.is_started == false {
         // Spawn text centered in the screen
-        spawn_centered_text_black_screen(
-            &mut commands,
-            "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check",
-        );
+        let text = "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
+        spawn_centered_text_black_screen(&mut commands, text);
         // The game state has changed
         game_state.is_changed = true;
     }
@@ -195,17 +192,17 @@ pub fn game_ui(
         // Win text
         let mut text = format!(
             "Refresh (R) to play again\n\n\
-            🎉 CONGRATULATIONS! YOU WIN!\n\
-            ⏱️ Time taken: {:.5} seconds\n\
-            🎯 Attempts: {}\n\
-            📊 Alignment accuracy: {:.1}%",
+            CONGRATULATIONS! YOU WIN!\n\
+            - Time taken: {:.5} seconds\n\
+            - Attempts: {}\n\
+            - Alignment accuracy: {:.1}%",
             elapsed,
             game_state.attempts,
             accuracy
         );
 
         if game_state.attempts == 1 {
-            text.push_str("\n⭐ PERFECT! First try!");
+            text.push_str("\nPERFECT! First try!");
         }
 
         // Spawn text centered in the screen
@@ -215,7 +212,7 @@ pub fn game_ui(
     }
     // Game is ongoing, show instructions and status
     else{ 
-        let text = format!("Arrow Keys/WASD: Rotate | SPACE: Check \n🎯 Find the RED face! | Attempts: {}", game_state.attempts);
+        let text = format!("Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}", game_state.attempts);
         // Spawn text
         commands.spawn((
             Text::new(text),

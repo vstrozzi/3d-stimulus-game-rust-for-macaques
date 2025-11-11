@@ -16,6 +16,15 @@ impl Default for PyramidType {
     }
 }
 
+/// Possible decoration shapes
+#[derive(Clone, Copy)]
+pub enum DecorationShape {
+    Circle,
+    Square,
+    Star,
+    Triangle,
+}
+
 /// Resources
 #[derive(Resource, Clone, Default, Debug)]
 pub struct GameState {

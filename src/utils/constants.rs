@@ -7,8 +7,8 @@ pub mod camera_3d_constants {
     pub const CAMERA_3D_SPEED_X: f32 = 2.0;
     pub const CAMERA_3D_SPEED_Z: f32 = 4.0;
 
-    pub const MIN_RADIUS: f32 = 5.0;
-    pub const MAX_RADIUS: f32 = 20.0;
+    pub const CAMERA_3D_MIN_RADIUS: f32 = 5.0;
+    pub const CAMERA_3D_MAX_RADIUS: f32 = 50.0;
 }
 
 /// Object constants
@@ -21,10 +21,10 @@ pub mod pyramid_constants {
     use bevy::prelude::Color;
 
     pub const PYRAMID_BASE_RADIUS_MIN: f32 = 1.0;
-    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 1.0;
+    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 5.0;
 
     pub const PYRAMID_HEIGHT_MIN: f32 = 2.0;
-    pub const PYRAMID_HEIGHT_MAX: f32 = 2.0;
+    pub const PYRAMID_HEIGHT_MAX: f32 = 7.0;
 
     pub static PYRAMID_ANGLE_OFFSET_RAD_MIN: f32 = 0.0 * (std::f32::consts::PI / 180.0);
     pub static PYRAMID_ANGLE_OFFSET_RAD_MAX: f32 = 360.0 * (std::f32::consts::PI / 180.0);
@@ -38,12 +38,24 @@ pub mod pyramid_constants {
     ];
 
     pub const PYRAMID_TARGET_FACE_INDEX: usize = 0;
+
+
+    // Constants for face decorations 
+    pub const DECORATION_COUNT_MIN: usize = 10;
+    pub const DECORATION_COUNT_MAX: usize = 100;
+    pub const DECORATION_SIZE_MIN: f32 = 0.05;
+    pub const DECORATION_SIZE_MAX: f32 = 0.15;
+    pub const DECORATION_OFFSET_RANGE: f32 = 0.3; // How far from center decorations can be placed
+
 }
 
-/// Game constants
+/// Generic Game constants
 pub mod game_constants {
     pub const REFRESH_RATE_HZ: f64 = 60.0; // Hz
 
-    pub static mut SEED: u64 = 420;
-    pub const COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD: f32 = -0.9; // Cosine of angle between camera forward and face normal
+    pub static mut SEED: u64 = 69;
+
+    pub const FONT_PATH: &str = "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf";
+
+    pub const COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD: f32 = -0.9; // Allowed misalignment camera and correct face normal
 }

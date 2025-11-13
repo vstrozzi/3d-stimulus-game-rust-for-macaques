@@ -28,9 +28,21 @@ pub enum DecorationShape {
     Triangle,
 }
 
+/// Game state enum representing the different states the game can be in
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum GamePhase {
+    #[default]
+    NotStarted,
+    Playing,
+    Won,
+}
+
 /// A resource that holds the current state of the game.
 #[derive(Resource, Clone, Default, Debug)]
 pub struct GameState {
+    // Game state - using state machine pattern
+    /// The current phase of the game
+    pub phase: GamePhase,
     // Game values
     // The seed used for random number generation.
     pub random_seed: u64,
@@ -47,14 +59,8 @@ pub struct GameState {
     // The colors of the pyramid faces.
     pub pyramid_color_faces: [Color; 3],
 
-    // Game state flags
-    // A flag indicating whether the game is currently being played.
-    pub is_playing: bool,
-    // A flag indicating whether the game has started.
-    pub is_started: bool,
-    // A flag indicating whether the game has been won.
-    pub is_won: bool,
-    // A flag indicating whether the game state has changed.
+    // State change tracking
+    /// A flag indicating whether the game state has changed.
     pub is_changed: bool,
 
     // Timing

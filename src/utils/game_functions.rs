@@ -2,7 +2,9 @@
 use bevy::prelude::*;
 
 use crate::utils::constants::game_constants::COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD;
-use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid, RandomGen, UIEntity};
+use crate::utils::objects::{
+    FaceMarker, GameEntity, GamePhase, GameState, Pyramid, RandomGen, UIEntity,
+};
 use crate::utils::setup::setup;
 
 /// A plugin for handling game functions, including checking for face alignment and managing the game UI.
@@ -80,8 +82,8 @@ pub fn check_face_alignment(
     camera_query: Query<&Transform, With<Camera3d>>,
     face_query: Query<(&Transform, &FaceMarker), With<Pyramid>>,
 ) {
-    // Only check if the game is active
-    if !game_state.is_playing || !game_state.is_started {
+    // Only check if the game is in Playing state
+    if game_state.phase != GamePhase::Playing {
         return;
     }
     // Check for SPACE key press to check alignment
@@ -122,10 +124,11 @@ pub fn check_face_alignment(
             if best_alignment < COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD {
                 // Check if the face is the correct one
                 if best_face_index == game_state.pyramid_target_face_index {
-                    // Stop playing the game and record data
-                    game_state.is_playing = false;
+                    // Transition to Won state
+                    game_state.phase = GamePhase::Won;
                     game_state.end_time = Some(time.elapsed());
                     game_state.cosine_alignment = Some(best_alignment);
+                    game_state.is_changed = true;
                 }
             }
         }
@@ -155,84 +158,77 @@ pub fn game_ui(
         commands.entity(entity).despawn();
     }
 
-    // State Machine Logic
-    // If the game has not started and the SPACE key is pressed, start the game.
-    if !game_state.is_started && keyboard.just_pressed(KeyCode::Space) {
-        // Start the game
-        game_state.is_started = true;
-        game_state.is_changed = true;
-        game_state.is_playing = true;
-        game_state.start_time = Some(time.elapsed());
-        game_state.attempts = 0;
-    }
-    // If the game has not started, display the start screen.
-    else if !game_state.is_started {
-        // Spawn text centered in the screen
-        let text = "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
-        spawn_centered_text_black_screen(&mut commands, text);
-        // The game state has changed
-        game_state.is_changed = true;
-    }
-    // If the game is over and the 'R' key is pressed, restart the game.
-    else if !game_state.is_playing && keyboard.just_pressed(KeyCode::KeyR) {
-        // Despawn all game entities
-        for entity in entities.iter() {
-            commands.entity(entity).despawn();
-        }
-        // Spawn black screen
-        spawn_black_screen(&mut commands);
-
-        // Reset the game state
-        setup(commands, meshes, materials, random_gen, time);
-    }
-    // If the game is over and the player has won, display the win screen.
-    else if !game_state.is_playing {
-        let elapsed = game_state.end_time.unwrap().as_secs_f32()
-            - game_state.start_time.unwrap().as_secs_f32();
-        let accuracy = game_state.cosine_alignment.unwrap() * 100.0;
-
-        // Win text
-        let mut text = format!(
-            "Refresh (R) to play again\n\n\
-            CONGRATULATIONS! YOU WIN!\n\
-            - Time taken: {:.5} seconds\n\
-            - Attempts: {}\n\
-            - Alignment accuracy: {:.1}%",
-            elapsed, game_state.attempts, accuracy
-        );
-
-        if game_state.attempts == 1 {
-            text.push_str("\nPERFECT! First try!");
+    // State Machine using match pattern
+    match game_state.phase {
+        GamePhase::NotStarted => {
+            if keyboard.just_pressed(KeyCode::Space) {
+                // Transition: NotStarted -> Playing
+                game_state.phase = GamePhase::Playing;
+                game_state.start_time = Some(time.elapsed());
+                game_state.attempts = 0;
+                game_state.is_changed = true;
+            } else {
+                // Display start screen
+                let text = "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
+                spawn_centered_text_black_screen(&mut commands, text);
+                game_state.is_changed = true;
+            }
         }
 
-        // Spawn text centered in the screen
-        spawn_centered_text_black_screen(&mut commands, &text);
-        // The game state has changed
-        game_state.is_changed = true;
-    }
-    // If the game is ongoing, display the game UI.
-    else {
-        let text = format!(
-            "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",
-            game_state.attempts
-        );
-        // Spawn text
-        commands.spawn((
-            Text::new(text),
-            TextFont {
-                font_size: 24.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(10.0),
-                left: Val::Px(10.0),
-                ..default()
-            },
-            UIEntity, // Marker for despawning
-        ));
-        // The game state has changed
-        game_state.is_changed = true;
+        GamePhase::Playing => {
+            // Display game UI
+            let text = format!(
+                "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",
+                game_state.attempts
+            );
+            commands.spawn((
+                Text::new(text),
+                TextFont {
+                    font_size: 24.0,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(10.0),
+                    left: Val::Px(10.0),
+                    ..default()
+                },
+                UIEntity,
+            ));
+            game_state.is_changed = true;
+        }
+
+        GamePhase::Won => {
+            if keyboard.just_pressed(KeyCode::KeyR) {
+                // Transition: Won -> NotStarted (restart)
+                for entity in entities.iter() {
+                    commands.entity(entity).despawn();
+                }
+                spawn_black_screen(&mut commands);
+                setup(commands, meshes, materials, random_gen, time);
+            } else {
+                // Display win screen
+                let elapsed = game_state.end_time.unwrap().as_secs_f32()
+                    - game_state.start_time.unwrap().as_secs_f32();
+                let accuracy = game_state.cosine_alignment.unwrap() * 100.0;
+
+                let mut text = format!(
+                    "Refresh (R) to play again\n\n\
+                    CONGRATULATIONS! YOU WIN!\n\
+                    - Time taken: {:.5} seconds\n\
+                    - Attempts: {}\n\
+                    - Alignment accuracy: {:.1}%",
+                    elapsed, game_state.attempts, accuracy
+                );
+
+                if game_state.attempts == 1 {
+                    text.push_str("\nPERFECT! First try!");
+                }
+
+                spawn_centered_text_black_screen(&mut commands, &text);
+                game_state.is_changed = true;
+            }
+        }
     }
 }

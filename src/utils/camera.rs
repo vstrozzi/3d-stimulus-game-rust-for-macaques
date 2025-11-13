@@ -4,7 +4,7 @@ use crate::utils::constants::camera_3d_constants::{
     CAMERA_3D_INITIAL_Y, CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS, CAMERA_3D_SPEED_X,
     CAMERA_3D_SPEED_Z,
 };
-use crate::utils::objects::GameState;
+use crate::utils::objects::{GamePhase, GameState};
 use bevy::prelude::*;
 
 /// A plugin for a 3D first-person orbit camera.
@@ -26,7 +26,7 @@ pub fn camera_3d_fpov_inputs(
     game_state: ResMut<GameState>,
 ) {
     // Don't update the camera if the game is not in a playing state.
-    if !game_state.is_playing || !game_state.is_started {
+    if game_state.phase != GamePhase::Playing {
         return;
     }
 

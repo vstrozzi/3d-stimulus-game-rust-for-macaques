@@ -8,8 +8,8 @@ use crate::utils::constants::{
     object_constants::GROUND_Y,
     pyramid_constants::*,
 };
-use crate::utils::objects::{*};
-use crate::utils::pyramid::{spawn_pyramid};
+use crate::utils::objects::*;
+use crate::utils::pyramid::spawn_pyramid;
 
 use rand::{Rng, RngCore};
 
@@ -133,9 +133,7 @@ pub fn setup_game_state(
         pyramid_start_orientation_radius: pyramid_start_orientation_radius,
         pyramid_color_faces: pyramid_colors,
 
-        is_playing: true,
-        is_started: false,
-        is_won: false,
+        phase: GamePhase::NotStarted,
         is_changed: true,
 
         start_time: Some(time.elapsed()),

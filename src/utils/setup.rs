@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::log;
 use crate::utils::constants::{
     camera_3d_constants::{CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z},
+    game_constants::SEED,
     object_constants::GROUND_Y,
     pyramid_constants::*,
 };
@@ -10,7 +11,7 @@ use crate::utils::objects::{
     DecorationShape, FaceMarker, GameEntity, GameState, Pyramid, PyramidType, RandomGen,
 };
 
-use rand::{Rng, RngCore, SeedableRng};
+use rand::{Rng, RngCore};
 use rand_chacha::ChaCha8Rng;
 
 /// Plugin for handling setup
@@ -27,7 +28,7 @@ pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    random_gen: ResMut<RandomGen>,
+    mut random_gen: ResMut<RandomGen>,
     time: Res<Time>,
 ) {
     // Camera
@@ -74,9 +75,15 @@ pub fn setup(
     });
 
     // Initialize game state
-    let mut game_state = setup_game_state(&mut commands, &time, &random_gen);
+    let mut game_state = setup_game_state(&mut commands, &time, &mut random_gen);
     // Spawn Pyramid by borrowing commands, meshes, materials
-    spawn_pyramid(&mut commands, &mut meshes, &mut materials, &mut game_state);
+    spawn_pyramid(
+        &mut commands,
+        &mut meshes,
+        &mut materials,
+        &mut random_gen,
+        &mut game_state,
+    );
 
     log!("🎮 Pyramid Game Started!");
 }
@@ -85,34 +92,37 @@ pub fn setup(
 pub fn setup_game_state(
     commands: &mut Commands,
     time: &Res<Time>,
-    random_gen: &ResMut<RandomGen>,
+    random_gen: &mut ResMut<RandomGen>,
 ) -> GameState {
     // Define the random pyramid parameters
-    let pyramid_type = if random_gen.next_u64() % 2 == 0 {
+    let pyramid_type = if random_gen.random_gen.next_u64() % 2 == 0 {
         PyramidType::Type1
     } else {
         PyramidType::Type2
     };
-    let pyramid_base_radius =
-        random_gen.random_range(PYRAMID_BASE_RADIUS_MIN..=PYRAMID_BASE_RADIUS_MAX);
-    let pyramid_height = random_gen.random_range(PYRAMID_HEIGHT_MIN..=PYRAMID_HEIGHT_MAX);
+    let pyramid_base_radius = random_gen
+        .random_gen
+        .random_range(PYRAMID_BASE_RADIUS_MIN..=PYRAMID_BASE_RADIUS_MAX);
+    let pyramid_height = random_gen
+        .random_gen
+        .random_range(PYRAMID_HEIGHT_MIN..=PYRAMID_HEIGHT_MAX);
 
-    let pyramid_start_orientation_radius =
-        random_gen.random_range(PYRAMID_ANGLE_OFFSET_RAD_MIN..PYRAMID_ANGLE_OFFSET_RAD_MAX);
+    let pyramid_start_orientation_radius = random_gen
+        .random_gen
+        .random_range(PYRAMID_ANGLE_OFFSET_RAD_MIN..PYRAMID_ANGLE_OFFSET_RAD_MAX);
     let pyramid_target_face_index = 0;
 
     let mut pyramid_colors = PYRAMID_COLORS;
     // Set same colors for two sides if Type2
     if pyramid_type == PyramidType::Type2 {
-        if random_gen.next_u64() % 2 == 0 {
+        if random_gen.random_gen.next_u64() % 2 == 0 {
             pyramid_colors[1] = pyramid_colors[2];
         } else {
             pyramid_colors[2] = pyramid_colors[1];
         }
     }
     let game_state = GameState {
-        random_seed: random_seed,
-        random_gen: Some(random_gen),
+        random_seed: SEED,
         pyramid_type: pyramid_type,
         pyramid_base_radius: pyramid_base_radius,
         pyramid_height: pyramid_height,
@@ -144,6 +154,7 @@ pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    random_gen: &mut ResMut<RandomGen>,
     game_state: &mut GameState,
 ) {
     // Define top vertex for pyramid
@@ -231,7 +242,7 @@ pub fn spawn_pyramid(
             commands,
             meshes,
             materials,
-            game_state.random_gen.as_mut().unwrap(),
+            &mut random_gen.random_gen,
             face_entity,
             top,
             base_corners[i],

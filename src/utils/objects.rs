@@ -32,7 +32,6 @@ pub enum DecorationShape {
 pub struct GameState {
     // Game values
     pub random_seed: u64,
-    pub random_gen: Option<ChaCha8Rng>,
     pub pyramid_type: PyramidType,
     pub pyramid_base_radius: f32,
     pub pyramid_height: f32,

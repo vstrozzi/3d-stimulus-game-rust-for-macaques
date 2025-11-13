@@ -39,20 +39,18 @@ pub mod pyramid_constants {
 
     pub const PYRAMID_TARGET_FACE_INDEX: usize = 0;
 
-
-    // Constants for face decorations 
+    // Constants for face decorations
     pub const DECORATION_COUNT_MIN: usize = 10;
     pub const DECORATION_COUNT_MAX: usize = 100;
     pub const DECORATION_SIZE_MIN: f32 = 0.05;
     pub const DECORATION_SIZE_MAX: f32 = 0.15;
-
 }
 
 /// Generic Game constants
 pub mod game_constants {
     pub const REFRESH_RATE_HZ: f64 = 60.0; // Hz
 
-    pub static mut SEED: u64 = 69;
+    pub const SEED: u64 = 69;
 
     pub const FONT_PATH: &str = "fonts/Roboto/Roboto-VariableFont_wdth,wght.ttf";
 

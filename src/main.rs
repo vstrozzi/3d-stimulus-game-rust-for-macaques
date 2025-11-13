@@ -7,7 +7,7 @@ use bevy::{
 use monkey_3d_game::utils::{
     camera::Camera3dFpovPlugin, constants::game_constants::REFRESH_RATE_HZ,
     debug_functions::DebugFunctionsPlugin, game_functions::GameFunctionsPlugin,
-    inputs::InputsPlugin, setup::SetupPlugin, objects::GameState,
+    inputs::InputsPlugin, objects::GameState, setup::SetupPlugin,
 };
 
 /// Main application function
@@ -44,16 +44,18 @@ fn main() {
             // DEBUG PLUGINS
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
+            // My Plugin
+            SetupPlugin,
+            GameFunctionsPlugin,
+            Camera3dFpovPlugin,
+            InputsPlugin,
+            DebugFunctionsPlugin,
         ))
-        
-        // My Plugin
-        .add_plugins(SetupPlugin)
-        .add_plugins(GameFunctionsPlugin)
-        .add_plugins(Camera3dFpovPlugin)
-        .add_plugins(InputsPlugin)
-        .add_plugins(DebugFunctionsPlugin)
         // Timer for physics (fixed timestep timer)
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
+        // Insert source of randomness
+        .insert_resource(RandomState::default())
+        // Insert Gamestate
         .insert_resource(GameState::default())
         .run();
 }

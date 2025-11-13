@@ -1,9 +1,11 @@
 use bevy::prelude::*;
+use rand_chacha::rand_core::SeedableRng;
 use std::time::Duration;
 
+use crate::utils::constants::game_constants::SEED;
 use rand_chacha::ChaCha8Rng;
-/// Pyramid types
 
+/// Pyramid types
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyramidType {
     Type1,
@@ -48,10 +50,32 @@ pub struct GameState {
     pub start_time: Option<Duration>,
     pub end_time: Option<Duration>,
 
-
     // Metrics
     pub attempts: u32,
     pub cosine_alignment: Option<f32>,
+}
+
+// Random Generation Resource
+#[derive(Resource)]
+pub struct RandomGen {
+    pub random_gen: ChaCha8Rng,
+}
+
+impl RandomGen {
+    pub fn from_seed(seed: u64) -> Self {
+        Self {
+            random_gen: ChaCha8Rng::seed_from_u64(seed),
+        }
+    }
+}
+
+impl Default for RandomGen {
+    fn default() -> Self {
+        use rand_chacha::rand_core::SeedableRng;
+        Self {
+            random_gen: ChaCha8Rng::seed_from_u64(SEED),
+        }
+    }
 }
 
 /// Components

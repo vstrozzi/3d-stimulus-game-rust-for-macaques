@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 
-use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid, UIEntity};
+use crate::utils::constants::game_constants::COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD;
+use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid, RandomGen, UIEntity};
 use crate::utils::setup::setup;
-use crate::utils::constants::game_constants::{COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD};
 /// Plugin for handling functions
 pub struct GameFunctionsPlugin;
 
@@ -10,11 +10,11 @@ impl Plugin for GameFunctionsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (
-                (crate::utils::game_functions::check_face_alignment,
-                crate::utils::game_functions::game_ui)
-                .chain(),
-            ),
+            ((
+                crate::utils::game_functions::check_face_alignment,
+                crate::utils::game_functions::game_ui,
+            )
+                .chain(),),
         );
     }
 }
@@ -31,7 +31,7 @@ pub fn spawn_black_screen(commands: &mut Commands) {
             ..default()
         },
         BackgroundColor(Color::BLACK),
-        UIEntity,  // Marker for despawning 
+        UIEntity, // Marker for despawning
     ));
 }
 
@@ -47,7 +47,7 @@ pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
                 align_items: AlignItems::Center,         // vertically center children
                 ..default()
             },
-            UIEntity,  // Marker for despawning 
+            UIEntity,                                    // Marker for despawning
             BackgroundColor(Color::srgb(0.0, 0.0, 0.0)), // transparent container
         ))
         .with_children(|parent| {
@@ -78,12 +78,11 @@ pub fn check_face_alignment(
     face_query: Query<(&Transform, &FaceMarker), With<Pyramid>>,
 ) {
     // Only check if the game is active
-    if !game_state.is_playing || !game_state.is_started{
+    if !game_state.is_playing || !game_state.is_started {
         return;
     }
     // Check for SPACE key press to check alignment
     if keyboard.just_pressed(KeyCode::Space) {
-
         game_state.attempts += 1;
 
         let Ok(camera_transform) = camera_query.single() else {
@@ -101,8 +100,8 @@ pub fn check_face_alignment(
         for (face_transform, face_marker) in &face_query {
             // Get face normal in world space
             // The local normal is stored in `face_marker.normal`
-            let face_normal = (face_transform.rotation * (face_marker.normal )).normalize();
-            
+            let face_normal = (face_transform.rotation * (face_marker.normal)).normalize();
+
             // Project down to XZ plane
             let face_normal_xz = Vec3::new(face_normal.x, 0.0, face_normal.z).normalize();
             // Calculate alignment (dot product) of camera direction and face normal
@@ -124,7 +123,6 @@ pub fn check_face_alignment(
                     game_state.is_playing = false;
                     game_state.end_time = Some(time.elapsed());
                     game_state.cosine_alignment = Some(best_alignment);
-
                 }
             }
         }
@@ -140,6 +138,7 @@ pub fn game_ui(
     keyboard: Res<ButtonInput<KeyCode>>,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
+    random_gen: ResMut<RandomGen>,
     time: Res<Time>,
 ) {
     // Check if the game state has changed from last frame before doing anything
@@ -152,7 +151,7 @@ pub fn game_ui(
     for entity in &query {
         commands.entity(entity).despawn();
     }
-    
+
     // State Machine Logic
     // Game not yet started and SPACE pressed
     if game_state.is_started == false && keyboard.just_pressed(KeyCode::Space) {
@@ -162,7 +161,6 @@ pub fn game_ui(
         game_state.is_playing = true;
         game_state.start_time = Some(time.elapsed());
         game_state.attempts = 0;
-
     }
     // Game is started but not yet playing
     else if game_state.is_started == false {
@@ -182,11 +180,12 @@ pub fn game_ui(
         spawn_black_screen(&mut commands);
 
         // Reset the game state
-        setup(commands, meshes, materials, time);
+        setup(commands, meshes, materials, random_gen, time);
     }
     // If game over and won show stats
-    else if !game_state.is_playing{ 
-        let elapsed = game_state.end_time.unwrap().as_secs_f32() - game_state.start_time.unwrap().as_secs_f32();
+    else if !game_state.is_playing {
+        let elapsed = game_state.end_time.unwrap().as_secs_f32()
+            - game_state.start_time.unwrap().as_secs_f32();
         let accuracy = game_state.cosine_alignment.unwrap() * 100.0;
 
         // Win text
@@ -196,9 +195,7 @@ pub fn game_ui(
             - Time taken: {:.5} seconds\n\
             - Attempts: {}\n\
             - Alignment accuracy: {:.1}%",
-            elapsed,
-            game_state.attempts,
-            accuracy
+            elapsed, game_state.attempts, accuracy
         );
 
         if game_state.attempts == 1 {
@@ -211,8 +208,11 @@ pub fn game_ui(
         game_state.is_changed = true;
     }
     // Game is ongoing, show instructions and status
-    else{ 
-        let text = format!("Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}", game_state.attempts);
+    else {
+        let text = format!(
+            "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",
+            game_state.attempts
+        );
         // Spawn text
         commands.spawn((
             Text::new(text),
@@ -227,10 +227,9 @@ pub fn game_ui(
                 left: Val::Px(10.0),
                 ..default()
             },
-            UIEntity // Marker for despawning
+            UIEntity, // Marker for despawning
         ));
         // The game state has changed
         game_state.is_changed = true;
     }
-
 }

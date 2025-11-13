@@ -1,12 +1,15 @@
+// This file contains the core game logic and UI functions.
 use bevy::prelude::*;
 
 use crate::utils::constants::game_constants::COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD;
 use crate::utils::objects::{FaceMarker, GameEntity, GameState, Pyramid, RandomGen, UIEntity};
 use crate::utils::setup::setup;
-/// Plugin for handling functions
+
+/// A plugin for handling game functions, including checking for face alignment and managing the game UI.
 pub struct GameFunctionsPlugin;
 
 impl Plugin for GameFunctionsPlugin {
+    /// Builds the plugin by adding the `check_face_alignment` and `game_ui` systems to the app.
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
@@ -19,7 +22,7 @@ impl Plugin for GameFunctionsPlugin {
     }
 }
 
-/// Spawn a black screen UI
+/// Spawns a black screen that covers the entire viewport.
 pub fn spawn_black_screen(commands: &mut Commands) {
     commands.spawn((
         Node {
@@ -35,7 +38,7 @@ pub fn spawn_black_screen(commands: &mut Commands) {
     ));
 }
 
-/// Spawn centered text on black screen
+/// Spawns centered text on a black screen.
 pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
     commands
         .spawn((
@@ -69,7 +72,7 @@ pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
         });
 }
 
-/// Checking the winning condition
+/// Checks if the player has won the game by aligning the camera with the correct face of the pyramid.
 pub fn check_face_alignment(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
@@ -129,7 +132,7 @@ pub fn check_face_alignment(
     }
 }
 
-/// Game UI
+/// Manages the game's UI based on the current game state.
 pub fn game_ui(
     mut commands: Commands,
     mut game_state: ResMut<GameState>,
@@ -142,7 +145,7 @@ pub fn game_ui(
     time: Res<Time>,
 ) {
     // Check if the game state has changed from last frame before doing anything
-    if game_state.is_changed == false {
+    if !game_state.is_changed {
         return;
     }
     game_state.is_changed = false;
@@ -153,8 +156,8 @@ pub fn game_ui(
     }
 
     // State Machine Logic
-    // Game not yet started and SPACE pressed
-    if game_state.is_started == false && keyboard.just_pressed(KeyCode::Space) {
+    // If the game has not started and the SPACE key is pressed, start the game.
+    if !game_state.is_started && keyboard.just_pressed(KeyCode::Space) {
         // Start the game
         game_state.is_started = true;
         game_state.is_changed = true;
@@ -162,15 +165,15 @@ pub fn game_ui(
         game_state.start_time = Some(time.elapsed());
         game_state.attempts = 0;
     }
-    // Game is started but not yet playing
-    else if game_state.is_started == false {
+    // If the game has not started, display the start screen.
+    else if !game_state.is_started {
         // Spawn text centered in the screen
         let text = "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
         spawn_centered_text_black_screen(&mut commands, text);
         // The game state has changed
         game_state.is_changed = true;
     }
-    // If game over and R key pressed restart the game
+    // If the game is over and the 'R' key is pressed, restart the game.
     else if !game_state.is_playing && keyboard.just_pressed(KeyCode::KeyR) {
         // Despawn all game entities
         for entity in entities.iter() {
@@ -182,7 +185,7 @@ pub fn game_ui(
         // Reset the game state
         setup(commands, meshes, materials, random_gen, time);
     }
-    // If game over and won show stats
+    // If the game is over and the player has won, display the win screen.
     else if !game_state.is_playing {
         let elapsed = game_state.end_time.unwrap().as_secs_f32()
             - game_state.start_time.unwrap().as_secs_f32();
@@ -207,7 +210,7 @@ pub fn game_ui(
         // The game state has changed
         game_state.is_changed = true;
     }
-    // Game is ongoing, show instructions and status
+    // If the game is ongoing, display the game UI.
     else {
         let text = format!(
             "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",

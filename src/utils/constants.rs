@@ -3,7 +3,7 @@
 /// 3D camera
 pub mod camera_3d_constants {
     pub const CAMERA_3D_INITIAL_X: f32 = 0.0;
-    pub const CAMERA_3D_INITIAL_Y: f32 = 0.5;
+    pub const CAMERA_3D_INITIAL_Y: f32 = 1.;
     pub const CAMERA_3D_INITIAL_Z: f32 = 15.0;
 
     pub const CAMERA_3D_SPEED_X: f32 = 2.0;
@@ -24,11 +24,11 @@ pub mod object_constants {
 pub mod pyramid_constants {
     use bevy::prelude::Color;
 
-    pub const PYRAMID_BASE_RADIUS_MIN: f32 = 1.0;
-    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 5.0;
+    pub const PYRAMID_BASE_RADIUS_MIN: f32 = 3.0;
+    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 3.0;
 
-    pub const PYRAMID_HEIGHT_MIN: f32 = 2.0;
-    pub const PYRAMID_HEIGHT_MAX: f32 = 7.0;
+    pub const PYRAMID_HEIGHT_MIN: f32 = 4.0;
+    pub const PYRAMID_HEIGHT_MAX: f32 = 4.0;
 
     // Angle's offset for the pyramid's base in radians from the camera
     pub static PYRAMID_ANGLE_OFFSET_RAD_MIN: f32 = 0.0 * (std::f32::consts::PI / 180.0);
@@ -56,7 +56,7 @@ pub mod pyramid_constants {
     // Wooden base
     pub const BASE_HEIGHT: f32 = 0.3;
     pub const BASE_COLOR: Color = Color::srgb(0.59, 0.29, 0.00); // brown
-    pub const BASE_NR_SIDES: usize = 12; // multiple of 3
+    pub const BASE_NR_SIDES: usize = 15; // multiple of 3
 
 }
 

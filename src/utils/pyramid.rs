@@ -3,26 +3,13 @@
 use crate::utils::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 use crate::utils::objects::{
     Decoration, DecorationSet, DecorationShape, FaceMarker, GameEntity, GameState, Pyramid,
-    PyramidType, RandomGen, RotableComponent,
+    PyramidType, RandomGen, RotableComponent, BaseFrame, BaseDoor,
 };
 use bevy::prelude::*;
 
 use rand::{Rng, RngCore};
 use rand_chacha::ChaCha8Rng;
 
-/// Component to mark the base frame (wooden panel with hole)
-#[derive(Component)]
-pub struct BaseFrame {
-    pub side_index: usize,
-}
-
-/// Component to mark the base door (pentagon that covers the hole)
-#[derive(Component)]
-pub struct BaseDoor {
-    pub side_index: usize,
-    pub face_index: usize, // Which pyramid face this aligns with (0, 1, or 2)
-    pub is_open: bool,
-}
 
 /// Spawns the wooden base with holes for the pyramid
 pub fn spawn_pyramid_base(
@@ -112,7 +99,7 @@ pub fn spawn_pyramid_base(
             MeshMaterial3d(materials.add(StandardMaterial {
                 base_color: door_color,
                 cull_mode: None,
-                double_sided: true,
+                double_sided: false,
                 ..default()
             })),
             Transform::default(),
@@ -122,7 +109,10 @@ pub fn spawn_pyramid_base(
                 is_open: false,
             },
             GameEntity,
+            RotableComponent,
         ));
+
+        
     }
 
     // Spawn a circular or polygonal lid at GROUND_Y + BASE_HEIGHT
@@ -136,7 +126,7 @@ pub fn spawn_pyramid_base(
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: BASE_COLOR,
             cull_mode: None,
-            double_sided: true,
+            double_sided: false,
             ..default()
         })),
         Transform::from_xyz(0.0, top_y, 0.0),
@@ -315,7 +305,7 @@ fn create_pentagon_door(
     let pentagon_radius = (width.min(height) * hole_scale) / 2.0;
     
     // Slightly offset the door forward to prevent z-fighting
-    let door_center = center + normal * 0.001;
+    let door_center = center - normal * 0.0001;
     
     // Local coordinate system
     let local_right = (bottom_right - bottom_left).normalize();
@@ -365,9 +355,6 @@ pub fn spawn_pyramid(
     random_gen: &mut ResMut<RandomGen>,
     game_state: &mut GameState,
 ) {
-    // First spawn the base
-    spawn_pyramid_base(commands, meshes, materials, game_state);
-    
     let top_vex = Vec3::new(0.0, game_state.pyramid_height, 0.0);
     // Build the symmetric triangular vertices for the base of the pyramid.
     let mut base_corners: [Vec3; 3] = [Vec3::ZERO; 3];
@@ -495,6 +482,9 @@ pub fn spawn_pyramid(
             );
         }
     }
+
+    // Spawn the base
+    spawn_pyramid_base(commands, meshes, materials, game_state);
 }
 
 
@@ -615,6 +605,7 @@ fn spawn_decorations_from_set(
 
         // Offset slightly away from face surface to prevent z-fighting
         let offset_position = position - face_normal* 0.0001;
+        
 
         // Spawn the decoration as a child of the face
         commands.entity(parent_face).with_children(|parent| {

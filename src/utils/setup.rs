@@ -1,6 +1,4 @@
 //! Setup logic for the monkey_3d_game, with main setup plugin and functions for initializing the game scene and state.
-use std::f32::consts::FRAC_PI_2;
-
 use bevy::prelude::*;
 
 use crate::log;
@@ -62,10 +60,57 @@ pub fn setup(
     MeshMaterial3d(materials.add(StandardMaterial {
         base_color: Color::BLACK,
         perceptual_roughness: 0.2,
+        reflectance:0.9,
         ..default()
     })),
     Transform::from_xyz(0.0, GROUND_Y, -2.0),
     GameEntity,
+    ));
+
+    // Constants for clarity
+    const PLANE_WIDTH: f32 = 15.0;
+    const PLANE_DISTANCE: f32 = 7.0;
+    const PLANE_HEIGHT: f32 = 10.0;
+    const ANGLE_RAD: f32 = 40.0 * std::f32::consts::PI / 180.0; // 15 degrees in radians
+
+    // Right Side Plane
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d { 
+            normal: Dir3::Z, 
+            half_size: Vec2::new(PLANE_WIDTH / 2.0, PLANE_HEIGHT / 2.0) 
+        })),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.2, 0.2, 0.2), // Slightly lighter than black to see the edge
+            perceptual_roughness: 0.2,
+            reflectance: 0.9,
+            ..default()
+        })),
+        Transform::from_xyz(
+            (PLANE_DISTANCE / 2.0) + (PLANE_DISTANCE * ANGLE_RAD.cos()), 
+            GROUND_Y, 
+            -2.0 + (PLANE_DISTANCE * ANGLE_RAD.sin())
+        ).with_rotation(Quat::from_rotation_y(-ANGLE_RAD)),
+        GameEntity,
+    ));
+
+    // Left Side Plane
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d { 
+            normal: Dir3::Z, 
+            half_size: Vec2::new(PLANE_WIDTH / 2.0, PLANE_HEIGHT / 2.0) 
+        })),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgb(0.2, 0.2, 0.2),
+            perceptual_roughness: 0.2,
+            reflectance: 0.9,
+            ..default()
+        })),
+        Transform::from_xyz(
+            -(PLANE_DISTANCE / 2.0) - (PLANE_DISTANCE * ANGLE_RAD.cos()), 
+            GROUND_Y, 
+            -2.0 + (PLANE_WIDTH / 2.0 * ANGLE_RAD.sin())
+        ).with_rotation(Quat::from_rotation_y(ANGLE_RAD)),
+        GameEntity,
     ));
 
     // Game light

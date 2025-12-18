@@ -142,3 +142,17 @@ pub struct GameEntity;
 /// A component that marks an entity as a UI entity
 #[derive(Component)]
 pub struct UIEntity;
+
+/// Component to mark the base frame (wooden panel with hole)
+#[derive(Component)]
+pub struct BaseFrame {
+    pub side_index: usize,
+}
+
+/// Component to mark the base door (pentagon that covers the hole)
+#[derive(Component)]
+pub struct BaseDoor {
+    pub side_index: usize,
+    pub face_index: usize, // Which pyramid face this aligns with (0, 1, or 2)
+    pub is_open: bool,
+}

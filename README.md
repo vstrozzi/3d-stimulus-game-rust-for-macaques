@@ -42,18 +42,19 @@ cargo run --release
     This project is configured to use `wasm-server-runner` which simplifies development.
 
     ```bash
-    # Build and run with wasm-server-runner
-    cargo run --target wasm32-unknown-unknown
+    # Build
+    cargo build --release --target wasm32-unknown-unknown
+
     ```
-    This will build the wasm binary and start a local server.
+    This will build the wasm binary.
 
 3.  **Manual Wasm Build and Serve:**
     If you want to build the wasm file and serve it manually:
 
     a. **Build the wasm binary:**
-    You will need a tool like `wasm-pack` or `wasm-bindgen-cli` to process the output. For example with `wasm-pack`:
+    You will need a tool like `wasm-bindgen` to get the js bindings.
     ```bash
-    wasm-pack build --target web --out-dir ./out
+    wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/release/monkey_3d_game.wasm
     ```
 
     b. **Serve the `index.html` file:**

@@ -167,6 +167,7 @@ pub fn game_ui(
                 game_state.start_time = Some(time.elapsed());
                 game_state.nr_attempts = 0;
                 game_state.is_changed = true;
+                
             } else {
                 // Display start screen
                 let text = "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";

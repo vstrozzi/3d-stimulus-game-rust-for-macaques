@@ -44,6 +44,9 @@ opt-level = "s"
 strip = "debuginfo"
 
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 # link using lld faster than cargo
 [target.x86_64-unknown-linux-gnu]
 linker = "clang"

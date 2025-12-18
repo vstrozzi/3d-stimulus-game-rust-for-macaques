@@ -4,7 +4,7 @@
 pub mod camera_3d_constants {
     pub const CAMERA_3D_INITIAL_X: f32 = 0.0;
     pub const CAMERA_3D_INITIAL_Y: f32 = 0.5;
-    pub const CAMERA_3D_INITIAL_Z: f32 = 8.0;
+    pub const CAMERA_3D_INITIAL_Z: f32 = 15.0;
 
     pub const CAMERA_3D_SPEED_X: f32 = 2.0;
     pub const CAMERA_3D_SPEED_Z: f32 = 4.0;
@@ -52,6 +52,12 @@ pub mod pyramid_constants {
     pub const DECORATION_COUNT_MAX: usize = 100;
     pub const DECORATION_SIZE_MIN: f32 = 0.05;
     pub const DECORATION_SIZE_MAX: f32 = 0.15;
+
+    // Wooden base
+    pub const BASE_HEIGHT: f32 = 0.3;
+    pub const BASE_COLOR: Color = Color::srgb(0.59, 0.29, 0.00);
+    pub const BASE_NR_SIDES: usize = 12; // multiple of 3
+
 }
 
 /// Generic game constants

@@ -1,4 +1,6 @@
 //! Setup logic for the monkey_3d_game, with main setup plugin and functions for initializing the game scene and state.
+use std::f32::consts::FRAC_PI_2;
+
 use bevy::prelude::*;
 
 use crate::log;
@@ -30,7 +32,7 @@ pub fn setup(
     mut random_gen: ResMut<RandomGen>,
     time: Res<Time>,
 ) {
-    // Camera looks at the origin.
+    // Two cameras for looks at the origin.
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(
@@ -46,12 +48,24 @@ pub fn setup(
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            perceptual_roughness: 1.0,
+            base_color: Color::BLACK,
+            perceptual_roughness: 0.8,
             ..default()
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
         GameEntity,
+    ));
+
+    // Back plane
+    commands.spawn((
+    Mesh3d(meshes.add(Plane3d{normal: Dir3::Z, half_size: Vec2::splat(0.5)}.mesh().size(15.0, 10.0))),
+    MeshMaterial3d(materials.add(StandardMaterial {
+        base_color: Color::BLACK,
+        perceptual_roughness: 0.2,
+        ..default()
+    })),
+    Transform::from_xyz(0.0, GROUND_Y, -2.0),
+    GameEntity,
     ));
 
     // Game light
@@ -61,7 +75,7 @@ pub fn setup(
             shadows_enabled: true,
             ..default()
         },
-        Transform::from_xyz(2.0, 2.0, -2.0),
+        Transform::from_xyz(0.0, 3.0, 4.0),
         GameEntity,
     ));
 

@@ -25,7 +25,7 @@ pub fn spawn_pyramid(
         game_state.pyramid_base_radius * game_state.pyramid_start_orientation_rad.cos(),
         game_state.pyramid_base_radius * game_state.pyramid_start_orientation_rad.sin(),
     );
-    base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
+    base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y + BASE_HEIGHT, prev_xz.y);
     // Compute constants for the rotation of the pyramid's base vertices.
     let pyramid_angle_increment_cos: f32 = PYRAMID_ANGLE_INCREMENT_RAD.cos();
     let pyramid_angle_increment_sin: f32 = PYRAMID_ANGLE_INCREMENT_RAD.sin();
@@ -36,7 +36,7 @@ pub fn spawn_pyramid(
 
         prev_xz = Vec2::new(x, z);
         // Save the new vertex.
-        base_corners[i] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
+        base_corners[i] = Vec3::new(prev_xz.x, GROUND_Y + BASE_HEIGHT, prev_xz.y);
     }
 
     // Generate decoration sets for each face.
@@ -147,6 +147,7 @@ pub fn spawn_pyramid(
     }
 }
 
+
 /// Generates a decoration set for a pyramid face using Poisson-like sampling.
 /// Decorations are stored using barycentric coordinates relative to the triangle vertices.
 fn generate_decoration_set(
@@ -203,7 +204,7 @@ fn generate_decoration_set(
         }
 
         // Convert world position to barycentric coordinates
-        // We need to solve: world_position = w0*top + w1*corner1 + w2*corner2
+        // world_position = w0*top + w1*corner1 + w2*corner2
         // where w0 + w1 + w2 = 1
         let v0 = corner1 - top;
         let v1 = corner2 - top;
@@ -236,8 +237,8 @@ fn generate_decoration_set(
     }
 }
 
-/// Spawns decorations from a decoration set onto a face.
-/// Reconstructs world positions from barycentric coordinates relative to the given triangle vertices.
+/// Spawns decorations from a decoration set onto a face
+/// Reconstructs world positions from barycentric coordinates relative to the given triangle vertices
 fn spawn_decorations_from_set(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -255,18 +256,17 @@ fn spawn_decorations_from_set(
             + decoration.barycentric.y * corner1
             + decoration.barycentric.z * corner2;
 
-        // Create a mesh based on the shape.
         let mesh = create_decoration_mesh(decoration_set.shape, decoration.size);
 
-        // Calculate the rotation to align the decoration with the face plane.
+        // Calculate the rotation to align the decoration with the face plane
         let base_rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
         let normal_rotation = Quat::from_rotation_arc(Vec3::Y, face_normal);
         let final_rotation = normal_rotation * base_rotation;
 
         // Offset slightly away from face surface to prevent z-fighting
-        let offset_position = position - face_normal * 0.001;
+        let offset_position = position - face_normal* 0.0001;
 
-        // Spawn the decoration as a child of the face.
+        // Spawn the decoration as a child of the face
         commands.entity(parent_face).with_children(|parent| {
             parent.spawn((
                 Mesh3d(meshes.add(mesh)),
@@ -286,7 +286,7 @@ fn spawn_decorations_from_set(
     }
 }
 
-/// Samples a random point inside a triangle using barycentric coordinates, with collision checking against existing decorations.
+/// Samples a random point inside a triangle using barycentric coordinates, with collision checking against existing decorations
 fn sample_point_in_triangle(
     rng: &mut ChaCha8Rng,
     v0: Vec3,
@@ -295,19 +295,19 @@ fn sample_point_in_triangle(
     size: f32,
     existing_decorations: &[(Vec3, f32)],
 ) -> (Vec3, bool) {
-    // Generate random barycentric coordinates using the square root method for a uniform distribution.
+    // Generate random barycentric coordinates using the square root method for a uniform distribution
     let r1 = rng.random_range(0.0..1.0_f32).sqrt();
     let r2 = rng.random_range(0.0..1.0_f32);
 
-    // The barycentric weights ensure that the point is inside the triangle.
+    // The barycentric weights ensure that the point is inside the triangle
     let w0 = 1.0 - r1;
     let w1 = r1 * (1.0 - r2);
     let w2 = r1 * r2;
 
-    // Calculate the 3D position of the point.
+    // Calculate the 3D position of the point
     let position = v0 * w0 + v1 * w1 + v2 * w2;
 
-    // Set a minimum distance from the edges, proportional to the decoration's size.
+    // Set a minimum distance from the edges, proportional to the decoration's size
     let edge_margin = size * 1.5;
 
     // Check if the point is too close to the triangle's edges.
@@ -322,8 +322,8 @@ fn sample_point_in_triangle(
         return (position, false);
     }
 
-    // Check for overlap with existing decorations (Poisson disk constraint).
-    let min_spacing = size * 2.0; // The minimum distance between decoration centers.
+    // Check for overlap with existing decorations (Poisson disk constraint)
+    let min_spacing = size * 2.0; // The minimum distance between decoration centers
 
     for (existing_pos, existing_size) in existing_decorations {
         let distance = position.distance(*existing_pos);
@@ -337,7 +337,7 @@ fn sample_point_in_triangle(
     (position, true)
 }
 
-/// Calculates the minimum distance from a point to a line segment.
+/// Calculates the minimum distance from a point to a line segment
 fn point_to_line_segment_distance(point: Vec3, line_start: Vec3, line_end: Vec3) -> f32 {
     let line_vec = line_end - line_start;
     let point_vec = point - line_start;
@@ -347,14 +347,14 @@ fn point_to_line_segment_distance(point: Vec3, line_start: Vec3, line_end: Vec3)
         return point_vec.length();
     }
 
-    // Project the point onto the line and clamp it to the segment.
+    // Project the point onto the line and clamp it to the segment
     let t = (point_vec.dot(line_vec) / line_length_sq).clamp(0.0, 1.0);
     let projection = line_start + line_vec * t;
 
     point.distance(projection)
 }
 
-/// Creates a mesh for a decoration shape.
+/// Creates a mesh for a decoration shape
 fn create_decoration_mesh(shape: DecorationShape, size: f32) -> Mesh {
     match shape {
         DecorationShape::Circle => Circle::new(size).mesh().resolution(16).build(),
@@ -364,7 +364,7 @@ fn create_decoration_mesh(shape: DecorationShape, size: f32) -> Mesh {
     }
 }
 
-/// Creates a star-shaped mesh.
+/// Creates a star-shaped mesh
 fn create_star_mesh(size: f32, points: usize) -> Mesh {
     let mut mesh = Mesh::new(
         bevy::mesh::PrimitiveTopology::TriangleList,
@@ -376,12 +376,12 @@ fn create_star_mesh(size: f32, points: usize) -> Mesh {
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
 
-    // Add the center point of the star.
+    // Add the center point of the star
     positions.push([0.0, 0.0, 0.0]);
     normals.push([0.0, 1.0, 0.0]);
     uvs.push([0.5, 0.5]);
 
-    // Create the points of the star.
+    // Create the points of the star
     let angle_step = std::f32::consts::TAU / (points * 2) as f32;
     for i in 0..(points * 2) {
         let angle = i as f32 * angle_step;
@@ -394,7 +394,7 @@ fn create_star_mesh(size: f32, points: usize) -> Mesh {
         uvs.push([x / size * 0.5 + 0.5, y / size * 0.5 + 0.5]);
     }
 
-    // Create the triangles of the star.
+    // Create the triangles of the star
     for i in 1..=(points * 2) {
         let next = if i == points * 2 { 1 } else { i + 1 };
         indices.extend_from_slice(&[0, i as u32, next as u32]);
@@ -408,7 +408,7 @@ fn create_star_mesh(size: f32, points: usize) -> Mesh {
     mesh
 }
 
-/// Creates a triangle-shaped mesh.
+/// Creates a triangle-shaped mesh
 fn create_triangle_mesh(size: f32) -> Mesh {
     let mut mesh = Mesh::new(
         bevy::mesh::PrimitiveTopology::TriangleList,

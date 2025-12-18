@@ -1,15 +1,16 @@
-// This file contains the logic for spawning the pyramid and its decorations.
+//! Logic for spawning the pyramid and its decorations.
+
 use crate::utils::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 use crate::utils::objects::{
     Decoration, DecorationSet, DecorationShape, FaceMarker, GameEntity, GameState, Pyramid,
-    PyramidType, RandomGen,
+    PyramidType, RandomGen, RotableComponent,
 };
 use bevy::prelude::*;
 
 use rand::{Rng, RngCore};
 use rand_chacha::ChaCha8Rng;
 
-/// Spawns a pyramid composed of three triangular faces.
+/// Spawns a pyramid composed with three triangular faces.
 pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -17,13 +18,12 @@ pub fn spawn_pyramid(
     random_gen: &mut ResMut<RandomGen>,
     game_state: &mut GameState,
 ) {
-    // Define the top vertex of the pyramid.
-    let top = Vec3::new(0.0, game_state.pyramid_height, 0.0);
+    let top_vex = Vec3::new(0.0, game_state.pyramid_height, 0.0);
     // Build the symmetric triangular vertices for the base of the pyramid.
     let mut base_corners: [Vec3; 3] = [Vec3::ZERO; 3];
     let mut prev_xz = Vec2::new(
-        game_state.pyramid_base_radius * game_state.pyramid_start_orientation_radius.cos(),
-        game_state.pyramid_base_radius * game_state.pyramid_start_orientation_radius.sin(),
+        game_state.pyramid_base_radius * game_state.pyramid_start_orientation_rad.cos(),
+        game_state.pyramid_base_radius * game_state.pyramid_start_orientation_rad.sin(),
     );
     base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y, prev_xz.y);
     // Compute constants for the rotation of the pyramid's base vertices.
@@ -46,14 +46,14 @@ pub fn spawn_pyramid(
     // Generate decoration sets for faces
     decoration_sets[0] = Some(generate_decoration_set(
         &mut random_gen.random_gen,
-        top,
+        top_vex,
         base_corners[0],
         base_corners[1],
     ));
 
     decoration_sets[1] = Some(generate_decoration_set(
         &mut random_gen.random_gen,
-        top,
+        top_vex,
         base_corners[1],
         base_corners[2],
     ));
@@ -64,7 +64,7 @@ pub fn spawn_pyramid(
     } else {
         decoration_sets[2] = Some(generate_decoration_set(
             &mut random_gen.random_gen,
-            top,
+            top_vex,
             base_corners[2],
             base_corners[0],
         ));
@@ -82,14 +82,14 @@ pub fn spawn_pyramid(
 
         // Define the positions of the face-triangle's vertices.
         let positions = vec![
-            top.to_array(), // Top vertex
+            top_vex.to_array(), // Top vertex
             base_corners[i].to_array(),
             base_corners[next].to_array(),
         ];
 
         // Calculate the normal vector on the 2D plane of the face for lighting and shading.
-        let v1 = base_corners[i] - top;
-        let v2 = base_corners[next] - top;
+        let v1 = base_corners[i] - top_vex;
+        let v2 = base_corners[next] - top_vex;
         let normal = v1.cross(v2).normalize();
 
         // Save the normal of each vertex (they are the same).
@@ -115,6 +115,7 @@ pub fn spawn_pyramid(
                 })),
                 Transform::default(),
                 Pyramid,
+                RotableComponent, // Make it rotatable by camera controls
                 FaceMarker {
                     face_index: i,
                     color: game_state.pyramid_color_faces[i],
@@ -137,7 +138,7 @@ pub fn spawn_pyramid(
                 materials,
                 face_entity,
                 decoration_set,
-                top,
+                top_vex,
                 base_corners[i],
                 base_corners[next],
                 normal,

@@ -1,4 +1,4 @@
-// This file contains the core game logic and UI functions.
+//! Core game logic and UI functions.
 use bevy::prelude::*;
 
 use crate::utils::constants::game_constants::COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD;
@@ -88,7 +88,7 @@ pub fn check_face_alignment(
     }
     // Check for SPACE key press to check alignment
     if keyboard.just_pressed(KeyCode::Space) {
-        game_state.attempts += 1;
+        game_state.nr_attempts += 1;
 
         let Ok(camera_transform) = camera_query.single() else {
             return;
@@ -165,7 +165,7 @@ pub fn game_ui(
                 // Transition: NotStarted -> Playing
                 game_state.phase = GamePhase::Playing;
                 game_state.start_time = Some(time.elapsed());
-                game_state.attempts = 0;
+                game_state.nr_attempts = 0;
                 game_state.is_changed = true;
             } else {
                 // Display start screen
@@ -179,7 +179,7 @@ pub fn game_ui(
             // Display game UI
             let text = format!(
                 "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",
-                game_state.attempts
+                game_state.nr_attempts
             );
             commands.spawn((
                 Text::new(text),
@@ -219,10 +219,10 @@ pub fn game_ui(
                     - Time taken: {:.5} seconds\n\
                     - Attempts: {}\n\
                     - Alignment accuracy: {:.1}%",
-                    elapsed, game_state.attempts, accuracy
+                    elapsed, game_state.nr_attempts, accuracy
                 );
 
-                if game_state.attempts == 1 {
+                if game_state.nr_attempts == 1 {
                     text.push_str("\nPERFECT! First try!");
                 }
 

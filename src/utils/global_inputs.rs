@@ -11,7 +11,7 @@ pub struct InputsPlugin;
 
 impl Plugin for InputsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, crate::utils::inputs::handle_keyboard_input);
+        app.add_systems(Update, crate::utils::global_inputs::handle_keyboard_input);
     }
 }
 

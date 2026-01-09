@@ -8,11 +8,11 @@ use rand_chacha::ChaCha8Rng;
 
 
 /// Game state enum representing the different states the game can be in
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, States, Hash)]
 pub enum GamePhase {
     #[default]
     // The game has not started yet
-    NotStarted,
+    MenuUI,
     // The game is currently being played
     Playing,
     // The game has been won
@@ -67,8 +67,6 @@ pub struct DecorationSet {
 /// The resource of the current state of the game
 #[derive(Resource, Clone, Default, Debug)]
 pub struct GameState {
-    pub phase: GamePhase,
-
     pub random_seed: u64,
 
     pub pyramid_type: PyramidType,
@@ -78,9 +76,6 @@ pub struct GameState {
     pub pyramid_target_face_index: usize,
     pub pyramid_start_orientation_rad: f32,
     pub pyramid_color_faces: [Color; 3],
-
-    /// A flag indicating whether the game state has changed.
-    pub is_changed: bool,
 
     // The time when the game started.
     pub start_time: Option<Duration>,

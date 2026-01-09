@@ -9,13 +9,11 @@ use bevy::{
 
 /// Import custom modules game defined
 use monkey_3d_game::utils::{
-    camera::Camera3dFpovPlugin,
+    systems_logic::SystemsLogicPlugin,
     constants::game_constants::REFRESH_RATE_HZ,
     debug_functions::DebugFunctionsPlugin,
-    game_functions::GameFunctionsPlugin,
-    inputs::InputsPlugin,
+    global_inputs::InputsPlugin,
     objects::{GameState, RandomGen},
-    setup::SetupPlugin,
 };
 
 /// Entry point for the application
@@ -48,9 +46,7 @@ fn main() {
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
             // Custom game plugins
-            SetupPlugin,
-            GameFunctionsPlugin,
-            Camera3dFpovPlugin,
+            SystemsLogicPlugin, // Main game phase logic
             InputsPlugin,
             DebugFunctionsPlugin,
         ))

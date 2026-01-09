@@ -6,9 +6,10 @@ pub mod utils {
     pub mod constants;
     pub mod debug_functions;
     pub mod game_functions;
-    pub mod inputs;
+    pub mod global_inputs;
     pub mod macros;
     pub mod objects;
     pub mod pyramid;
     pub mod setup;
+    pub mod systems_logic;
 }

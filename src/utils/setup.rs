@@ -15,16 +15,9 @@ use crate::utils::constants::{
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 
+
 use rand::{Rng, RngCore};
 
-/// Plugin for initial setup of the game
-pub struct SetupPlugin;
-
-impl Plugin for SetupPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, crate::utils::setup::setup);
-    }
-}
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid
 pub fn setup(
@@ -109,6 +102,17 @@ pub fn setup(
     log!("🎮 Pyramid Game Started!");
 }
 
+
+// Despawn all entities, needed when transitioninf from Playing to MenuUI
+pub fn despawn_setup(
+    mut commands: Commands,
+    query: Query<Entity, With<GameEntity>>,
+) {
+    for entity in &query {
+        commands.entity(entity).despawn();
+    }
+}
+
 /// Initialize the GameState
 pub fn setup_game_state(
     commands: &mut Commands,
@@ -157,9 +161,6 @@ pub fn setup_game_state(
         pyramid_target_face_index: pyramid_target_face_index as usize,
         pyramid_start_orientation_rad: pyramid_start_orientation_rad,
         pyramid_color_faces: pyramid_colors,
-
-        phase: GamePhase::NotStarted,
-        is_changed: true,
 
         start_time: Some(time.elapsed()),
         end_time: None,

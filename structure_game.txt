@@ -1,0 +1,15 @@
+pub enum GamePhase {
+    #[default]
+    // The game has not started yet
+    MenuUI,
+    // The game is currently being played
+    Playing,
+    // The game has been won
+    Won,
+}
+
+
+Start in MenuUI
+When pressing space move from MenuUi to Playing, call once setup of #setup.rs, keep calling all gamefunctions
+When pressing space stop all the functions running in Playing and wait for the end of the animation
+When pressing space and having correct position of winning from Playing to MenuUI, despawn everything and redraw MenuUI

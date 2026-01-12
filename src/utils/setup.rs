@@ -58,6 +58,7 @@ pub fn setup(
             base_color: Color::srgb(0.2, 0.2, 0.2),
             perceptual_roughness: 0.2,
             reflectance: 1.0,
+            ior: 3.5,
             cull_mode: None,
             ..default()
         })),
@@ -152,8 +153,6 @@ pub fn setup_game_state(
         
         pyramid_target_door_index = 2;
     }
-
-    // Depending on the type of the pyramid select the target door index to check face alignment with
 
     // Create the initial game state
     let game_state = GameState {

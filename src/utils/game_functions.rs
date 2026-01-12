@@ -67,9 +67,13 @@ pub fn playing_inputs(
     mut commands: Commands,
     query: Query<Entity, With<UIEntity>>,
 ) {
+    if game_state.is_animating {
+        return; // Do not allow camera inputs while animating
+    }
     // Check for SPACE key press to check alignment
     if keyboard.just_pressed(KeyCode::Space) {
         game_state.nr_attempts += 1;
+        game_state.is_animating = true; // Ensure not animating
         // Clean old ui using helper
         despawn_ui_helper(&mut commands, &query);
         // Spawn new ui using helper
@@ -106,7 +110,6 @@ pub fn playing_inputs(
                 best_door_index = door.door_index;
             }
             
-            println!("Door Index: {}, Alignment: {:.4}", door.door_index, alignment);
         }
 
         // Determine if the player wins
@@ -159,7 +162,6 @@ pub fn playing_inputs(
 
         if let Some(light_entity) = found_light {
             // Start Animation
-            game_state.is_animating = true;
             game_state.animating_door = Some(winning_door.unwrap());
             game_state.animating_light = Some(light_entity);
             game_state.animation_start_time = Some(time.elapsed());
@@ -299,19 +301,19 @@ pub fn handle_door_animation(
         // Phase 1: Fade Out (Opening)
         *light_visibility = Visibility::Visible;
         let t = elapsed / DOOR_ANIMATION_FADE_OUT_DURATION;
-        let alpha = 1.0 - t.clamp(0.0, 1.0);
+        let alpha = t.clamp(0.0, 1.0);
         material.base_color.set_alpha(alpha);
 
     } else if elapsed < stay_open_end {
         // Phase 2: Stay Open
         *light_visibility = Visibility::Visible;
-        material.base_color.set_alpha(0.0);
+        material.base_color.set_alpha(1.0);
 
     } else if elapsed < fade_in_end {
         // Phase 3: Fade In (Closing)
         *light_visibility = Visibility::Visible;
         let t = (elapsed - stay_open_end) / DOOR_ANIMATION_FADE_IN_DURATION;
-        let alpha = t.clamp(0.0, 1.0);
+        let alpha = 1.0 -  t.clamp(0.0, 1.0);
         material.base_color.set_alpha(alpha);
 
     } else {

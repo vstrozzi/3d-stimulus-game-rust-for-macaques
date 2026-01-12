@@ -14,7 +14,11 @@ pub fn camera_3d_fpov_inputs(
     timer: Res<Time>,
     mut camera_query: Query<&mut Transform, With<Camera3d>>,
     mut rot_entities: Query<&mut Transform, (With<RotableComponent>, Without<Camera3d>)>,
+    gamestate: Res<crate::utils::objects::GameState>,
 ) {
+    if gamestate.is_animating {
+        return; // Do not allow camera inputs while animating
+    }
     // Set the camera's movement and zoom speed
     let speed = CAMERA_3D_SPEED_X * timer.delta_secs();
     let zoom_speed = CAMERA_3D_SPEED_Z * timer.delta_secs();

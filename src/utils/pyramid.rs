@@ -91,7 +91,7 @@ pub fn spawn_pyramid_base(
                         outer_angle: std::f32::consts::PI / 6.0,
                         ..default()
                     },
-                    Transform::from_translation(light_pos).looking_at(light_pos - normal, up),
+                    Transform::from_translation(light_pos).looking_at(light_pos - 2.0*normal, up),
                     GameEntity,
                     // Initially hidden
                     HoleLight,
@@ -267,30 +267,23 @@ fn create_frame_with_hole(
     
     // Create triangles connecting the outer rectangle to the inner pentagon
     let mut indices = Vec::new();
+
+    indices.extend_from_slice(&[1, 2, 5]); 
+    indices.extend_from_slice(&[2, 6, 5]);
+
+    indices.extend_from_slice(&[2, 3, 6]);
+    indices.extend_from_slice(&[3, 7, 6]);
+
+
+    indices.extend_from_slice(&[3, 0, 8]); // TL -> BL -> PentBL
+    indices.extend_from_slice(&[3, 8, 7]); // TL -> PentBL -> PentTL
+
+    indices.extend_from_slice(&[0, 4, 8]); 
     
-    // We need to triangulate the frame by connecting outer edges to pentagon edges
-    // Strategy: divide the frame into sections and triangulate each
+    indices.extend_from_slice(&[0, 1, 4]);
     
-    // Bottom section: connect bottom edge to bottom pentagon edges
-    indices.extend_from_slice(&[0, 1, 4]); // bottom-left to bottom-right to pentagon[0]
-    indices.extend_from_slice(&[1, 5, 4]); // bottom-right to pentagon[1] to pentagon[0]
-    
-    // Right section: connect right edge to right pentagon edges
-    indices.extend_from_slice(&[1, 2, 5]); // bottom-right to top-right to pentagon[1]
-    indices.extend_from_slice(&[2, 6, 5]); // top-right to pentagon[2] to pentagon[1]
-    
-    // Top section: connect top edge to top pentagon edges
-    indices.extend_from_slice(&[2, 3, 6]); // top-right to top-left to pentagon[2]
-    indices.extend_from_slice(&[3, 7, 6]); // top-left to pentagon[3] to pentagon[2]
-    
-    // Left section: connect left edge to left pentagon edges
-    indices.extend_from_slice(&[3, 0, 7]); // top-left to bottom-left to pentagon[3]
-    indices.extend_from_slice(&[0, 4, 7]); // bottom-left to pentagon[0] to pentagon[3]
-    
-    // Fill the gap between pentagon[3] and pentagon[4]
-    indices.extend_from_slice(&[7, 4, 8]); // pentagon[3] to pentagon[0] to pentagon[4]
-    indices.extend_from_slice(&[4, 8, 7]); // Additional triangle if needed
-    
+    indices.extend_from_slice(&[1, 5, 4]);
+
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(bevy::mesh::Indices::U32(indices));

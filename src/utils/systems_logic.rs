@@ -33,7 +33,7 @@ impl Plugin for SystemsLogicPlugin {
                 (
                     // Allow inputs only if not animating
                     (playing_inputs, camera_3d_fpov_inputs).chain()
-                        .run_if(in_state(GamePhase::Playing).and(is_animating)),
+                        .run_if(in_state(GamePhase::Playing).and(is_animating)), // STILL HERE FOR PERFORMANCE REASON BUT LOGIC INO INDIVID FUNCTIONS
 
                     // All the other systems can keep playing while we animate
                     (handle_door_animation)

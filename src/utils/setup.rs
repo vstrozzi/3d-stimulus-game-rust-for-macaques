@@ -53,7 +53,7 @@ pub fn setup(
 
     // Semicircle Wall surrounding the pyramid
     commands.spawn((
-        Mesh3d(meshes.add(create_semicircle_mesh(9.0, 10.0, 64))),
+        Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgb(0.2, 0.2, 0.2),
             perceptual_roughness: 0.2,
@@ -68,17 +68,17 @@ pub fn setup(
         GameEntity,
     ));
 
-    // Game light - PointLight positioned high to provide more uniform lighting
+    //  PointLight positioned high to provide more uniform lighting
     commands.spawn((
         SpotLight {
-            intensity: 4_000_000.0,
+            intensity: 50_000_000.0,
             shadows_enabled: true,
             outer_angle: std::f32::consts::PI / 3.0,
-            range: 15.0, // Increased range since light is higher
+            range: 45.0, // Increased range since light is higher
             radius: 0.0,
             ..default()
         },
-        Transform::from_xyz(0.0, 9.0, 0.0).looking_at(Vec3::ZERO, -Vec3::Y), // Higher position for more uniform lighting
+        Transform::from_xyz(0.0, 15.0, 0.0).looking_at(Vec3::ZERO, -Vec3::Y), // Higher position for more uniform lighting
         GameEntity,
     ));
 
@@ -186,41 +186,74 @@ pub fn setup_game_state(
 }
 
 
-/// Spawn a semicircle around the pyramid object for reflections and hints to user.
-fn create_semicircle_mesh(radius: f32, height: f32, segments: u32) -> Mesh {
+/// `extension`: The length of the straight lines extending forward from the semicircle ends.
+fn create_extended_semicircle_mesh(radius: f32, height: f32, extension: f32, segments: u32) -> Mesh {
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
 
-    // Semicircle from 0 to PI (Right to Left, facing inward)
-    for i in 0..=segments {
-        let t = i as f32 / segments as f32;
-        let angle = t * std::f32::consts::PI; 
+    // Calculate total length for correct UV mapping (0.0 to 1.0)
+    // Arc length = PI * R
+    // Total = Extension + Arc + Extension
+    let arc_len = std::f32::consts::PI * radius;
+    let total_len = arc_len + (2.0 * extension);
 
-        // x = R * cos(angle), z = -R * sin(angle)
-        // angle=0 -> (R, 0, 0)
-        // angle=PI/2 -> (0, 0, -R) (Back)
-        // angle=PI -> (-R, 0, 0)
-        let x = radius * angle.cos();
-        let z = -radius * angle.sin();
-
-        // Normal points outwards (to center)
-        let normal = -Vec3::new(x, 0.0, z).normalize();
+    // Helper to push a column of vertices (Top and Bottom)
+    // We modify the lists internally
+    let mut push_column = |x: f32, z: f32, normal: Vec3, u_dist: f32| {
+        let u = u_dist / total_len;
 
         // Bottom vertex
         positions.push([x, 0.0, z]);
         normals.push([normal.x, normal.y, normal.z]);
-        uvs.push([t, 1.0]);
+        uvs.push([u, 1.0]);
 
         // Top vertex
         positions.push([x, height, z]);
         normals.push([normal.x, normal.y, normal.z]);
-        uvs.push([t, 0.0]);
+        uvs.push([u, 0.0]);
+    };
+
+    // --- 1. Right Extension (Start) ---
+    // Starts at Z = extension, goes to Z = 0
+    // Normal points inward (-X)
+    push_column(radius, extension, Vec3::NEG_X, 0.0);
+
+    // --- 2. Semicircle Arc ---
+    // From 0 to PI
+    for i in 0..=segments {
+        let t = i as f32 / segments as f32;
+        let angle = t * std::f32::consts::PI;
+
+        // x = R * cos(angle), z = -R * sin(angle)
+        let x = radius * angle.cos();
+        let z = -radius * angle.sin();
+
+        // Normal points outwards (to center)
+        // Note: For the specific case of angle=0 or PI, this matches the straight line normals perfectly.
+        let normal = -Vec3::new(x, 0.0, z).normalize();
+
+        // Calculate distance along the path for UVs
+        // Current distance = Extension + (portion of arc)
+        let current_dist = extension + (t * arc_len);
+
+        push_column(x, z, normal, current_dist);
     }
 
-    for i in 0..segments {
+    // --- 3. Left Extension (End) ---
+    // Starts at Z = 0, goes to Z = extension
+    // Normal points inward (+X)
+    push_column(-radius, extension, Vec3::X, total_len);
+
+    // --- Indices Generation ---
+    // We now have (segments + 1) arc columns + 2 extension columns = segments + 3 columns.
+    // The number of quads to draw is (total_columns - 1).
+    let total_columns = positions.len() as u32 / 2; 
+
+    for i in 0..(total_columns - 1) {
         let base = i * 2;
+        
         // CCW winding for inward face
         indices.push(base);     // Bottom Current
         indices.push(base + 2); // Bottom Next

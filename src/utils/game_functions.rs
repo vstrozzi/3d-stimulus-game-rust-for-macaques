@@ -1,11 +1,13 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
 
+use crate::utils::touch_inputs::TouchTapEvent;
 use crate::utils::constants::game_constants::{
     COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD, DOOR_ANIMATION_FADE_IN_DURATION,
     DOOR_ANIMATION_FADE_OUT_DURATION, DOOR_ANIMATION_STAY_OPEN_DURATION,
     SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT,
 };
+use crate::utils::constants::lighting_constants::MAX_SPOTLIGHT_INTENSITY;
 use crate::utils::objects::{
     BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleEmissive, HoleLight, ScoreBarFill,
     ScoreBarUI, UIEntity,
@@ -34,7 +36,7 @@ pub fn cleanup_game_entities(mut commands: Commands, query: Query<Entity, With<G
 pub fn setup_intro_ui(mut commands: Commands) {
     commands.spawn((Camera2d::default(), UIEntity));
     let text =
-        "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
+        "Press SPACE or TAP to start! \nControls: Arrow Keys/WASD or Swipe to Rotate | SPACE or TAP to Check";
     spawn_centered_text_black_screen(&mut commands, text);
 }
 
@@ -44,8 +46,10 @@ pub fn menu_inputs(
     mut next_state: ResMut<NextState<GamePhase>>,
     mut game_state: ResMut<GameState>,
     time: Res<Time>,
+    mut tap_events: MessageReader<TouchTapEvent>,
 ) {
-    if keyboard.just_pressed(KeyCode::Space) {
+    let tap_detected = tap_events.read().next().is_some();
+    if keyboard.just_pressed(KeyCode::Space) || tap_detected {
         game_state.start_time = Some(time.elapsed());
         game_state.nr_attempts = 0;
         next_state.set(GamePhase::Playing);
@@ -69,12 +73,14 @@ pub fn playing_inputs(
     frame_query: Query<(&BaseFrame, &Children)>,
     mut commands: Commands,
     query: Query<Entity, With<UIEntity>>,
+    mut tap_events: MessageReader<TouchTapEvent>,
 ) {
     if game_state.is_animating {
         return; // Do not allow camera inputs while animating
     }
-    // Check for SPACE key press to check alignment
-    if keyboard.just_pressed(KeyCode::Space) {
+    // Check for SPACE key press or touch tap to check alignment
+    let tap_detected = tap_events.read().next().is_some();
+    if keyboard.just_pressed(KeyCode::Space) || tap_detected {
         game_state.nr_attempts += 1;
         game_state.is_animating = true; // Ensure not animating
         // Clean old ui using helper
@@ -182,8 +188,10 @@ pub fn playing_inputs(
 pub fn won_inputs(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GamePhase>>,
+    mut tap_events: MessageReader<TouchTapEvent>,
 ) {
-    if keyboard.just_pressed(KeyCode::KeyR) {
+    let tap_detected = tap_events.read().next().is_some();
+    if keyboard.just_pressed(KeyCode::KeyR) || tap_detected {
         next_state.set(GamePhase::MenuUI);
     }
 }
@@ -195,7 +203,7 @@ pub fn setup_playing_ui(mut commands: Commands, game_state: Res<GameState>) {
 
 pub fn spawn_playing_hud(commands: &mut Commands, game_state: &GameState) {
     let text = format!(
-        "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",
+        "Swipe or Arrow Keys: Rotate | TAP or SPACE: Check \nFind the RED face! | Attempts: {}",
         game_state.nr_attempts
     );
     commands.spawn((
@@ -270,7 +278,7 @@ pub fn setup_won_ui(mut commands: Commands, game_state: Res<GameState>) {
     let accuracy = game_state.cosine_alignment.unwrap_or(0.0) * 100.0;
 
     let mut text = format!(
-        "Refresh (R) to play again\n\n        CONGRATULATIONS! YOU WIN!\n        - Time taken: {:.5} seconds\n        - Attempts: {}\n        - Alignment accuracy: {:.1}%",
+        "TAP or press R to play again\n\n        CONGRATULATIONS! YOU WIN!\n        - Time taken: {:.5} seconds\n        - Attempts: {}\n        - Alignment accuracy: {:.1}%",
         elapsed, game_state.nr_attempts, accuracy
     );
 
@@ -360,8 +368,7 @@ pub fn handle_door_animation(
         0.0
     };
 
-    // Max intensity values
-    const MAX_SPOTLIGHT_INTENSITY: f32 = 2_000_000.0;
+    // Max intensity values (MAX_SPOTLIGHT_INTENSITY imported from constants)
     const MAX_EMISSIVE_INTENSITY: f32 = 100.0;
 
     if elapsed < fade_in_end {

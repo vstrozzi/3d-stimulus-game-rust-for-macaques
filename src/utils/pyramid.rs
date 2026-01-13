@@ -1,6 +1,10 @@
 //! Logic for spawning the pyramid base with interactive doors.
 
-use crate::utils::constants::{object_constants::GROUND_Y, pyramid_constants::*};
+use crate::utils::constants::{
+    lighting_constants::{HOLE_SPOTLIGHT_INTENSITY, SHADOWS_ENABLED},
+    object_constants::GROUND_Y,
+    pyramid_constants::*,
+};
 use crate::utils::objects::{
     BaseDoor, BaseFrame, Decoration, DecorationSet, DecorationShape, GameEntity, GameState,
     HoleEmissive, HoleLight, Pyramid, PyramidType, RandomGen, RotableComponent,
@@ -143,8 +147,8 @@ pub fn spawn_pyramid_base(
                 // Spawn spotlight
                 parent.spawn((
                     SpotLight {
-                        intensity: 2_000_000.0,
-                        shadows_enabled: true,
+                        intensity: HOLE_SPOTLIGHT_INTENSITY,
+                        shadows_enabled: SHADOWS_ENABLED,
                         inner_angle: std::f32::consts::PI / 6.0, // Soft falloff
                         outer_angle: std::f32::consts::PI / 4.0,
                         range: 25.0,
@@ -681,7 +685,7 @@ fn spawn_decorations_from_set(
         let final_rotation = normal_rotation * base_rotation;
 
         // Offset slightly away from face surface to prevent z-fighting
-        let offset_position = position - face_normal * 0.0001;
+        let offset_position = position - face_normal * 0.01;
 
         // Spawn the decoration as a child of the face
         commands.entity(parent_face).with_children(|parent| {

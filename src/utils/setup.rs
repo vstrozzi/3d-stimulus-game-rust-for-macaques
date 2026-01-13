@@ -9,6 +9,7 @@ use crate::log;
 use crate::utils::constants::{
     camera_3d_constants::{CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z},
     game_constants::SEED,
+    lighting_constants::{AMBIENT_BRIGHTNESS, MAIN_SPOTLIGHT_INTENSITY},
     object_constants::GROUND_Y,
     pyramid_constants::*,
 };
@@ -69,7 +70,7 @@ pub fn setup(
     //  PointLight positioned high to provide more uniform lighting
     commands.spawn((
         SpotLight {
-            intensity: 50_000_000.0,
+            intensity: MAIN_SPOTLIGHT_INTENSITY,
             shadows_enabled: true,
             outer_angle: std::f32::consts::PI / 3.0,
             range: 45.0, // Increased range since light is higher
@@ -83,7 +84,7 @@ pub fn setup(
     // Ambient light
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
-        brightness: 200.0,
+        brightness: AMBIENT_BRIGHTNESS,
         affects_lightmapped_meshes: true,
     });
 

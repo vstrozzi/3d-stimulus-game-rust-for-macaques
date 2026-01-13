@@ -12,4 +12,5 @@ pub mod utils {
     pub mod pyramid;
     pub mod setup;
     pub mod systems_logic;
+    pub mod touch_inputs;
 }

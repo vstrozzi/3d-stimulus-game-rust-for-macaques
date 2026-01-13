@@ -10,7 +10,7 @@ pub mod camera_3d_constants {
     pub const CAMERA_3D_SPEED_Z: f32 = 4.0;
 
     // Radius range for the camera's orbit.
-    pub const CAMERA_3D_MIN_RADIUS: f32 = 8.0;
+    pub const CAMERA_3D_MIN_RADIUS: f32 = 9.0;
     pub const CAMERA_3D_MAX_RADIUS: f32 = 20.0;
 }
 
@@ -87,4 +87,25 @@ pub mod game_constants {
     pub const SCORE_BAR_HEIGHT: f32 = 20.0; // pixels (scaled by UiScale)
     pub const SCORE_BAR_TOP_OFFSET: f32 = 50.0; // pixels from top (scaled by UiScale)
     pub const SCORE_BAR_BORDER_THICKNESS: f32 = 2.0; // pixels (scaled by UiScale)
+}
+
+/// Lighting constants
+pub mod lighting_constants {
+    // Main scene spotlight intensity
+    pub const MAIN_SPOTLIGHT_INTENSITY: f32 = 50_000_000.0;
+
+    // Hole spotlight intensity (for door animations)
+    pub const HOLE_SPOTLIGHT_INTENSITY: f32 = 2_000_000.0;
+
+    // Max spotlight intensity during animation
+    pub const MAX_SPOTLIGHT_INTENSITY: f32 = 2_000_000.0;
+
+    // Ambient light brightness
+    pub const AMBIENT_BRIGHTNESS: f32 = 200.0;
+
+    // Shadow settings
+    #[cfg(target_arch = "wasm32")]
+    pub const SHADOWS_ENABLED: bool = false;    // Need to disable shadowslight on WASM for weird artifacts
+    #[cfg(not(target_arch = "wasm32"))]
+    pub const SHADOWS_ENABLED: bool = true;
 }

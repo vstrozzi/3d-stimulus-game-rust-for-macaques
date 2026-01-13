@@ -6,11 +6,17 @@ A 3D puzzle game built with Bevy where the player must find the correct orientat
 
 ## Controls
 
+### Keyboard
 -   **Arrow Keys / WASD**: Rotate camera around pyramid (orbit left/right, zoom in/out)
 -   **SPACE**: Check alignment / Start game
 -   **R**: Restart game (when game is over)
 -   **ESC**: Toggle fullscreen/windowed mode and cursor lock
 -   **V**: Toggle VSync on/off
+
+### Touch (Mobile/Touchscreen)
+-   **Horizontal Swipe**: Rotate camera around pyramid (left/right)
+-   **Vertical Swipe**: Zoom in/out (swipe up to zoom in, swipe down to zoom out)
+-   **Tap**: Check alignment / Start game / Restart game
 
 ## Dependencies
 

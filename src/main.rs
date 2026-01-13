@@ -14,6 +14,7 @@ use monkey_3d_game::utils::{
     global_inputs::InputsPlugin,
     objects::{GameState, RandomGen},
     systems_logic::SystemsLogicPlugin,
+    touch_inputs::TouchInputPlugin,
 };
 
 /// Entry point for the application
@@ -48,6 +49,7 @@ fn main() {
             // Custom game plugins
             SystemsLogicPlugin, // Main game phase logic
             InputsPlugin,
+            TouchInputPlugin, // Touch/mobile support
             DebugFunctionsPlugin,
         ))
         // Fixed timestep for physics calculations

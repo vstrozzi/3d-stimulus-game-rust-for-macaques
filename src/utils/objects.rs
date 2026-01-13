@@ -149,3 +149,10 @@ pub struct BaseDoor {
     pub normal: Vec3, // In world coordinates
     pub is_open: bool,
 }
+
+// Component of the UI bar showing the score with lights
+#[derive(Component)]
+pub struct ScoreBarUI;
+// Component marking the fill bar inside the ScoreBarUI
+#[derive(Component)]
+pub struct ScoreBarFill;

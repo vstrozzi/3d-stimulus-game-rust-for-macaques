@@ -160,7 +160,7 @@ pub fn setup_game_state(
         end_time: None,
 
         nr_attempts: 0,
-        cosine_alignment: None,
+        cosine_alignment: Some(0.0),
 
         animating_door: None,
         animating_light: None,

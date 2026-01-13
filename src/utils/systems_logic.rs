@@ -3,7 +3,7 @@
 use crate::utils::camera::camera_3d_fpov_inputs;
 use crate::utils::game_functions::{
     despawn_ui, handle_door_animation, menu_inputs, playing_inputs, setup_intro_ui,
-    setup_playing_ui, setup_won_ui, won_inputs,
+    setup_playing_ui, setup_won_ui, update_score_bar_animation, update_ui_scale, won_inputs,
 };
 use crate::utils::objects::{GamePhase, GameState};
 use crate::utils::setup::{despawn_setup, setup};
@@ -16,6 +16,8 @@ impl Plugin for SystemsLogicPlugin {
     /// Builds the plugin by adding the systems to the app.
     fn build(&self, app: &mut App) {
         app.init_state::<GamePhase>()
+            // Global UI responsiveness system (runs every frame)
+            .add_systems(Update, update_ui_scale)
             // Intro State
             .add_systems(OnEnter(GamePhase::MenuUI), setup_intro_ui)
             .add_systems(Update, menu_inputs.run_if(in_state(GamePhase::MenuUI)))
@@ -33,7 +35,8 @@ impl Plugin for SystemsLogicPlugin {
                         .chain()
                         .run_if(in_state(GamePhase::Playing).and(is_animating)), // STILL HERE FOR PERFORMANCE REASON BUT LOGIC INO INDIVID FUNCTIONS
                     // All the other systems can keep playing while we animate
-                    (handle_door_animation).run_if(in_state(GamePhase::Playing)),
+                    (handle_door_animation, update_score_bar_animation)
+                        .run_if(in_state(GamePhase::Playing)),
                 ),
             )
             .add_systems(

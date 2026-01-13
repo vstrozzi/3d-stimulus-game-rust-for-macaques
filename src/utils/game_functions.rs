@@ -4,9 +4,11 @@ use bevy::prelude::*;
 use crate::utils::constants::game_constants::{
     COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD, DOOR_ANIMATION_FADE_IN_DURATION,
     DOOR_ANIMATION_FADE_OUT_DURATION, DOOR_ANIMATION_STAY_OPEN_DURATION,
+    SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT,
 };
 use crate::utils::objects::{
-    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleLight, UIEntity,
+    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleLight, ScoreBarFill, ScoreBarUI,
+    UIEntity,
 };
 
 /// Helper to despawn ui entities given a mutable commands reference
@@ -207,6 +209,52 @@ pub fn spawn_playing_hud(commands: &mut Commands, game_state: &GameState) {
         },
         UIEntity,
     ));
+
+    // Spawn the score bar
+    spawn_score_bar(commands);
+}
+
+/// Spawns the energy score bar at the top center of the screen
+pub fn spawn_score_bar(commands: &mut Commands) {
+    // Container for the score bar (centered at top)
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                top: Val::Px(SCORE_BAR_TOP_OFFSET),
+                justify_content: JustifyContent::Center,
+                ..default()
+            },
+            UIEntity,
+        ))
+        .with_children(|parent| {
+            // Outer border/background of the bar
+            parent
+                .spawn((
+                    Node {
+                        width: Val::Percent(SCORE_BAR_WIDTH_PERCENT),
+                        height: Val::Px(SCORE_BAR_HEIGHT),
+                        border: UiRect::all(Val::Px(SCORE_BAR_BORDER_THICKNESS)),
+                        padding: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.5)), // Dark subtle background
+                    ScoreBarUI,
+                ))
+                .with_children(|bar_parent| {
+                    // Inner fill bar (starts empty)
+                    bar_parent.spawn((
+                        Node {
+                            width: Val::Percent(0.0), // Starts empty
+                            height: Val::Percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgba(0.2, 0.6, 1.0, 0.3)), // Dim cyan glow when empty
+                        ScoreBarFill,
+                    ));
+                });
+        });
 }
 
 /// Setup UI for Won state
@@ -254,7 +302,7 @@ pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
                 },
                 TextColor(Color::srgb(1.0, 1.0, 1.0)),
                 Node {
-                    max_width: Val::Px(1200.0), // limit text width for wrapping
+                    max_width: Val::Percent(90.0), // limit text width for wrapping (responsive)
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     ..default()
@@ -334,4 +382,93 @@ pub fn handle_door_animation(
         }
         game_state.pending_phase = None;
     }
+}
+
+/// Updates the score bar fill and color during the door animation
+pub fn update_score_bar_animation(
+    game_state: Res<GameState>,
+    time: Res<Time>,
+    mut fill_query: Query<(&mut Node, &mut BackgroundColor), With<ScoreBarFill>>,
+) {
+    let Ok((mut node, mut bg_color)) = fill_query.single_mut() else {
+        return;
+    };
+
+    if !game_state.is_animating {
+        // Not animating - show empty/dim state
+        node.width = Val::Percent(0.0);
+        *bg_color = BackgroundColor(Color::srgba(0.2, 0.6, 1.0, 0.3)); // Dim cyan
+        return;
+    }
+
+    // Get animation progress
+    let Some(start_time) = game_state.animation_start_time else {
+        return;
+    };
+    let elapsed = (time.elapsed() - start_time).as_secs_f32();
+
+    let total_duration = DOOR_ANIMATION_FADE_OUT_DURATION
+        + DOOR_ANIMATION_STAY_OPEN_DURATION
+        + DOOR_ANIMATION_FADE_IN_DURATION;
+
+    // Calculate fill progress (0.0 to 1.0)
+    let fill_progress = (elapsed / total_duration).clamp(0.0, 1.0);
+
+    // Get alignment score (normalized to 0.0 - 1.0 range from -1.0 - 1.0)
+    let alignment_normalized = if let Some(alignment) = game_state.cosine_alignment {
+        ((alignment + 1.0) / 2.0).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+
+    // Fill width based on both animation progress and alignment score
+    // The bar fills up to the alignment level during the animation
+    let target_width = alignment_normalized * 100.0;
+    let current_width = fill_progress * target_width;
+    node.width = Val::Percent(current_width);
+
+    // Color gradient based on alignment quality (cyan -> yellow -> white)
+    // Low alignment (0.0-0.5): cyan to yellow
+    // High alignment (0.5-1.0): yellow to bright white
+    let color = if alignment_normalized < 0.5 {
+        let t = alignment_normalized * 2.0; // 0.0 to 1.0 for first half
+        Color::srgba(
+            0.2 + t * 0.8, // R: 0.2 -> 1.0
+            0.6 + t * 0.4, // G: 0.6 -> 1.0
+            1.0 - t * 0.2, // B: 1.0 -> 0.8
+            0.7 + t * 0.2, // A: 0.7 -> 0.9
+        )
+    } else {
+        let t = (alignment_normalized - 0.5) * 2.0; // 0.0 to 1.0 for second half
+        Color::srgba(
+            1.0,               // R: stays at 1.0
+            1.0,               // G: stays at 1.0
+            0.8 + t * 0.2,     // B: 0.8 -> 1.0 (yellow to white)
+            0.9 + t * 0.1,     // A: 0.9 -> 1.0
+        )
+    };
+
+    *bg_color = BackgroundColor(color);
+}
+
+/// Updates UI scale based on window size for responsive design
+/// Targets 1080p (1920x1080) as the reference resolution
+pub fn update_ui_scale(
+    mut ui_scale: ResMut<UiScale>,
+    window_query: Query<&Window>,
+) {
+    let Ok(window) = window_query.single() else {
+        return;
+    };
+
+    // Reference height for UI design (1080p)
+    const REFERENCE_HEIGHT: f32 = 1080.0;
+    
+    // Calculate scale based on window height
+    let scale = window.height() / REFERENCE_HEIGHT;
+    
+    // Clamp scale to reasonable bounds (0.5x to 2.0x)
+    let clamped_scale = scale.clamp(0.5, 2.0);
+    
+    ui_scale.0 = clamped_scale;
 }

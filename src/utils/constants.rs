@@ -78,4 +78,13 @@ pub mod game_constants {
     pub const DOOR_ANIMATION_FADE_OUT_DURATION: f32 = 0.5;
     pub const DOOR_ANIMATION_STAY_OPEN_DURATION: f32 = 0.5;
     pub const DOOR_ANIMATION_FADE_IN_DURATION: f32 = 0.5;
+
+    // UI responsive design reference
+    pub const UI_REFERENCE_HEIGHT: f32 = 1080.0; // 1080p as reference
+
+    // Score bar UI constants (scaled values)
+    pub const SCORE_BAR_WIDTH_PERCENT: f32 = 40.0; // 40% of screen width
+    pub const SCORE_BAR_HEIGHT: f32 = 20.0; // pixels (scaled by UiScale)
+    pub const SCORE_BAR_TOP_OFFSET: f32 = 50.0; // pixels from top (scaled by UiScale)
+    pub const SCORE_BAR_BORDER_THICKNESS: f32 = 2.0; // pixels (scaled by UiScale)
 }

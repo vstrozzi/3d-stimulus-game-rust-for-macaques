@@ -4,9 +4,8 @@ use crate::utils::constants::camera_3d_constants::{
     CAMERA_3D_INITIAL_Y, CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS, CAMERA_3D_SPEED_X,
     CAMERA_3D_SPEED_Z,
 };
-use crate::utils::objects::{RotableComponent};
+use crate::utils::objects::RotableComponent;
 use bevy::prelude::*;
-
 
 /// Controls the 3D camera, rotating the main pyramid (A/D) and its platform and zooms in/out with W/S.
 pub fn camera_3d_fpov_inputs(
@@ -28,9 +27,9 @@ pub fn camera_3d_fpov_inputs(
     let right = keyboard.pressed(KeyCode::ArrowRight) || keyboard.pressed(KeyCode::KeyD);
     let up = keyboard.pressed(KeyCode::ArrowUp) || keyboard.pressed(KeyCode::KeyW);
     let down = keyboard.pressed(KeyCode::ArrowDown) || keyboard.pressed(KeyCode::KeyS);
-    
+
     // Update Camera zoom by updating camera (up/down)
-    if up || down{
+    if up || down {
         let Ok(mut transform) = camera_query.single_mut() else {
             return;
         };
@@ -52,17 +51,22 @@ pub fn camera_3d_fpov_inputs(
         );
         // Make the camera always look at the origin.
         transform.look_at(Vec3::ZERO, Vec3::Y);
-    } 
+    }
     // Rotate all the rotable entities around the origin based on camera input
     else if left || right {
-        for mut rot_entity_transform in &mut rot_entities{
+        for mut rot_entity_transform in &mut rot_entities {
             // Get the entity's current rotation and radius from the origin.
             let (mut yaw, _, _) = rot_entity_transform.rotation.to_euler(EulerRot::YXZ);
-            
-            yaw += if left {-speed} else if right {speed} else {0.};
+
+            yaw += if left {
+                -speed
+            } else if right {
+                speed
+            } else {
+                0.
+            };
 
             rot_entity_transform.rotation = Quat::from_rotation_y(yaw);
-            }
+        }
     }
-
 }

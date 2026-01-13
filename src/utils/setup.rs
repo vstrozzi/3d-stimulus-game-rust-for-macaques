@@ -2,8 +2,8 @@
 use bevy::prelude::*;
 
 use bevy::asset::RenderAssetUsages;
-use bevy::render::render_resource::{PrimitiveTopology};
 use bevy::mesh::Indices;
+use bevy::render::render_resource::PrimitiveTopology;
 
 use crate::log;
 use crate::utils::constants::{
@@ -15,9 +15,7 @@ use crate::utils::constants::{
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 
-
 use rand::{Rng, RngCore};
-
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid
 pub fn setup(
@@ -82,8 +80,6 @@ pub fn setup(
         GameEntity,
     ));
 
-
-
     // Ambient light
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
@@ -106,12 +102,8 @@ pub fn setup(
     log!("🎮 Pyramid Game Started!");
 }
 
-
 // Despawn all entities, needed when transitioning from Playing to MenuUI
-pub fn despawn_setup(
-    mut commands: Commands,
-    query: Query<Entity, With<GameEntity>>,
-) {
+pub fn despawn_setup(mut commands: Commands, query: Query<Entity, With<GameEntity>>) {
     for entity in &query {
         commands.entity(entity).despawn();
     }
@@ -123,7 +115,6 @@ pub fn setup_game_state(
     time: &Res<Time>,
     random_gen: &mut ResMut<RandomGen>,
 ) -> GameState {
-
     // Determine the pyramid type randomly
     let pyramid_type = if random_gen.random_gen.next_u64() % 2 == 0 {
         PyramidType::Type1
@@ -150,7 +141,7 @@ pub fn setup_game_state(
     let mut pyramid_target_door_index = 5;
     if pyramid_type == PyramidType::Type2 {
         pyramid_colors[2] = pyramid_colors[1];
-        
+
         pyramid_target_door_index = 2;
     }
 
@@ -161,10 +152,10 @@ pub fn setup_game_state(
         pyramid_base_radius: pyramid_base_radius,
         pyramid_height: pyramid_height,
         pyramid_start_orientation_rad: pyramid_start_orientation_rad,
-        
+
         pyramid_color_faces: pyramid_colors,
 
-        pyramid_target_door_index: pyramid_target_door_index, 
+        pyramid_target_door_index: pyramid_target_door_index,
         start_time: Some(time.elapsed()),
         end_time: None,
 
@@ -178,16 +169,19 @@ pub fn setup_game_state(
         pending_phase: None,
     };
 
-
     let cloned_game_state = game_state.clone();
     commands.insert_resource(game_state);
 
     return cloned_game_state;
 }
 
-
-/// `extension`: The length of the straight lines extending forward from the semicircle ends.
-fn create_extended_semicircle_mesh(radius: f32, height: f32, extension: f32, segments: u32) -> Mesh {
+/// The length of the straight lines extending forward from the semicircle ends.
+fn create_extended_semicircle_mesh(
+    radius: f32,
+    height: f32,
+    extension: f32,
+    segments: u32,
+) -> Mesh {
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
@@ -215,12 +209,11 @@ fn create_extended_semicircle_mesh(radius: f32, height: f32, extension: f32, seg
         uvs.push([u, 0.0]);
     };
 
-    // --- 1. Right Extension (Start) ---
     // Starts at Z = extension, goes to Z = 0
     // Normal points inward (-X)
     push_column(radius, extension, Vec3::NEG_X, 0.0);
 
-    // --- 2. Semicircle Arc ---
+    // Semicircle Arc
     // From 0 to PI
     for i in 0..=segments {
         let t = i as f32 / segments as f32;
@@ -241,21 +234,21 @@ fn create_extended_semicircle_mesh(radius: f32, height: f32, extension: f32, seg
         push_column(x, z, normal, current_dist);
     }
 
-    // --- 3. Left Extension (End) ---
+    // Left Extension (End)
     // Starts at Z = 0, goes to Z = extension
     // Normal points inward (+X)
     push_column(-radius, extension, Vec3::X, total_len);
 
-    // --- Indices Generation ---
+    // Indices Generation
     // We now have (segments + 1) arc columns + 2 extension columns = segments + 3 columns.
     // The number of quads to draw is (total_columns - 1).
-    let total_columns = positions.len() as u32 / 2; 
+    let total_columns = positions.len() as u32 / 2;
 
     for i in 0..(total_columns - 1) {
         let base = i * 2;
-        
+
         // CCW winding for inward face
-        indices.push(base);     // Bottom Current
+        indices.push(base); // Bottom Current
         indices.push(base + 2); // Bottom Next
         indices.push(base + 1); // Top Current
 
@@ -264,7 +257,10 @@ fn create_extended_semicircle_mesh(radius: f32, height: f32, extension: f32, seg
         indices.push(base + 3); // Top Next
     }
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);

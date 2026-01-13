@@ -9,18 +9,18 @@ use bevy::{
 
 /// Import custom modules game defined
 use monkey_3d_game::utils::{
-    systems_logic::SystemsLogicPlugin,
     constants::game_constants::REFRESH_RATE_HZ,
     debug_functions::DebugFunctionsPlugin,
     global_inputs::InputsPlugin,
     objects::{GameState, RandomGen},
+    systems_logic::SystemsLogicPlugin,
 };
 
 /// Entry point for the application
 fn main() {
     let window = Some(Window {
         title: "Monkey 3D Game".into(),
-        fit_canvas_to_parent: true, // Wasm size as canvas
+        fit_canvas_to_parent: true,            // Wasm size as canvas
         prevent_default_event_handling: false, // Wasm not override default (F5, ...)
         #[cfg(not(target_arch = "wasm32"))]
         mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary), // Native fullscreen

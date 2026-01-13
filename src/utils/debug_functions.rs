@@ -11,10 +11,7 @@ impl Plugin for DebugFunctionsPlugin {
 }
 
 /// Toggles VSync when the 'V' key is pressed.
-fn toggle_vsync(
-    input: Res<ButtonInput<KeyCode>>,
-    mut window: Query<&mut Window>,
-) {
+fn toggle_vsync(input: Res<ButtonInput<KeyCode>>, mut window: Query<&mut Window>) {
     if input.just_pressed(KeyCode::KeyV) {
         let mut window = window.single_mut().unwrap();
 

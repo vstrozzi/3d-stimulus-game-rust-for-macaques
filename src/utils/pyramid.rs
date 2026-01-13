@@ -2,14 +2,13 @@
 
 use crate::utils::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 use crate::utils::objects::{
-    Decoration, DecorationSet, DecorationShape, GameEntity, GameState, Pyramid,
-    PyramidType, RandomGen, RotableComponent, BaseFrame, BaseDoor, HoleLight,
+    BaseDoor, BaseFrame, Decoration, DecorationSet, DecorationShape, GameEntity, GameState,
+    HoleLight, Pyramid, PyramidType, RandomGen, RotableComponent,
 };
 use bevy::prelude::*;
 
 use rand::{Rng, RngCore};
 use rand_chacha::ChaCha8Rng;
-
 
 /// Spawns the wooden base with holes for the pyramid
 pub fn spawn_pyramid_base(
@@ -21,11 +20,14 @@ pub fn spawn_pyramid_base(
     let base_radius = BASE_RADIUS;
     let angle_increment = std::f32::consts::TAU / BASE_NR_SIDES as f32;
 
-    
     for i in 0..BASE_NR_SIDES {
-        let angle1 = i as f32 * angle_increment + game_state.pyramid_start_orientation_rad + std::f32::consts::PI / 2.0;
-        let angle2 = (i + 1) as f32 * angle_increment + game_state.pyramid_start_orientation_rad + std::f32::consts::PI / 2.0;
-        
+        let angle1 = i as f32 * angle_increment
+            + game_state.pyramid_start_orientation_rad
+            + std::f32::consts::PI / 2.0;
+        let angle2 = (i + 1) as f32 * angle_increment
+            + game_state.pyramid_start_orientation_rad
+            + std::f32::consts::PI / 2.0;
+
         // Calculate the four corners of the rectangular side
         let bottom_outer_1 = Vec3::new(
             base_radius * angle1.cos(),
@@ -47,27 +49,23 @@ pub fn spawn_pyramid_base(
             GROUND_Y + BASE_HEIGHT,
             base_radius * angle2.sin(),
         );
-        
+
         // Create the frame mesh with a pentagonal hole
-        let frame_mesh = create_frame_with_hole(
-            bottom_outer_1,
-            bottom_outer_2,
-            top_outer_1,
-            top_outer_2,
-        );
-        
+        let frame_mesh =
+            create_frame_with_hole(bottom_outer_1, bottom_outer_2, top_outer_1, top_outer_2);
+
         // Calculate the normal for the side
         let side_vec = bottom_outer_2 - bottom_outer_1;
         let up_vec = Vec3::Y;
         let normal = side_vec.cross(up_vec).normalize();
-        
-        // Calculate light position 
+
+        // Calculate light position
         let center = (bottom_outer_1 + bottom_outer_2 + top_outer_1 + top_outer_2) / 4.0;
-        let light_pos = center - normal * BASE_HOLES_LIGHT_OFFSET_CENTER + Vec3::Y * BASE_HOLES_LIGHT_Y_OFFSET ;
+        let light_pos =
+            center - normal * BASE_HOLES_LIGHT_OFFSET_CENTER + Vec3::Y * BASE_HOLES_LIGHT_Y_OFFSET;
 
-
-        let right = normal.cross(Vec3::Y).normalize();  // Perpendicular to both normal and Y
-        let up = right.cross(normal).normalize();       // Perpendicular to both right and look direction
+        let right = normal.cross(Vec3::Y).normalize(); // Perpendicular to both normal and Y
+        let up = right.cross(normal).normalize(); // Perpendicular to both right and look direction
         // Spawn the base frame and a light in front to have a nice effect
         commands
             .spawn((
@@ -78,39 +76,39 @@ pub fn spawn_pyramid_base(
                     double_sided: true,
                     ..default()
                 })),
-                Transform::default(),
-                BaseFrame {door_index: i },
+                Transform::default(), // Frame sits at (0,0,0) or world origin
+                BaseFrame { door_index: i },
                 GameEntity,
-                RotableComponent
+                RotableComponent,
             ))
             .with_children(|parent| {
                 parent.spawn((
                     SpotLight {
                         intensity: 2_000_000.0,
                         shadows_enabled: true,
-                        outer_angle: std::f32::consts::PI / 6.0,
+                        inner_angle: std::f32::consts::PI / 6.0, // Soft falloff
+                        outer_angle: std::f32::consts::PI / 4.0,
+                        range: 25.0,
+                        radius: 0.5,
                         ..default()
                     },
-                    Transform::from_translation(light_pos).looking_at(light_pos - 2.0*normal, up),
                     GameEntity,
-                    // Initially hidden
                     HoleLight,
-                    Visibility::Hidden,
+                    Visibility::Hidden, // Initially hidden
+                    // Position is RELATIVE to the Frame.
+                    // 'light_pos' must be the offset from the Frame's center.
+                    Transform::from_translation(light_pos).looking_at(light_pos - 2.0 * normal, up),
                 ));
             });
-        
+
         // Create and spawn the door (pentagon) that covers the hole
-        let door_mesh = create_pentagon_door(
-            bottom_outer_1,
-            bottom_outer_2,
-            top_outer_1,
-            top_outer_2,
-        );
-        
+        let door_mesh =
+            create_pentagon_door(bottom_outer_1, bottom_outer_2, top_outer_1, top_outer_2);
+
         // Door color: slightly darker brown with a visible border effect
         // Alpha mode Blend to allow transparency changes
         let door_color = Color::srgba(0.49, 0.24, 0.00, 0.0);
-        
+
         // Spawn the door entity
         commands.spawn((
             Mesh3d(meshes.add(door_mesh)),
@@ -130,15 +128,18 @@ pub fn spawn_pyramid_base(
             GameEntity,
             RotableComponent,
         ));
-        
     }
 
     // Spawn the top lid of the base
     let top_y = GROUND_Y + BASE_HEIGHT;
-    
+
     // Create a polygon mesh matching the base's shape
-    let top_lid_mesh = create_top_lid_mesh(base_radius, BASE_NR_SIDES, game_state.pyramid_start_orientation_rad);
-    
+    let top_lid_mesh = create_top_lid_mesh(
+        base_radius,
+        BASE_NR_SIDES,
+        game_state.pyramid_start_orientation_rad,
+    );
+
     commands.spawn((
         Mesh3d(meshes.add(top_lid_mesh)),
         MeshMaterial3d(materials.add(StandardMaterial {
@@ -148,11 +149,10 @@ pub fn spawn_pyramid_base(
             ..default()
         })),
         Transform::from_xyz(0.0, top_y, 0.0),
-        RotableComponent, 
+        RotableComponent,
         GameEntity,
     ));
 }
-
 
 /// Creates a polygonal lid mesh for the top of the base
 fn create_top_lid_mesh(radius: f32, sides: usize, start_orientation: f32) -> Mesh {
@@ -160,44 +160,42 @@ fn create_top_lid_mesh(radius: f32, sides: usize, start_orientation: f32) -> Mes
         bevy::mesh::PrimitiveTopology::TriangleList,
         Default::default(),
     );
-    
+
     let angle_increment = std::f32::consts::TAU / sides as f32;
     let mut positions = Vec::new();
     let mut normals = Vec::new();
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
-    
+
     // Center vertex
     positions.push([0.0, 0.0, 0.0]);
     normals.push([0.0, 1.0, 0.0]);
     uvs.push([0.5, 0.5]);
-    
+
     // Create vertices around the perimeter
     for i in 0..sides {
         let angle = i as f32 * angle_increment + start_orientation + std::f32::consts::PI / 2.0;
         let x = radius * angle.cos();
         let z = radius * angle.sin();
-        
+
         positions.push([x, 0.0, z]);
         normals.push([0.0, 1.0, 0.0]);
         uvs.push([x / radius * 0.5 + 0.5, z / radius * 0.5 + 0.5]);
     }
-    
+
     // Create triangles (fan triangulation from center)
     for i in 1..=sides {
         let next = if i == sides { 1 } else { i + 1 };
         indices.extend_from_slice(&[0, i as u32, next as u32]);
     }
-    
+
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-    
+
     mesh
 }
-
-
 
 /// Creates a rectangular frame mesh with a pentagonal hole cut out in the center
 fn create_frame_with_hole(
@@ -210,84 +208,84 @@ fn create_frame_with_hole(
         bevy::mesh::PrimitiveTopology::TriangleList,
         Default::default(),
     );
-    
+
     // Calculate the center of the rectangle
     let center = (bottom_left + bottom_right + top_left + top_right) / 4.0;
-    
+
     // Calculate the width and height of the rectangle
     let width = bottom_left.distance(bottom_right);
     let height = bottom_left.distance(top_left);
-    
+
     // Calculate the normal
     let side_vec = bottom_right - bottom_left;
     let up_vec = top_left - bottom_left;
     let normal = side_vec.cross(up_vec).normalize();
-    
+
     // Create pentagon hole vertices (scaled down from center)
     let hole_scale = 0.4; // Pentagon is 40% of the panel size
     let pentagon_radius = (width.min(height) * hole_scale) / 2.0;
-    
+
     // Pentagon vertices (5 points)
     let pentagon_points = 5;
     let pentagon_angle_offset = -std::f32::consts::FRAC_PI_2; // Start from top
     let mut pentagon_vertices = Vec::new();
-    
+
     // Local coordinate system for the rectangle
     let local_right = (bottom_right - bottom_left).normalize();
     let local_up = (top_left - bottom_left).normalize();
-    
+
     for i in 0..pentagon_points {
-        let angle = (i as f32 * std::f32::consts::TAU / pentagon_points as f32) + pentagon_angle_offset;
+        let angle =
+            (i as f32 * std::f32::consts::TAU / pentagon_points as f32) + pentagon_angle_offset;
         let x_offset = angle.cos() * pentagon_radius;
         let y_offset = angle.sin() * pentagon_radius;
-        
+
         let vertex = center + local_right * x_offset + local_up * y_offset;
         pentagon_vertices.push(vertex);
     }
-    
+
     // Build vertices: 4 outer corners + 5 pentagon vertices
     let mut positions = Vec::new();
     let mut normals = Vec::new();
-    
+
     // Outer rectangle vertices (0-3)
     positions.push(bottom_left.to_array());
     positions.push(bottom_right.to_array());
     positions.push(top_right.to_array());
     positions.push(top_left.to_array());
-    
+
     // Pentagon hole vertices (4-8)
     for vertex in &pentagon_vertices {
         positions.push(vertex.to_array());
     }
-    
+
     // All vertices share the same normal
     for _ in 0..positions.len() {
         normals.push(normal.to_array());
     }
-    
+
     // Create triangles connecting the outer rectangle to the inner pentagon
     let mut indices = Vec::new();
 
-    indices.extend_from_slice(&[1, 2, 5]); 
+    indices.extend_from_slice(&[1, 2, 5]);
     indices.extend_from_slice(&[2, 6, 5]);
 
     indices.extend_from_slice(&[2, 3, 6]);
     indices.extend_from_slice(&[3, 7, 6]);
 
-
     indices.extend_from_slice(&[3, 0, 8]); // TL -> BL -> PentBL
     indices.extend_from_slice(&[3, 8, 7]); // TL -> PentBL -> PentTL
 
-    indices.extend_from_slice(&[0, 4, 8]); 
-    
+    indices.extend_from_slice(&[0, 4, 8]);
+
     indices.extend_from_slice(&[0, 1, 4]);
-    
+
     indices.extend_from_slice(&[1, 5, 4]);
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-    
+
     mesh
 }
 
@@ -302,67 +300,68 @@ fn create_pentagon_door(
         bevy::mesh::PrimitiveTopology::TriangleList,
         Default::default(),
     );
-    
+
     // Calculate the center of the rectangle
     let center = (bottom_left + bottom_right + top_left + top_right) / 4.0;
-    
+
     // Calculate the width and height
     let width = bottom_left.distance(bottom_right);
     let height = bottom_left.distance(top_left);
-    
+
     // Calculate the normal (same as create_frame_with_hole for consistency)
     let side_vec = bottom_right - bottom_left;
     let up_vec = top_left - bottom_left;
     let normal = side_vec.cross(up_vec).normalize();
-    
+
     // Pentagon parameters (matching the hole)
     let hole_scale = 0.4;
     let pentagon_radius = (width.min(height) * hole_scale) / 2.0;
-    
+
     // Slightly offset the door forward to prevent z-fighting
     let door_center = center + normal * 0.001;
-    
+
     // Local coordinate system (same as create_frame_with_hole)
     let local_right = (bottom_right - bottom_left).normalize();
     let local_up = (top_left - bottom_left).normalize();
-    
+
     // Create pentagon vertices
     let pentagon_points = 5;
     let pentagon_angle_offset = -std::f32::consts::FRAC_PI_2;
-    
+
     let mut positions = Vec::new();
     let mut normals_vec = Vec::new();
-    
+
     // Center vertex
     positions.push(door_center.to_array());
     normals_vec.push(normal.to_array());
-    
+
     // Pentagon vertices
     for i in 0..pentagon_points {
-        let angle = (i as f32 * std::f32::consts::TAU / pentagon_points as f32) + pentagon_angle_offset;
+        let angle =
+            (i as f32 * std::f32::consts::TAU / pentagon_points as f32) + pentagon_angle_offset;
         let x_offset = angle.cos() * pentagon_radius;
         let y_offset = angle.sin() * pentagon_radius;
-        
+
         let vertex = door_center + local_right * x_offset + local_up * y_offset;
         positions.push(vertex.to_array());
         normals_vec.push(normal.to_array());
     }
-    
+
     // Create triangles (fan triangulation from center)
     let mut indices = Vec::new();
     for i in 1..=pentagon_points {
         let next = if i == pentagon_points { 1 } else { i + 1 };
         indices.extend_from_slice(&[0, i as u32, next as u32]);
     }
-    
+
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals_vec);
     mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-    
+
     mesh
 }
 
-/// Spawns a pyramid composed with three triangular faces.
+/// Spawns a triangular prism (Toblerone-shape) instead of a pyramid.
 pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -370,128 +369,230 @@ pub fn spawn_pyramid(
     random_gen: &mut ResMut<RandomGen>,
     game_state: &mut GameState,
 ) {
-    let top_vex = Vec3::new(0.0, game_state.pyramid_height, 0.0);
-    // Build the symmetric triangular vertices for the base of the pyramid.
+    let height_y = game_state.pyramid_height;
+
+    // Build the symmetric triangular vertices for the BASE.
     let mut base_corners: [Vec3; 3] = [Vec3::ZERO; 3];
+    // Build the symmetric triangular vertices for the TOP.
+    let mut top_corners: [Vec3; 3] = [Vec3::ZERO; 3];
+
     let mut prev_xz = Vec2::new(
         game_state.pyramid_base_radius * game_state.pyramid_start_orientation_rad.cos(),
         game_state.pyramid_base_radius * game_state.pyramid_start_orientation_rad.sin(),
     );
+
+    // Set first corners
     base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y + BASE_HEIGHT, prev_xz.y);
-    // Compute constants for the rotation of the pyramid's base vertices.
+    top_corners[0] = Vec3::new(prev_xz.x, height_y, prev_xz.y);
+
+    // Compute constants for rotation
     let pyramid_angle_increment_cos: f32 = PYRAMID_ANGLE_INCREMENT_RAD.cos();
     let pyramid_angle_increment_sin: f32 = PYRAMID_ANGLE_INCREMENT_RAD.sin();
+
     for i in 1..3 {
-        // Construct a new face by rotating from the previous one on the 2D base-circle of the pyramid in the xz-plane.
+        // Rotate
         let x = prev_xz.x * pyramid_angle_increment_cos - prev_xz.y * pyramid_angle_increment_sin;
         let z = prev_xz.y * pyramid_angle_increment_cos + prev_xz.x * pyramid_angle_increment_sin;
-
         prev_xz = Vec2::new(x, z);
-        // Save the new vertex.
+
+        // Save vertices
         base_corners[i] = Vec3::new(prev_xz.x, GROUND_Y + BASE_HEIGHT, prev_xz.y);
+        top_corners[i] = Vec3::new(prev_xz.x, height_y, prev_xz.y);
     }
 
-    // Generate decoration sets for each face.
-    // For Type2 pyramids, we replicate one decoration set (similar to colors).
-    let mut decoration_sets: [Option<DecorationSet>; 3] = [None, None, None];
+    // Spawn Top Cap
 
-    // Generate decoration sets for faces
-    decoration_sets[0] = Some(generate_decoration_set(
-        &mut random_gen.random_gen,
-        top_vex,
-        base_corners[0],
-        base_corners[1],
+    // Create mesh for the top triangle
+    let mut top_mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        Default::default(),
+    );
+    top_mesh.insert_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        vec![
+            top_corners[0].to_array(),
+            top_corners[1].to_array(),
+            top_corners[2].to_array(),
+        ],
+    );
+    top_mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 3]); // Pointing UP
+    top_mesh.insert_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        vec![[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]],
+    );
+
+    commands.spawn((
+        Mesh3d(meshes.add(top_mesh)),
+        MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: BASE_COLOR,
+            cull_mode: None,
+            double_sided: true,
+            ..default()
+        })),
+        Transform::default(),
+        Pyramid,
+        RotableComponent,
+        GameEntity,
     ));
 
-    decoration_sets[1] = Some(generate_decoration_set(
-        &mut random_gen.random_gen,
-        top_vex,
-        base_corners[1],
-        base_corners[2],
-    ));
+    // Generate Decoration Sets
 
-    // For Type2 pyramids, replicate one decoration set to another face
-    if game_state.pyramid_type == PyramidType::Type2 {
-        decoration_sets[2] = decoration_sets[1].clone();
-    } else {
-        decoration_sets[2] = Some(generate_decoration_set(
+    // We need 2 decoration sets per face to fill the rectangle (treated as 2 triangles).
+    // Structure: [Face1_SetA, Face1_SetB, Face2_SetA, ... ]
+    let mut dec_sets: Vec<Option<DecorationSet>> = Vec::new();
+
+    // Indices for the loop below to generate sets for Face 0 and Face 1
+    // We treat the rectangle as two triangles:
+    // Tri A: (TopLeft, BaseLeft, BaseRight)
+    // Tri B: (TopLeft, BaseRight, TopRight)
+    for i in 0..2 {
+        // Generate for first 2 faces
+        let next = (i + 1) % 3;
+
+        let tl = top_corners[i];
+        let tr = top_corners[next];
+        let bl = base_corners[i];
+        let br = base_corners[next];
+
+        // Set A (Bottom-Left Triangle)
+        dec_sets.push(Some(generate_decoration_set(
             &mut random_gen.random_gen,
-            top_vex,
-            base_corners[2],
-            base_corners[0],
-        ));
+            tl,
+            bl,
+            br,
+        )));
+
+        // Set B (Top-Right Triangle)
+        dec_sets.push(Some(generate_decoration_set(
+            &mut random_gen.random_gen,
+            tl,
+            br,
+            tr, // Using TL as "top" for barycentric logic
+        )));
     }
 
-    // Create the triangular face meshes independently.
+    // Handle Type2 Logic (Face 3 copies Face 2)
+    if game_state.pyramid_type == PyramidType::Type2 {
+        dec_sets.push(dec_sets[2].clone()); // Copy Face 2 Set A
+        dec_sets.push(dec_sets[3].clone()); // Copy Face 2 Set B
+    } else {
+        // Generate fresh sets for Face 3
+        let i = 2;
+        let next = 0;
+        let tl = top_corners[i];
+        let tr = top_corners[next];
+        let bl = base_corners[i];
+        let br = base_corners[next];
+
+        dec_sets.push(Some(generate_decoration_set(
+            &mut random_gen.random_gen,
+            tl,
+            bl,
+            br,
+        )));
+        dec_sets.push(Some(generate_decoration_set(
+            &mut random_gen.random_gen,
+            tl,
+            br,
+            tr,
+        )));
+    }
+
+    // Spawn the pyramid faces
     for i in 0..3 {
         let next = (i + 1) % 3;
 
-        // Create a triangular mesh for the face.
+        // Vertices for the Quad
+        let tl = top_corners[i];
+        let tr = top_corners[next];
+        let bl = base_corners[i];
+        let br = base_corners[next];
+
+        // Create a Quad Mesh (2 Triangles)
         let mut mesh = Mesh::new(
             bevy::mesh::PrimitiveTopology::TriangleList,
             Default::default(),
         );
 
-        // Define the positions of the face-triangle's vertices.
         let positions = vec![
-            top_vex.to_array(), // Top vertex
-            base_corners[i].to_array(),
-            base_corners[next].to_array(),
+            tl.to_array(), // 0: Top Left
+            bl.to_array(), // 1: Bottom Left
+            br.to_array(), // 2: Bottom Right
+            tr.to_array(), // 3: Top Right
         ];
 
-        // Calculate the normal vector on the 2D plane of the face for lighting and shading.
-        let v1 = base_corners[i] - top_vex;
-        let v2 = base_corners[next] - top_vex;
+        // Indices for two triangles: 0-1-2 and 0-2-3
+        let indices = vec![0, 1, 2, 0, 2, 3];
+
+        // Calculate Normal (same for the whole flat face)
+        let v1 = bl - tl;
+        let v2 = tr - tl;
         let normal = v1.cross(v2).normalize();
+        let normals = vec![normal.to_array(); 4];
 
-        // Save the normal of each vertex (they are the same).
-        let normals = vec![normal.to_array(); 3];
-
-        // Insert the positions, normals, and UVs for each vertex into the mesh.
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
         mesh.insert_attribute(
             Mesh::ATTRIBUTE_UV_0,
-            vec![[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]], // Defines how the texture is mapped to the triangular shape (flipped vertically).
+            vec![
+                [0.0, 0.0], // TL
+                [0.0, 1.0], // BL
+                [1.0, 1.0], // BR
+                [1.0, 0.0], // TR
+            ],
         );
+        mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
-        // Spawn the face entity with its mesh, material, transform, and components.
         let face_entity = commands
             .spawn((
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: game_state.pyramid_color_faces[i],
-                    cull_mode: None, // Disable backface culling to render both sides of the face.
-                    double_sided: false ,
+                    cull_mode: None,
+                    double_sided: false,
                     ..default()
                 })),
                 Transform::default(),
                 Pyramid,
-                RotableComponent, // Make it rotatable by camera controls
+                RotableComponent,
                 GameEntity,
             ))
             .id();
 
-        // Spawn decorations from the decoration set.
-        if let Some(ref decoration_set) = decoration_sets[i] {
+        // Apply Set A to the first virtual triangle (TL, BL, BR)
+        if let Some(ref set_a) = dec_sets[i * 2] {
             spawn_decorations_from_set(
                 commands,
                 meshes,
                 materials,
                 face_entity,
-                decoration_set,
-                top_vex,
-                base_corners[i],
-                base_corners[next],
+                set_a,
+                tl,
+                bl,
+                br,
+                normal,
+            );
+        }
+
+        // Apply Set B to the second virtual triangle (TL, BR, TR)
+        if let Some(ref set_b) = dec_sets[i * 2 + 1] {
+            spawn_decorations_from_set(
+                commands,
+                meshes,
+                materials,
+                face_entity,
+                set_b,
+                tl,
+                br,
+                tr,
                 normal,
             );
         }
     }
 
-    // Spawn the base
+    // Spawn the base (unchanged)
     spawn_pyramid_base(commands, meshes, materials, game_state);
 }
-
 
 /// Generates a decoration set for a pyramid face using Poisson-like sampling.
 /// Decorations are stored using barycentric coordinates relative to the triangle vertices.
@@ -609,8 +710,7 @@ fn spawn_decorations_from_set(
         let final_rotation = normal_rotation * base_rotation;
 
         // Offset slightly away from face surface to prevent z-fighting
-        let offset_position = position - face_normal* 0.0001;
-        
+        let offset_position = position - face_normal * 0.0001;
 
         // Spawn the decoration as a child of the face
         commands.entity(parent_face).with_children(|parent| {

@@ -24,8 +24,8 @@ pub mod object_constants {
 pub mod pyramid_constants {
     use bevy::prelude::Color;
 
-    pub const PYRAMID_BASE_RADIUS_MIN: f32 = 3.0;
-    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 3.0;
+    pub const PYRAMID_BASE_RADIUS_MIN: f32 = 2.5;
+    pub const PYRAMID_BASE_RADIUS_MAX: f32 = 2.5;
 
     pub const PYRAMID_HEIGHT_MIN: f32 = 4.0;
     pub const PYRAMID_HEIGHT_MAX: f32 = 4.0;
@@ -60,8 +60,6 @@ pub mod pyramid_constants {
     pub const BASE_NR_SIDES: usize = 6; // multiple of 3
     pub const BASE_HOLES_LIGHT_Y_OFFSET: f32 = 0.0; // Y offset of the light holes from the Y of the holes itself
     pub const BASE_HOLES_LIGHT_OFFSET_CENTER: f32 = -0.4; // Offset of the light holes from the normal of center of the hole
-
-
 }
 
 /// Generic game constants
@@ -74,7 +72,7 @@ pub mod game_constants {
     pub const SEED: u64 = 69;
 
     // Allowed misalignment camera and correct face normal (cosine of normal vectore camera and face angle)
-    pub const COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD: f32 = 0.9; 
+    pub const COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD: f32 = 0.9;
 
     // Animation durations for the door
     pub const DOOR_ANIMATION_FADE_OUT_DURATION: f32 = 0.5;

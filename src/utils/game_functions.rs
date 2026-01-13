@@ -6,10 +6,8 @@ use crate::utils::constants::game_constants::{
     DOOR_ANIMATION_FADE_OUT_DURATION, DOOR_ANIMATION_STAY_OPEN_DURATION,
 };
 use crate::utils::objects::{
-    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleLight,
-    UIEntity,
+    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleLight, UIEntity,
 };
-
 
 /// Helper to despawn ui entities given a mutable commands reference
 pub fn despawn_ui_helper(commands: &mut Commands, query: &Query<Entity, With<UIEntity>>) {
@@ -26,16 +24,15 @@ pub fn despawn_ui(mut commands: Commands, query: Query<Entity, With<UIEntity>>) 
 /// Helper system to cleanup Game entities
 pub fn cleanup_game_entities(mut commands: Commands, query: Query<Entity, With<GameEntity>>) {
     for entity in &query {
-        commands.entity(entity).despawn(); 
+        commands.entity(entity).despawn();
     }
 }
-
-
 
 /// Setup UI for MenuUI state
 pub fn setup_intro_ui(mut commands: Commands) {
     commands.spawn((Camera2d::default(), UIEntity));
-    let text = "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
+    let text =
+        "Press SPACE to start the game! \nGame Commands: Arrow Keys/WASD: Rotate | SPACE: Check";
     spawn_centered_text_black_screen(&mut commands, text);
 }
 
@@ -61,7 +58,12 @@ pub fn playing_inputs(
     // Queries needed for Playing logic
     mut materials: ResMut<Assets<StandardMaterial>>,
     camera_query: Query<&Transform, With<Camera3d>>,
-    mut door_query: Query<(Entity, &BaseDoor, &Transform, &mut MeshMaterial3d<StandardMaterial>)>,
+    mut door_query: Query<(
+        Entity,
+        &BaseDoor,
+        &Transform,
+        &mut MeshMaterial3d<StandardMaterial>,
+    )>,
     light_query: Query<Entity, With<HoleLight>>,
     frame_query: Query<(&BaseFrame, &Children)>,
     mut commands: Commands,
@@ -85,7 +87,6 @@ pub fn playing_inputs(
 
         // Get local camera direction
         let camera_forward = camera_transform.forward();
-        
 
         // Project camera forward to XZ plane
         let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize();
@@ -93,27 +94,27 @@ pub fn playing_inputs(
         let mut best_alignment = -1.0;
         let mut best_door_index = 0;
 
-
         for (_, door, door_transform, _) in &door_query {
             // Get door normal in world space and move to camera door's actual rotation
             let door_normal_world = door_transform.rotation * door.normal;
-            
+
             // Project to XZ plane
-            let door_normal_xz = Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize();
-            
+            let door_normal_xz =
+                Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize();
+
             // Calculate alignment (dot product)
             let alignment = door_normal_xz.dot(camera_forward_xz);
-            
+
             // Most negative = door facing toward camera
             if alignment > best_alignment {
                 best_alignment = alignment;
                 best_door_index = door.door_index;
             }
-            
         }
 
         // Determine if the player wins
-        let has_won = best_alignment > COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD && best_door_index == game_state.pyramid_target_door_index;
+        let has_won = best_alignment > COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD
+            && best_door_index == game_state.pyramid_target_door_index;
 
         // Set pending phase based on win condition
         if has_won {
@@ -135,10 +136,10 @@ pub fn playing_inputs(
             }
         }
 
-        if let Ok(( _, _, _, mut mat_handle)) = door_query.get_mut(winning_door.unwrap()) {
+        if let Ok((_, _, _, mut mat_handle)) = door_query.get_mut(winning_door.unwrap()) {
             if let Some(material) = materials.get(&mat_handle.0) {
                 let mut new_material = material.clone();
-                new_material.base_color.set_alpha(1.0); 
+                new_material.base_color.set_alpha(1.0);
                 mat_handle.0 = materials.add(new_material);
             }
         }
@@ -157,7 +158,9 @@ pub fn playing_inputs(
                     }
                 }
             }
-            if found_light.is_some() { break; }
+            if found_light.is_some() {
+                break;
+            }
         }
 
         if let Some(light_entity) = found_light {
@@ -166,8 +169,6 @@ pub fn playing_inputs(
             game_state.animating_light = Some(light_entity);
             game_state.animation_start_time = Some(time.elapsed());
         }
-        
-        
     }
 }
 
@@ -181,14 +182,13 @@ pub fn won_inputs(
     }
 }
 
-
 /// Setup UI for Playing state
 pub fn setup_playing_ui(mut commands: Commands, game_state: Res<GameState>) {
     spawn_playing_hud(&mut commands, &game_state);
 }
 
 pub fn spawn_playing_hud(commands: &mut Commands, game_state: &GameState) {
-     let text = format!(
+    let text = format!(
         "Arrow Keys/WASD: Rotate | SPACE: Check \nFind the RED face! | Attempts: {}",
         game_state.nr_attempts
     );
@@ -209,11 +209,10 @@ pub fn spawn_playing_hud(commands: &mut Commands, game_state: &GameState) {
     ));
 }
 
-
 /// Setup UI for Won state
 pub fn setup_won_ui(mut commands: Commands, game_state: Res<GameState>) {
-     commands.spawn((Camera2d::default(), UIEntity));
-     // Display win screen
+    commands.spawn((Camera2d::default(), UIEntity));
+    // Display win screen
     let elapsed = game_state.end_time.unwrap_or_default().as_secs_f32()
         - game_state.start_time.unwrap_or_default().as_secs_f32();
     let accuracy = game_state.cosine_alignment.unwrap_or(0.0) * 100.0;
@@ -229,7 +228,6 @@ pub fn setup_won_ui(mut commands: Commands, game_state: Res<GameState>) {
 
     spawn_centered_text_black_screen(&mut commands, &text);
 }
-
 
 /// Spawns centered text on a black screen.
 pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
@@ -279,7 +277,9 @@ pub fn handle_door_animation(
         return;
     }
 
-    let Some(start_time) = game_state.animation_start_time else { return; };
+    let Some(start_time) = game_state.animation_start_time else {
+        return;
+    };
     let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
     let door_entity = game_state.animating_door.unwrap();
@@ -290,12 +290,17 @@ pub fn handle_door_animation(
     let fade_in_end = stay_open_end + DOOR_ANIMATION_FADE_IN_DURATION;
 
     // Get material handle
-    let Ok(material_handle) = door_query.get(door_entity) else { return; };
-    let Some(material) = materials.get_mut(material_handle) else { return; };
+    let Ok(material_handle) = door_query.get(door_entity) else {
+        return;
+    };
+    let Some(material) = materials.get_mut(material_handle) else {
+        return;
+    };
 
     // Get light visibility
-    let Ok(mut light_visibility) = light_query.get_mut(light_entity) else { return; };
-
+    let Ok(mut light_visibility) = light_query.get_mut(light_entity) else {
+        return;
+    };
 
     if elapsed < fade_out_end {
         // Phase 1: Fade Out (Opening)
@@ -303,19 +308,16 @@ pub fn handle_door_animation(
         let t = elapsed / DOOR_ANIMATION_FADE_OUT_DURATION;
         let alpha = t.clamp(0.0, 1.0);
         material.base_color.set_alpha(alpha);
-
     } else if elapsed < stay_open_end {
         // Phase 2: Stay Open
         *light_visibility = Visibility::Visible;
         material.base_color.set_alpha(1.0);
-
     } else if elapsed < fade_in_end {
         // Phase 3: Fade In (Closing)
         *light_visibility = Visibility::Visible;
         let t = (elapsed - stay_open_end) / DOOR_ANIMATION_FADE_IN_DURATION;
-        let alpha = 1.0 -  t.clamp(0.0, 1.0);
+        let alpha = 1.0 - t.clamp(0.0, 1.0);
         material.base_color.set_alpha(alpha);
-
     } else {
         // Animation Finished
         material.base_color.set_alpha(1.0);

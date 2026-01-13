@@ -6,7 +6,6 @@ use std::time::Duration;
 use crate::utils::constants::game_constants::SEED;
 use rand_chacha::ChaCha8Rng;
 
-
 /// Game state enum representing the different states the game can be in
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, States, Hash)]
 pub enum GamePhase {
@@ -18,7 +17,6 @@ pub enum GamePhase {
     // The game has been won
     Won,
 }
-
 
 /// Different types of pyramids
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,7 +60,6 @@ pub struct DecorationSet {
     pub color: Color,
     pub decorations: Vec<Decoration>,
 }
-
 
 /// The resource of the current state of the game
 #[derive(Resource, Clone, Default, Debug)]
@@ -123,8 +120,6 @@ impl Default for RandomGen {
 #[derive(Component)]
 pub struct Pyramid;
 
-
-
 // A component that mars an entity to be rotated by the camera controls
 #[derive(Component)]
 pub struct RotableComponent;
@@ -151,6 +146,6 @@ pub struct BaseFrame {
 #[derive(Component)]
 pub struct BaseDoor {
     pub door_index: usize,
-    pub normal: Vec3,   // In world coordinates
+    pub normal: Vec3, // In world coordinates
     pub is_open: bool,
 }

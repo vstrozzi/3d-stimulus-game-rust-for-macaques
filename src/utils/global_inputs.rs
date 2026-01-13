@@ -49,7 +49,6 @@ pub fn handle_keyboard_input(
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     mut cursor: Query<&mut CursorOptions>,
 ) {
-
     if keyboard.just_pressed(KeyCode::Escape) {
         let mut window = windows.single_mut().unwrap();
         let mut cursor = cursor.single_mut().unwrap();

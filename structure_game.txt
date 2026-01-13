@@ -1,15 +1,3 @@
-pub enum GamePhase {
-    #[default]
-    // The game has not started yet
-    MenuUI,
-    // The game is currently being played
-    Playing,
-    // The game has been won
-    Won,
-}
+# Add a bar that lights up based on the cosine similarity of the last guess
 
-
-Start in MenuUI
-When pressing space move from MenuUi to Playing, call once setup of #setup.rs, keep calling all gamefunctions
-When pressing space stop all the functions running in Playing and wait for the end of the animation
-When pressing space and having correct position of winning from Playing to MenuUI, despawn everything and redraw MenuUI
+# Add borders to the pyramid li

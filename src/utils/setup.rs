@@ -159,9 +159,11 @@ pub fn setup_game_state(
         start_time: Some(time.elapsed()),
         end_time: None,
 
+        
         nr_attempts: 0,
         cosine_alignment: Some(0.0),
 
+        animating_emissive: None,
         animating_door: None,
         animating_light: None,
         animation_start_time: None,

@@ -3,12 +3,61 @@
 use crate::utils::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 use crate::utils::objects::{
     BaseDoor, BaseFrame, Decoration, DecorationSet, DecorationShape, GameEntity, GameState,
-    HoleLight, Pyramid, PyramidType, RandomGen, RotableComponent,
+    HoleEmissive, HoleLight, Pyramid, PyramidType, RandomGen, RotableComponent,
 };
 use bevy::prelude::*;
 
 use rand::{Rng, RngCore};
 use rand_chacha::ChaCha8Rng;
+
+/// Creates a pentagon mesh for the hole emissive effect
+fn create_pentagon_mesh(center: Vec3, radius: f32, local_right: Vec3, local_up: Vec3, normal: Vec3) -> Mesh {
+    let mut mesh = Mesh::new(
+        bevy::mesh::PrimitiveTopology::TriangleList,
+        Default::default(),
+    );
+
+    let pentagon_points = 5;
+    let pentagon_angle_offset = -std::f32::consts::FRAC_PI_2; // Start from top
+    
+    let mut positions = Vec::new();
+    let mut normals_vec = Vec::new();
+    let mut uvs = Vec::new();
+    let mut indices = Vec::new();
+
+    // Center vertex
+    positions.push(center.to_array());
+    normals_vec.push(normal.to_array());
+    uvs.push([0.5, 0.5]);
+
+    // Pentagon vertices
+    for i in 0..pentagon_points {
+        let angle = (i as f32 * std::f32::consts::TAU / pentagon_points as f32) + pentagon_angle_offset;
+        let x_offset = angle.cos() * radius;
+        let y_offset = angle.sin() * radius;
+
+        let vertex = center + local_right * x_offset + local_up * y_offset;
+        positions.push(vertex.to_array());
+        normals_vec.push(normal.to_array());
+        
+        let u = x_offset / radius * 0.5 + 0.5;
+        let v = y_offset / radius * 0.5 + 0.5;
+        uvs.push([u, v]);
+    }
+
+    // Create triangles (fan from center)
+    for i in 1..=pentagon_points {
+        let next = if i == pentagon_points { 1 } else { i + 1 };
+        indices.extend_from_slice(&[0, i as u32, next as u32]);
+    }
+
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals_vec);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    mesh.insert_indices(bevy::mesh::Indices::U32(indices));
+
+    mesh
+}
 
 /// Spawns the wooden base with holes for the pyramid
 pub fn spawn_pyramid_base(
@@ -50,22 +99,17 @@ pub fn spawn_pyramid_base(
             base_radius * angle2.sin(),
         );
 
-        // Create the frame mesh with a pentagonal hole
-        let frame_mesh =
+        // Create the frame mesh with a pentagonal hole (also returns computed values to avoid redundant calculations)
+        let (frame_mesh, normal, local_right, local_up, center, pentagon_radius) = 
             create_frame_with_hole(bottom_outer_1, bottom_outer_2, top_outer_1, top_outer_2);
 
-        // Calculate the normal for the side
-        let side_vec = bottom_outer_2 - bottom_outer_1;
-        let up_vec = Vec3::Y;
-        let normal = side_vec.cross(up_vec).normalize();
-
-        // Calculate light position
-        let center = (bottom_outer_1 + bottom_outer_2 + top_outer_1 + top_outer_2) / 4.0;
-        let light_pos =
-            center - normal * BASE_HOLES_LIGHT_OFFSET_CENTER + Vec3::Y * BASE_HOLES_LIGHT_Y_OFFSET;
-
-        let right = normal.cross(Vec3::Y).normalize(); // Perpendicular to both normal and Y
-        let up = right.cross(normal).normalize(); // Perpendicular to both right and look direction
+        // Light position is at the center of the frame
+        let light_pos = center;
+        
+        // Create emissive pentagon mesh - offset center slightly inward to prevent z-fighting
+        let pentagon_center_inset = center + normal * 0.01; // Slightly inward from frame surface
+        let pentagon_mesh = create_pentagon_mesh(pentagon_center_inset, pentagon_radius, local_right, local_up, normal);
+        
         // Spawn the base frame and a light in front to have a nice effect
         commands
             .spawn((
@@ -82,6 +126,21 @@ pub fn spawn_pyramid_base(
                 RotableComponent,
             ))
             .with_children(|parent| {
+                // Spawn emissive pentagon glow
+                parent.spawn((
+                    Mesh3d(meshes.add(pentagon_mesh)),
+                    MeshMaterial3d(materials.add(StandardMaterial {
+                        emissive: LinearRgba::new(0.0, 0.0, 0.0, 1.0), // Start with no emission
+                        cull_mode: None,
+                        ..default()
+                    })),
+                    Transform::default(), // Mesh vertices are already in world-space (like frame mesh)
+                    HoleEmissive,
+                    GameEntity,
+                    Visibility::Hidden, // Initially hidden
+                ));
+                
+                // Spawn spotlight
                 parent.spawn((
                     SpotLight {
                         intensity: 2_000_000.0,
@@ -97,32 +156,16 @@ pub fn spawn_pyramid_base(
                     Visibility::Hidden, // Initially hidden
                     // Position is RELATIVE to the Frame.
                     // 'light_pos' must be the offset from the Frame's center.
-                    Transform::from_translation(light_pos).looking_at(light_pos - 2.0 * normal, up),
+                    Transform::from_translation(light_pos).looking_at(light_pos + 2.0 * normal, Vec3::Y),
                 ));
             });
 
-        // Create and spawn the door (pentagon) that covers the hole
-        let door_mesh =
-            create_pentagon_door(bottom_outer_1, bottom_outer_2, top_outer_1, top_outer_2);
-
-        // Door color: slightly darker brown with a visible border effect
-        // Alpha mode Blend to allow transparency changes
-        let door_color = Color::srgba(0.49, 0.24, 0.00, 0.0);
-
         // Spawn the door entity
         commands.spawn((
-            Mesh3d(meshes.add(door_mesh)),
-            MeshMaterial3d(materials.add(StandardMaterial {
-                base_color: door_color,
-                cull_mode: None,
-                double_sided: false,
-                alpha_mode: AlphaMode::Blend,
-                ..default()
-            })),
             Transform::default(),
             BaseDoor {
                 door_index: i,
-                normal: normal,
+                normal: -normal,
                 is_open: false,
             },
             GameEntity,
@@ -203,7 +246,7 @@ fn create_frame_with_hole(
     bottom_right: Vec3,
     top_left: Vec3,
     top_right: Vec3,
-) -> Mesh {
+) -> (Mesh, Vec3, Vec3, Vec3, Vec3, f32) {
     let mut mesh = Mesh::new(
         bevy::mesh::PrimitiveTopology::TriangleList,
         Default::default(),
@@ -219,7 +262,7 @@ fn create_frame_with_hole(
     // Calculate the normal
     let side_vec = bottom_right - bottom_left;
     let up_vec = top_left - bottom_left;
-    let normal = side_vec.cross(up_vec).normalize();
+    let normal = - side_vec.cross(up_vec).normalize();
 
     // Create pentagon hole vertices (scaled down from center)
     let hole_scale = 0.4; // Pentagon is 40% of the panel size
@@ -286,79 +329,7 @@ fn create_frame_with_hole(
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
-    mesh
-}
-
-/// Creates a pentagon door mesh that fits in the hole
-fn create_pentagon_door(
-    bottom_left: Vec3,
-    bottom_right: Vec3,
-    top_left: Vec3,
-    top_right: Vec3,
-) -> Mesh {
-    let mut mesh = Mesh::new(
-        bevy::mesh::PrimitiveTopology::TriangleList,
-        Default::default(),
-    );
-
-    // Calculate the center of the rectangle
-    let center = (bottom_left + bottom_right + top_left + top_right) / 4.0;
-
-    // Calculate the width and height
-    let width = bottom_left.distance(bottom_right);
-    let height = bottom_left.distance(top_left);
-
-    // Calculate the normal (same as create_frame_with_hole for consistency)
-    let side_vec = bottom_right - bottom_left;
-    let up_vec = top_left - bottom_left;
-    let normal = side_vec.cross(up_vec).normalize();
-
-    // Pentagon parameters (matching the hole)
-    let hole_scale = 0.4;
-    let pentagon_radius = (width.min(height) * hole_scale) / 2.0;
-
-    // Slightly offset the door forward to prevent z-fighting
-    let door_center = center + normal * 0.001;
-
-    // Local coordinate system (same as create_frame_with_hole)
-    let local_right = (bottom_right - bottom_left).normalize();
-    let local_up = (top_left - bottom_left).normalize();
-
-    // Create pentagon vertices
-    let pentagon_points = 5;
-    let pentagon_angle_offset = -std::f32::consts::FRAC_PI_2;
-
-    let mut positions = Vec::new();
-    let mut normals_vec = Vec::new();
-
-    // Center vertex
-    positions.push(door_center.to_array());
-    normals_vec.push(normal.to_array());
-
-    // Pentagon vertices
-    for i in 0..pentagon_points {
-        let angle =
-            (i as f32 * std::f32::consts::TAU / pentagon_points as f32) + pentagon_angle_offset;
-        let x_offset = angle.cos() * pentagon_radius;
-        let y_offset = angle.sin() * pentagon_radius;
-
-        let vertex = door_center + local_right * x_offset + local_up * y_offset;
-        positions.push(vertex.to_array());
-        normals_vec.push(normal.to_array());
-    }
-
-    // Create triangles (fan triangulation from center)
-    let mut indices = Vec::new();
-    for i in 1..=pentagon_points {
-        let next = if i == pentagon_points { 1 } else { i + 1 };
-        indices.extend_from_slice(&[0, i as u32, next as u32]);
-    }
-
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals_vec);
-    mesh.insert_indices(bevy::mesh::Indices::U32(indices));
-
-    mesh
+    (mesh, normal, local_right, local_up, center, pentagon_radius)
 }
 
 /// Spawns a triangular prism (Toblerone-shape) instead of a pyramid.

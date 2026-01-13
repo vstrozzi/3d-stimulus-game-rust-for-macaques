@@ -89,6 +89,7 @@ pub struct GameState {
     // Animation state
     pub animating_door: Option<Entity>,
     pub animating_light: Option<Entity>,
+    pub animating_emissive: Option<Entity>,
     pub animation_start_time: Option<Duration>,
     pub is_animating: bool,
     pub pending_phase: Option<GamePhase>, // Phase to transition to after animation
@@ -127,6 +128,10 @@ pub struct RotableComponent;
 // A component that marks a pointlight as being one of the hole
 #[derive(Component)]
 pub struct HoleLight;
+
+// A component that marks an emissive mesh as being the hole glow effect
+#[derive(Component)]
+pub struct HoleEmissive;
 
 /// A component that marks an entity as a game entity, which can be cleared during setup
 #[derive(Component)]

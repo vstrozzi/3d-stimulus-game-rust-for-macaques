@@ -7,8 +7,8 @@ use crate::utils::constants::game_constants::{
     SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT,
 };
 use crate::utils::objects::{
-    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleLight, ScoreBarFill, ScoreBarUI,
-    UIEntity,
+    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleEmissive, HoleLight, ScoreBarFill,
+    ScoreBarUI, UIEntity,
 };
 
 /// Helper to despawn ui entities given a mutable commands reference
@@ -58,15 +58,14 @@ pub fn playing_inputs(
     mut game_state: ResMut<GameState>,
     time: Res<Time>,
     // Queries needed for Playing logic
-    mut materials: ResMut<Assets<StandardMaterial>>,
     camera_query: Query<&Transform, With<Camera3d>>,
-    mut door_query: Query<(
+    door_query: Query<(
         Entity,
         &BaseDoor,
         &Transform,
-        &mut MeshMaterial3d<StandardMaterial>,
     )>,
     light_query: Query<Entity, With<HoleLight>>,
+    emissive_query: Query<Entity, With<HoleEmissive>>,
     frame_query: Query<(&BaseFrame, &Children)>,
     mut commands: Commands,
     query: Query<Entity, With<UIEntity>>,
@@ -95,8 +94,9 @@ pub fn playing_inputs(
 
         let mut best_alignment = -1.0;
         let mut best_door_index = 0;
+        let mut winning_door_alignment = -1.0;
 
-        for (_, door, door_transform, _) in &door_query {
+        for (_, door, door_transform) in &door_query {
             // Get door normal in world space and move to camera door's actual rotation
             let door_normal_world = door_transform.rotation * door.normal;
 
@@ -112,17 +112,24 @@ pub fn playing_inputs(
                 best_alignment = alignment;
                 best_door_index = door.door_index;
             }
+            
+            // Save the real door_alignment
+            if door.door_index == game_state.pyramid_target_door_index {
+                winning_door_alignment = alignment;
+            }
         }
 
         // Determine if the player wins
         let has_won = best_alignment > COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD
             && best_door_index == game_state.pyramid_target_door_index;
 
+        // Always store the alignment for the score bar animation
+        game_state.cosine_alignment = Some(winning_door_alignment);
+
         // Set pending phase based on win condition
         if has_won {
             game_state.pending_phase = Some(GamePhase::Won); // Go to Won
             game_state.end_time = Some(time.elapsed());
-            game_state.cosine_alignment = Some(best_alignment);
         } else {
             game_state.pending_phase = Some(GamePhase::Playing); // Continue playing if lost
         }
@@ -131,36 +138,32 @@ pub fn playing_inputs(
         let mut winning_door = None;
 
         // Ensure the door has a unique material so we only fade THIS door.
-        for (door_entity, door, _, _) in &door_query {
+        for (door_entity, door, _) in &door_query {
             if door.door_index == game_state.pyramid_target_door_index {
                 winning_door = Some(door_entity);
                 break;
             }
         }
 
-        if let Ok((_, _, _, mut mat_handle)) = door_query.get_mut(winning_door.unwrap()) {
-            if let Some(material) = materials.get(&mat_handle.0) {
-                let mut new_material = material.clone();
-                new_material.base_color.set_alpha(1.0);
-                mat_handle.0 = materials.add(new_material);
-            }
-        }
 
-        // Find the corresponding light.
+        // Find the corresponding light and emissive.
         let mut found_light = None;
+        let mut found_emissive = None;
 
         // Iterate frames to find the one with correct side index
         for (frame, children) in &frame_query {
             if frame.door_index == game_state.pyramid_target_door_index {
-                // Check children for HoleLight
+                // Check children for HoleLight and HoleEmissive
                 for child in children {
                     if light_query.get(*child).is_ok() {
                         found_light = Some(*child);
-                        break;
+                    }
+                    if emissive_query.get(*child).is_ok() {
+                        found_emissive = Some(*child);
                     }
                 }
             }
-            if found_light.is_some() {
+            if found_light.is_some() && found_emissive.is_some() {
                 break;
             }
         }
@@ -169,6 +172,7 @@ pub fn playing_inputs(
             // Start Animation
             game_state.animating_door = Some(winning_door.unwrap());
             game_state.animating_light = Some(light_entity);
+            game_state.animating_emissive = found_emissive;
             game_state.animation_start_time = Some(time.elapsed());
         }
     }
@@ -311,13 +315,13 @@ pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
         });
 }
 
-/// Handles the door animation state machine
+/// Handles the light animation
 pub fn handle_door_animation(
     mut game_state: ResMut<GameState>,
     time: Res<Time>,
+    mut light_query: Query<(&mut Visibility, &mut SpotLight), With<HoleLight>>,
+    mut emissive_query: Query<(&mut Visibility, &MeshMaterial3d<StandardMaterial>), (With<HoleEmissive>, Without<HoleLight>)>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut light_query: Query<&mut Visibility, With<HoleLight>>,
-    door_query: Query<&MeshMaterial3d<StandardMaterial>, With<BaseDoor>>,
     mut next_state: ResMut<NextState<GamePhase>>,
 ) {
     // If not animating, exit
@@ -330,50 +334,78 @@ pub fn handle_door_animation(
     };
     let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
-    let door_entity = game_state.animating_door.unwrap();
     let light_entity = game_state.animating_light.unwrap();
 
     let fade_out_end = DOOR_ANIMATION_FADE_OUT_DURATION;
     let stay_open_end = fade_out_end + DOOR_ANIMATION_STAY_OPEN_DURATION;
     let fade_in_end = stay_open_end + DOOR_ANIMATION_FADE_IN_DURATION;
 
-    // Get material handle
-    let Ok(material_handle) = door_query.get(door_entity) else {
-        return;
-    };
-    let Some(material) = materials.get_mut(material_handle) else {
+    // Get light visibility and component
+    let Ok((mut light_visibility, mut spotlight)) = light_query.get_mut(light_entity) else {
         return;
     };
 
-    // Get light visibility
-    let Ok(mut light_visibility) = light_query.get_mut(light_entity) else {
-        return;
-    };
-
-    if elapsed < fade_out_end {
-        // Phase 1: Fade Out (Opening)
-        *light_visibility = Visibility::Visible;
-        let t = elapsed / DOOR_ANIMATION_FADE_OUT_DURATION;
-        let alpha = t.clamp(0.0, 1.0);
-        material.base_color.set_alpha(alpha);
+    // Calculate animation intensity (0.0 to 1.0)
+    let intensity_factor = if elapsed < fade_out_end {
+        // Phase 1: Fade Out (Opening) - 0.0 to 1.0
+        elapsed / fade_out_end
     } else if elapsed < stay_open_end {
-        // Phase 2: Stay Open
-        *light_visibility = Visibility::Visible;
-        material.base_color.set_alpha(1.0);
+        // Phase 2: Stay Open - 1.0
+        1.0
     } else if elapsed < fade_in_end {
-        // Phase 3: Fade In (Closing)
+        // Phase 3: Fade In (Closing) - 1.0 to 0.0
+        1.0 - ((elapsed - stay_open_end) / DOOR_ANIMATION_FADE_IN_DURATION)
+    } else {
+        // Animation finished
+        0.0
+    };
+
+    // Max intensity values
+    const MAX_SPOTLIGHT_INTENSITY: f32 = 2_000_000.0;
+    const MAX_EMISSIVE_INTENSITY: f32 = 100.0;
+
+    if elapsed < fade_in_end {
+        // Animation in progress
         *light_visibility = Visibility::Visible;
-        let t = (elapsed - stay_open_end) / DOOR_ANIMATION_FADE_IN_DURATION;
-        let alpha = 1.0 - t.clamp(0.0, 1.0);
-        material.base_color.set_alpha(alpha);
+        spotlight.intensity = MAX_SPOTLIGHT_INTENSITY * intensity_factor;
+
+        // Update emissive material if available
+        if let Some(emissive_entity) = game_state.animating_emissive {
+            if let Ok((mut emissive_visibility, material_handle)) = emissive_query.get_mut(emissive_entity) {
+                *emissive_visibility = Visibility::Visible;
+                
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    // Use spotlight color for emissive
+                    let light_color = spotlight.color.to_linear();
+                    material.emissive = LinearRgba::new(
+                        light_color.red * MAX_EMISSIVE_INTENSITY * intensity_factor,
+                        light_color.green * MAX_EMISSIVE_INTENSITY * intensity_factor,
+                        light_color.blue * MAX_EMISSIVE_INTENSITY * intensity_factor,
+                        1.0,
+                    );
+                }
+            }
+        }
     } else {
         // Animation Finished
-        material.base_color.set_alpha(1.0);
-        *light_visibility = Visibility::Hidden; // Turn off light
+        *light_visibility = Visibility::Hidden;
+        spotlight.intensity = MAX_SPOTLIGHT_INTENSITY; // Reset to default
+
+        // Hide and reset emissive
+        if let Some(emissive_entity) = game_state.animating_emissive {
+            if let Ok((mut emissive_visibility, material_handle)) = emissive_query.get_mut(emissive_entity) {
+                *emissive_visibility = Visibility::Hidden;
+                
+                if let Some(material) = materials.get_mut(&material_handle.0) {
+                    material.emissive = LinearRgba::new(0.0, 0.0, 0.0, 0.0);
+                }
+            }
+        }
 
         game_state.is_animating = false;
         game_state.animating_door = None;
         game_state.animating_light = None;
+        game_state.animating_emissive = None;
         game_state.animation_start_time = None;
 
         // Transition to pending phase

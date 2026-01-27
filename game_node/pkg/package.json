@@ -1,0 +1,15 @@
+{
+  "name": "game_node",
+  "type": "module",
+  "version": "0.1.0",
+  "files": [
+    "game_node_bg.wasm",
+    "game_node.js",
+    "game_node.d.ts"
+  ],
+  "main": "game_node.js",
+  "types": "game_node.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

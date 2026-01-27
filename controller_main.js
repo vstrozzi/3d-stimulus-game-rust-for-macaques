@@ -22,25 +22,36 @@ let inputs = {
   resumeRendering: 0,
 };
 
-// Touch state tracking
+// Touch state tracking - optimized for responsiveness
 let touchState = {
-  // Single touch for swipe/tap
+  // Gesture type lock - once detected, stick with it until touch ends
+  gestureType: null, // null, 'swipe', 'pinch', 'tap'
+
+  // Single touch tracking
   startX: 0,
   startY: 0,
+  lastX: 0,
+  lastY: 0,
   startTime: 0,
-  isActive: false,
-  // Multi-touch for pinch
-  initialPinchDistance: 0,
-  isPinching: false,
-  // Thresholds
-  swipeThreshold: 30, // pixels to trigger swipe
-  tapThreshold: 10, // max movement for tap
-  tapTimeThreshold: 300, // max ms for tap
-  // Continuous input state (for swipe-based rotation)
-  swipeRotateLeft: false,
-  swipeRotateRight: false,
-  pinchZoomIn: false,
-  pinchZoomOut: false,
+
+  // Pinch tracking
+  lastPinchDistance: 0,
+  pinchCenter: { x: 0, y: 0 },
+
+  // Output states (directly drive game inputs)
+  rotateLeft: false,
+  rotateRight: false,
+  zoomIn: false,
+  zoomOut: false,
+
+  // Tuning parameters
+  swipeMinDistance: 8, // pixels to start recognizing swipe
+  swipeSensitivity: 3, // pixels of movement per frame to trigger rotation
+  pinchMinDistance: 15, // pixels to start recognizing pinch
+  pinchSensitivity: 8, // pixels of pinch change to trigger zoom
+  tapMaxDistance: 15, // max movement for tap recognition
+  tapMaxTime: 250, // max ms for tap
+  gestureDecisionDistance: 20, // pixels before deciding gesture type
 };
 let sharedMem = null;
 let pointers = { cmd: 0, gameStructure: 0 };
@@ -197,7 +208,7 @@ function setKeyUI(key, active) {
 
 function setupInput() {
   // =========================================================================
-  // TOUCH INPUT HANDLERS
+  // TOUCH INPUT HANDLERS - Optimized for responsiveness
   // =========================================================================
 
   function getTouchDistance(touch1, touch2) {
@@ -206,28 +217,58 @@ function setupInput() {
     return Math.sqrt(dx * dx + dy * dy);
   }
 
+  function getTouchCenter(touch1, touch2) {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
+  }
+
+  function resetTouchOutputs() {
+    touchState.rotateLeft = false;
+    touchState.rotateRight = false;
+    touchState.zoomIn = false;
+    touchState.zoomOut = false;
+    setKeyUI("left", false);
+    setKeyUI("right", false);
+    setKeyUI("up", false);
+    setKeyUI("down", false);
+  }
+
+  function resetTouchState() {
+    touchState.gestureType = null;
+    resetTouchOutputs();
+  }
+
   window.addEventListener(
     "touchstart",
     (e) => {
       if (appState !== "GAME") return;
+      e.preventDefault();
+
+      const now = Date.now();
 
       if (e.touches.length === 2) {
-        // Start pinch gesture
-        touchState.isPinching = true;
-        touchState.isActive = false;
-        touchState.initialPinchDistance = getTouchDistance(
+        // Two fingers - immediately lock to pinch gesture
+        touchState.gestureType = "pinch";
+        touchState.lastPinchDistance = getTouchDistance(
           e.touches[0],
           e.touches[1],
         );
-        e.preventDefault();
+        touchState.pinchCenter = getTouchCenter(e.touches[0], e.touches[1]);
+        // Clear any rotation from previous single touch
+        touchState.rotateLeft = false;
+        touchState.rotateRight = false;
+        setKeyUI("left", false);
+        setKeyUI("right", false);
       } else if (e.touches.length === 1) {
-        // Start single touch (swipe or tap)
-        touchState.isActive = true;
-        touchState.isPinching = false;
+        // Single finger - could be tap or swipe, decide later
+        touchState.gestureType = null; // Will be decided on move or end
         touchState.startX = e.touches[0].clientX;
         touchState.startY = e.touches[0].clientY;
-        touchState.startTime = Date.now();
-        e.preventDefault();
+        touchState.lastX = e.touches[0].clientX;
+        touchState.lastY = e.touches[0].clientY;
+        touchState.startTime = now;
       }
     },
     { passive: false },
@@ -237,57 +278,97 @@ function setupInput() {
     "touchmove",
     (e) => {
       if (appState !== "GAME") return;
+      e.preventDefault();
 
-      if (touchState.isPinching && e.touches.length === 2) {
-        // Handle pinch zoom
+      if (e.touches.length === 2) {
+        // Handle pinch zoom - immediate response
+        if (touchState.gestureType !== "pinch") {
+          // Switching to pinch from another gesture
+          touchState.gestureType = "pinch";
+          touchState.lastPinchDistance = getTouchDistance(
+            e.touches[0],
+            e.touches[1],
+          );
+          resetTouchOutputs();
+        }
+
         const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
-        const delta = currentDistance - touchState.initialPinchDistance;
+        const delta = currentDistance - touchState.lastPinchDistance;
 
-        // Reset zoom states
-        touchState.pinchZoomIn = false;
-        touchState.pinchZoomOut = false;
-
-        if (Math.abs(delta) > 20) {
+        // Immediate response with small threshold
+        if (Math.abs(delta) > touchState.pinchSensitivity) {
           if (delta > 0) {
             // Pinch out = zoom in (get closer)
-            touchState.pinchZoomIn = true;
+            touchState.zoomIn = true;
+            touchState.zoomOut = false;
             setKeyUI("up", true);
             setKeyUI("down", false);
           } else {
             // Pinch in = zoom out (get further)
-            touchState.pinchZoomOut = true;
+            touchState.zoomOut = true;
+            touchState.zoomIn = false;
             setKeyUI("down", true);
             setKeyUI("up", false);
           }
-          // Update initial distance for continuous zooming
-          touchState.initialPinchDistance = currentDistance;
+          // Update for continuous tracking
+          touchState.lastPinchDistance = currentDistance;
+        } else {
+          // Below threshold - stop zooming
+          touchState.zoomIn = false;
+          touchState.zoomOut = false;
+          setKeyUI("up", false);
+          setKeyUI("down", false);
         }
-        e.preventDefault();
-      } else if (touchState.isActive && e.touches.length === 1) {
-        // Handle swipe for rotation
+      } else if (e.touches.length === 1) {
         const currentX = e.touches[0].clientX;
-        const deltaX = currentX - touchState.startX;
+        const currentY = e.touches[0].clientY;
+        const deltaFromStart =
+          Math.abs(currentX - touchState.startX) +
+          Math.abs(currentY - touchState.startY);
+        const deltaX = currentX - touchState.lastX;
 
-        // Reset rotation states
-        touchState.swipeRotateLeft = false;
-        touchState.swipeRotateRight = false;
+        // Decide gesture type if not yet decided
+        if (
+          touchState.gestureType === null &&
+          deltaFromStart > touchState.gestureDecisionDistance
+        ) {
+          // Enough movement to decide - this is a swipe
+          touchState.gestureType = "swipe";
+        }
 
-        if (Math.abs(deltaX) > touchState.swipeThreshold) {
-          if (deltaX > 0) {
-            // Swipe right = rotate right
-            touchState.swipeRotateRight = true;
-            setKeyUI("right", true);
-            setKeyUI("left", false);
+        // Handle swipe rotation - immediate response to movement
+        if (
+          touchState.gestureType === "swipe" ||
+          deltaFromStart > touchState.swipeMinDistance
+        ) {
+          if (touchState.gestureType === null) {
+            touchState.gestureType = "swipe";
+          }
+
+          // Respond to instantaneous movement direction
+          if (Math.abs(deltaX) > touchState.swipeSensitivity) {
+            if (deltaX > 0) {
+              touchState.rotateRight = true;
+              touchState.rotateLeft = false;
+              setKeyUI("right", true);
+              setKeyUI("left", false);
+            } else {
+              touchState.rotateLeft = true;
+              touchState.rotateRight = false;
+              setKeyUI("left", true);
+              setKeyUI("right", false);
+            }
           } else {
-            // Swipe left = rotate left
-            touchState.swipeRotateLeft = true;
-            setKeyUI("left", true);
+            // Not moving fast enough - stop rotation
+            touchState.rotateLeft = false;
+            touchState.rotateRight = false;
+            setKeyUI("left", false);
             setKeyUI("right", false);
           }
-          // Update start position for continuous rotation
-          touchState.startX = currentX;
         }
-        e.preventDefault();
+
+        touchState.lastX = currentX;
+        touchState.lastY = currentY;
       }
     },
     { passive: false },
@@ -297,68 +378,56 @@ function setupInput() {
     "touchend",
     (e) => {
       if (appState !== "GAME") return;
+      e.preventDefault();
 
-      if (touchState.isPinching) {
-        // End pinch gesture
-        touchState.isPinching = false;
-        touchState.pinchZoomIn = false;
-        touchState.pinchZoomOut = false;
-        setKeyUI("up", false);
-        setKeyUI("down", false);
-
-        // If one finger remains, switch to swipe mode
-        if (e.touches.length === 1) {
-          touchState.isActive = true;
-          touchState.startX = e.touches[0].clientX;
-          touchState.startY = e.touches[0].clientY;
-          touchState.startTime = Date.now();
-        }
-      } else if (touchState.isActive && e.touches.length === 0) {
-        // End single touch - check for tap
+      if (e.touches.length === 0) {
+        // All fingers lifted
         const endTime = Date.now();
         const elapsed = endTime - touchState.startTime;
+        const changedTouch = e.changedTouches[0];
 
-        // Check if this was a tap (short time, minimal movement)
-        if (elapsed < touchState.tapTimeThreshold) {
-          const changedTouch = e.changedTouches[0];
+        // Check for tap - only if gesture wasn't already decided as swipe/pinch
+        if (
+          touchState.gestureType === null ||
+          touchState.gestureType === "tap"
+        ) {
           const deltaX = Math.abs(changedTouch.clientX - touchState.startX);
           const deltaY = Math.abs(changedTouch.clientY - touchState.startY);
+          const totalDelta = deltaX + deltaY;
 
           if (
-            deltaX < touchState.tapThreshold &&
-            deltaY < touchState.tapThreshold
+            elapsed < touchState.tapMaxTime &&
+            totalDelta < touchState.tapMaxDistance
           ) {
             // This is a tap - trigger check alignment
             inputs.check = 1;
-            console.log("Touch tap - check alignment triggered");
+            console.log("Tap detected - check alignment triggered");
           }
         }
 
-        // Clear swipe rotation states
-        touchState.isActive = false;
-        touchState.swipeRotateLeft = false;
-        touchState.swipeRotateRight = false;
-        setKeyUI("left", false);
-        setKeyUI("right", false);
+        // Clear all touch state
+        resetTouchState();
+      } else if (e.touches.length === 1) {
+        // One finger remains after lifting one from pinch
+        // Transition to potential swipe
+        touchState.gestureType = null;
+        touchState.startX = e.touches[0].clientX;
+        touchState.startY = e.touches[0].clientY;
+        touchState.lastX = e.touches[0].clientX;
+        touchState.lastY = e.touches[0].clientY;
+        touchState.startTime = Date.now();
+        // Clear zoom outputs
+        touchState.zoomIn = false;
+        touchState.zoomOut = false;
+        setKeyUI("up", false);
+        setKeyUI("down", false);
       }
-
-      e.preventDefault();
     },
     { passive: false },
   );
 
   window.addEventListener("touchcancel", (e) => {
-    // Reset all touch state on cancel
-    touchState.isActive = false;
-    touchState.isPinching = false;
-    touchState.swipeRotateLeft = false;
-    touchState.swipeRotateRight = false;
-    touchState.pinchZoomIn = false;
-    touchState.pinchZoomOut = false;
-    setKeyUI("left", false);
-    setKeyUI("right", false);
-    setKeyUI("up", false);
-    setKeyUI("down", false);
+    resetTouchState();
   });
 
   // =========================================================================
@@ -472,10 +541,10 @@ function gameLoop() {
   }
 
   // Combine keyboard and touch inputs
-  let combinedLeft = inputs.left || (touchState.swipeRotateLeft ? 1 : 0);
-  let combinedRight = inputs.right || (touchState.swipeRotateRight ? 1 : 0);
-  let combinedUp = inputs.up || (touchState.pinchZoomIn ? 1 : 0);
-  let combinedDown = inputs.down || (touchState.pinchZoomOut ? 1 : 0);
+  let combinedLeft = inputs.left || (touchState.rotateLeft ? 1 : 0);
+  let combinedRight = inputs.right || (touchState.rotateRight ? 1 : 0);
+  let combinedUp = inputs.up || (touchState.zoomIn ? 1 : 0);
+  let combinedDown = inputs.down || (touchState.zoomOut ? 1 : 0);
 
   // Write Commands
   if (appState !== "GAME" || !running) {

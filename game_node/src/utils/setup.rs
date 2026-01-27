@@ -16,7 +16,8 @@ use crate::utils::constants::{
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 
-use rand::{Rng, RngCore};
+use rand::{Rng, RngCore, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid
 pub fn setup(
@@ -25,8 +26,14 @@ pub fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut random_gen: ResMut<RandomGen>,
     time: Res<Time>,
+    setup_config: Option<Res<SetupConfig>>,
 ) {
-    // Two cameras for looks at the origin.
+    let config_to_use = setup_config.and_then(|c| c.0.clone());
+
+    if let Some(ref config) = config_to_use {
+        random_gen.random_gen = ChaCha8Rng::seed_from_u64(config.seed);
+    }
+
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(
@@ -38,7 +45,6 @@ pub fn setup(
         GameEntity,
     ));
 
-    // Ground plane
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
@@ -50,7 +56,6 @@ pub fn setup(
         GameEntity,
     ));
 
-    // Semicircle Wall surrounding the pyramid
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
         MeshMaterial3d(materials.add(StandardMaterial {
@@ -61,37 +66,35 @@ pub fn setup(
             cull_mode: None,
             ..default()
         })),
-        // The mesh is generated centered at (0,0) with radius 12.
-        // It forms a semicircle from +X through -Z to -X.
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
         GameEntity,
     ));
 
-    //  PointLight positioned high to provide more uniform lighting
     commands.spawn((
         SpotLight {
             intensity: MAIN_SPOTLIGHT_INTENSITY,
             shadows_enabled: true,
             outer_angle: std::f32::consts::PI / 3.0,
-            range: 45.0, // Increased range since light is higher
+            range: 45.0,
             radius: 0.0,
             ..default()
         },
-        Transform::from_xyz(0.0, 15.0, 0.0).looking_at(Vec3::ZERO, -Vec3::Y), // Higher position for more uniform lighting
+        Transform::from_xyz(0.0, 15.0, 0.0).looking_at(Vec3::ZERO, -Vec3::Y),
         GameEntity,
     ));
 
-    // Ambient light
     commands.insert_resource(AmbientLight {
         color: Color::WHITE,
         brightness: AMBIENT_BRIGHTNESS,
         affects_lightmapped_meshes: true,
     });
 
-    // Game State with per session parameters
-    let mut game_state = setup_game_state(&mut commands, &time, &mut random_gen);
+    let mut game_state = if let Some(ref config) = config_to_use {
+        setup_game_state_from_config(&mut commands, &time, config)
+    } else {
+        setup_game_state(&mut commands, &time, &mut random_gen)
+    };
 
-    // Pyramid
     spawn_pyramid(
         &mut commands,
         &mut meshes,
@@ -100,30 +103,30 @@ pub fn setup(
         &mut game_state,
     );
 
+    if config_to_use.is_some() {
+        commands.insert_resource(SetupConfig(None));
+    }
+
     log!("🎮 Pyramid Game Started!");
 }
 
-// Despawn all entities, needed when transitioning from Playing to MenuUI
 pub fn despawn_setup(mut commands: Commands, query: Query<Entity, With<GameEntity>>) {
     for entity in &query {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 }
 
-/// Initialize the GameState
 pub fn setup_game_state(
     commands: &mut Commands,
     time: &Res<Time>,
     random_gen: &mut ResMut<RandomGen>,
 ) -> GameState {
-    // Determine the pyramid type randomly
     let pyramid_type = if random_gen.random_gen.next_u64() % 2 == 0 {
         PyramidType::Type1
     } else {
         PyramidType::Type2
     };
 
-    // Determine the pyramid's base radius and height randomly
     let pyramid_base_radius = random_gen
         .random_gen
         .random_range(PYRAMID_BASE_RADIUS_MIN..=PYRAMID_BASE_RADIUS_MAX);
@@ -131,36 +134,28 @@ pub fn setup_game_state(
         .random_gen
         .random_range(PYRAMID_HEIGHT_MIN..=PYRAMID_HEIGHT_MAX);
 
-    // Determine the pyramid's starting orientation randomly
     let pyramid_start_orientation_rad = random_gen
         .random_gen
         .random_range(PYRAMID_ANGLE_OFFSET_RAD_MIN..PYRAMID_ANGLE_OFFSET_RAD_MAX);
 
-    // If the pyramid is of Type2, make two of its sides the same color
-    // and set the door index to opposite direction of red side (counterclockwise)
     let mut pyramid_colors = PYRAMID_COLORS;
     let mut pyramid_target_door_index = 5;
     if pyramid_type == PyramidType::Type2 {
         pyramid_colors[2] = pyramid_colors[1];
-
         pyramid_target_door_index = 2;
     }
 
-    // Create the initial game state
     let game_state = GameState {
         random_seed: SEED,
         pyramid_type: pyramid_type,
         pyramid_base_radius: pyramid_base_radius,
         pyramid_height: pyramid_height,
         pyramid_start_orientation_rad: pyramid_start_orientation_rad,
-
         pyramid_color_faces: pyramid_colors,
-
         pyramid_target_door_index: pyramid_target_door_index,
         start_time: Some(time.elapsed()),
         end_time: None,
 
-        
         nr_attempts: 0,
         cosine_alignment: Some(0.0),
 
@@ -178,7 +173,96 @@ pub fn setup_game_state(
     return cloned_game_state;
 }
 
-/// The length of the straight lines extending forward from the semicircle ends.
+pub fn setup_game_state_from_config(
+    commands: &mut Commands,
+    time: &Res<Time>,
+    config: &GameConfig,
+) -> GameState {
+    let pyramid_type = if config.pyramid_type_code == 0 {
+        PyramidType::Type1
+    } else {
+        PyramidType::Type2
+    };
+
+    let pyramid_colors = [
+        Color::srgba(
+            config.pyramid_color_faces[0][0],
+            config.pyramid_color_faces[0][1],
+            config.pyramid_color_faces[0][2],
+            config.pyramid_color_faces[0][3],
+        ),
+        Color::srgba(
+            config.pyramid_color_faces[1][0],
+            config.pyramid_color_faces[1][1],
+            config.pyramid_color_faces[1][2],
+            config.pyramid_color_faces[1][3],
+        ),
+        Color::srgba(
+            config.pyramid_color_faces[2][0],
+            config.pyramid_color_faces[2][1],
+            config.pyramid_color_faces[2][2],
+            config.pyramid_color_faces[2][3],
+        ),
+    ];
+
+    let game_state = GameState {
+        random_seed: config.seed,
+        pyramid_type,
+        pyramid_base_radius: config.pyramid_base_radius,
+        pyramid_height: config.pyramid_height,
+        pyramid_start_orientation_rad: config.pyramid_start_orientation_rad,
+        pyramid_color_faces: pyramid_colors,
+        pyramid_target_door_index: config.pyramid_target_door_index,
+        start_time: Some(time.elapsed()),
+        end_time: None,
+        nr_attempts: 0,
+        cosine_alignment: Some(0.0),
+        animating_emissive: None,
+        animating_door: None,
+        animating_light: None,
+        animation_start_time: None,
+        is_animating: false,
+        pending_phase: None,
+    };
+
+    let cloned_game_state = game_state.clone();
+    commands.insert_resource(game_state);
+
+    cloned_game_state
+}
+
+use crate::command_handler::PendingReset;
+
+/// Legacy reset handler - replaced by handle_reset_command in systems_logic.rs
+#[allow(dead_code)]
+pub fn apply_pending_reset(
+    mut pending_reset: ResMut<PendingReset>,
+    mut commands: Commands,
+    entities_query: Query<Entity, With<GameEntity>>,
+    ui_entities_query: Query<Entity, With<UIEntity>>,
+    mut next_state: ResMut<NextState<GamePhase>>,
+) {
+    let Some(config) = pending_reset.0.take() else {
+        return;
+    };
+
+    info!("Applying reset with config seed: {}", config.seed);
+
+    for entity in &entities_query {
+        commands.entity(entity).try_despawn();
+    }
+
+    for entity in &ui_entities_query {
+        commands.entity(entity).try_despawn();
+    }
+
+    commands.insert_resource(SetupConfig(Some(config)));
+    next_state.set(GamePhase::Playing);
+}
+
+#[derive(Resource, Default)]
+pub struct SetupConfig(pub Option<GameConfig>);
+
 fn create_extended_semicircle_mesh(
     radius: f32,
     height: f32,
@@ -190,74 +274,45 @@ fn create_extended_semicircle_mesh(
     let mut uvs = Vec::new();
     let mut indices = Vec::new();
 
-    // Calculate total length for correct UV mapping (0.0 to 1.0)
-    // Arc length = PI * R
-    // Total = Extension + Arc + Extension
     let arc_len = std::f32::consts::PI * radius;
     let total_len = arc_len + (2.0 * extension);
 
-    // Helper to push a column of vertices (Top and Bottom)
-    // We modify the lists internally
     let mut push_column = |x: f32, z: f32, normal: Vec3, u_dist: f32| {
         let u = u_dist / total_len;
-
-        // Bottom vertex
         positions.push([x, 0.0, z]);
         normals.push([normal.x, normal.y, normal.z]);
         uvs.push([u, 1.0]);
 
-        // Top vertex
         positions.push([x, height, z]);
         normals.push([normal.x, normal.y, normal.z]);
         uvs.push([u, 0.0]);
     };
 
-    // Starts at Z = extension, goes to Z = 0
-    // Normal points inward (-X)
     push_column(radius, extension, Vec3::NEG_X, 0.0);
 
-    // Semicircle Arc
-    // From 0 to PI
     for i in 0..=segments {
         let t = i as f32 / segments as f32;
         let angle = t * std::f32::consts::PI;
-
-        // x = R * cos(angle), z = -R * sin(angle)
         let x = radius * angle.cos();
         let z = -radius * angle.sin();
-
-        // Normal points outwards (to center)
-        // Note: For the specific case of angle=0 or PI, this matches the straight line normals perfectly.
         let normal = -Vec3::new(x, 0.0, z).normalize();
-
-        // Calculate distance along the path for UVs
-        // Current distance = Extension + (portion of arc)
         let current_dist = extension + (t * arc_len);
-
         push_column(x, z, normal, current_dist);
     }
 
-    // Left Extension (End)
-    // Starts at Z = 0, goes to Z = extension
-    // Normal points inward (+X)
     push_column(-radius, extension, Vec3::X, total_len);
 
-    // Indices Generation
-    // We now have (segments + 1) arc columns + 2 extension columns = segments + 3 columns.
-    // The number of quads to draw is (total_columns - 1).
     let total_columns = positions.len() as u32 / 2;
 
     for i in 0..(total_columns - 1) {
         let base = i * 2;
+        indices.push(base);
+        indices.push(base + 2);
+        indices.push(base + 1);
 
-        // CCW winding for inward face
-        indices.push(base); // Bottom Current
-        indices.push(base + 2); // Bottom Next
-        indices.push(base + 1); // Top Current
-
-        indices.push(base + 1); // Top Current
-        indices.push(base + 2); // Bottom Next
-        indices.push(base + 3); // Top Next
+        indices.push(base + 1);
+        indices.push(base + 2);
+        indices.push(base + 3);
     }
 
     let mut mesh = Mesh::new(

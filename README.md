@@ -1,86 +1,60 @@
-# Monkey 3D Game
+# Monkey 3D Game - Twin Engine Architecture (Shared Memory)
 
-A 3D puzzle game built with Bevy where the player must find the correct orientation of the given randomly generated 3-sided pyramid using an orbital camera system.
+A 3D puzzle game built with Bevy demonstrating the **Twin-Engine Architecture**, where the Game Logic (Game Node) is decoupled from the Controller and communicates via **Atomic Shared Memory**.
 
-**Objective**: Locate the red face of the pyramid by orbiting around it, then press SPACE when aligned correctly.
+This architecture allows for extremely low-latency, lock-free communication between the game and external controllers, supporting multiple languages and platforms.
 
-## Controls
+## Architecture
 
-### Keyboard
--   **Arrow Keys / WASD**: Rotate camera around pyramid (orbit left/right, zoom in/out)
--   **SPACE**: Check alignment / Start game
--   **R**: Restart game (when game is over)
--   **ESC**: Toggle fullscreen/windowed mode and cursor lock
--   **V**: Toggle VSync on/off
+*   **Shared Library (`shared`)**: Defines the atomic data structures (`SharedCommands`, `SharedGameState`) and handles platform-specific shared memory creation (mmap on Native, SharedArrayBuffer on Web).
+*   **Game Node (`game_node`)**: The Bevy application. It reads commands from shared memory and writes game state to shared memory every frame.
+*   **Controllers**:
+    *   **Native (`controller_native`)**: Rust TUI application. Spawns the game process and maps keyboard input to atomic flags.
+    *   **Python (`controller_python`)**: Tkinter + transitions GUI built on the `monkey_shared` PyO3 bindings for interactive control.
+    *   **Web (`controller_web`)**: HTML/JS interface. Loads the WASM game and interacts via shared memory buffers.
 
-### Touch (Mobile/Touchscreen)
--   **Horizontal Swipe**: Rotate camera around pyramid (left/right)
--   **Vertical Swipe**: Zoom in/out (swipe up to zoom in, swipe down to zoom out)
--   **Tap**: Check alignment / Start game / Restart game
+## Prerequisites
 
-## Dependencies
+1.  **Rust**: Stable toolchain installed (`rustup`).
+2.  **OS**: Linux/macOS (Windows support is experimental).
 
--   `bevy = "0.17.2"`
--   `rand = "0.9.2"`
--   `rand_chacha = "0.9.0"`
--   `web-sys = "0.3.82"` (for wasm logging)
+### For Web Build
+*   `wasm-pack`: `cargo install wasm-pack`
 
-## Building and Running
+### For Python Controller
+*   Python 3.10+
+*   `pip install transitions`
+*   (Linux) `sudo apt install python3-tk` if Tkinter is missing
 
-### Native
+## How to Run
 
+**Important**: You must run the `game_node` and the `controller` in separate terminals.
+
+### 1. Start the Game Node
+Terminal 1:
 ```bash
-# Run in development mode
-cargo run
-
-# Run in release mode (optimized)
-cargo run --release
+cargo run -p game_node
 ```
 
-### WebAssembly (WASM)
+### 2. Start a Controller (Terminal 2)
 
-1.  **Install the wasm target:**
-    ```bash
-    rustup target add wasm32-unknown-unknown
-    ```
+#### Native Controller (Rust)
+```bash
+cargo run -p controller_native
+```
 
-2.  **Build for wasm:**
-    This project is configured to use `wasm-server-runner` which simplifies development.
+#### Python Controller
+```bash
+# Build shared library with Python bindings
+cargo build --release -p shared --features python
 
-    ```bash
-    # Build
-    cargo build --release --target wasm32-unknown-unknown
+# Copy the module next to the controller (adjust extension for your OS if needed)
+cp target/release/libshared.so controller_python/monkey_shared.so
 
-    ```
-    This will build the wasm binary.
+# Run the GUI controller
+python controller_python/controller.py
+```
 
-3.  **Manual Wasm Build and Serve:**
-    If you want to build the wasm file and serve it manually:
-
-    a. **Build the wasm binary:**
-    You will need a tool like `wasm-bindgen` to get the js bindings.
-    ```bash
-    wasm-bindgen --out-dir ./out/ --target web ./target/wasm32-unknown-unknown/release/monkey_3d_game.wasm
-    ```
-
-    b. **Serve the `index.html` file:**
-    The `index.html` file expects the wasm javascript module to be in the `./out/` directory.
-
-    A simple way to serve the files is to use a local http server. For example, with Python:
-    ```bash
-    # Make sure you are in the root of the project directory
-    python3 -m http.server
-    ```
-    Then open your browser to `http://localhost:8000`.
-
-    Or using `http-server` via npx:
-    ```bash
-    npx http-server .
-    ```
-
-## 🔗 Useful Links
-
-- [Bevy 0.17 Documentation](https://docs.rs/bevy/0.17.2/bevy/)
-- [Bevy Official Examples](https://bevyengine.org/examples/)
-- [Bevy Cheat Book](https://bevy-cheatbook.github.io/)
-- [Bevy Assets](https://bevyengine.org/assets/)
+#### Web Controller
+1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`)
+2. Launch

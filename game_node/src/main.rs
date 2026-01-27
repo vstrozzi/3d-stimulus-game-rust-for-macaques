@@ -1,30 +1,37 @@
 //! Start-up for the monkey_3d_game, with window, plugins, and resources.
+//!
+//! Twin-Engine Architecture: This is the Game Node. It receives commands from
+//! the Controller and emits state via Shared Memory.
 
-/// Import necessary modules from the Bevy engine
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     window::*,
 };
 
-/// Import custom modules game defined
-use monkey_3d_game::utils::{
-    constants::game_constants::REFRESH_RATE_HZ,
-    debug_functions::DebugFunctionsPlugin,
-    global_inputs::InputsPlugin,
-    objects::{GameState, RandomGen},
-    systems_logic::SystemsLogicPlugin,
-    touch_inputs::TouchInputPlugin,
+use game_node::{
+    command_handler::CommandHandlerPlugin,
+    state_emitter::StateEmitterPlugin,
+    web_adapter::WebAdapterPlugin,
+    // native_adapter removed, integrated into command_handler
+    utils::{
+        constants::game_constants::REFRESH_RATE_HZ,
+        debug_functions::DebugFunctionsPlugin,
+        objects::{GameState, RandomGen},
+        systems_logic::SystemsLogicPlugin,
+    },
 };
 
 /// Entry point for the application
 fn main() {
     let window = Some(Window {
         title: "Monkey 3D Game".into(),
-        fit_canvas_to_parent: true,            // Wasm size as canvas
-        prevent_default_event_handling: true,  // Prevent browser from intercepting touch/scroll
+        #[cfg(target_arch = "wasm32")]
+        canvas: Some("#game-canvas".into()),
+        fit_canvas_to_parent: true,
+        prevent_default_event_handling: true,
         #[cfg(not(target_arch = "wasm32"))]
-        mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary), // Native fullscreen
+        mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
         present_mode: PresentMode::AutoVsync,
         ..default()
     });
@@ -37,26 +44,23 @@ fn main() {
 
     App::new()
         .add_plugins((
-            // Default plugins with the custom window and cursor settings
             DefaultPlugins.set(WindowPlugin {
                 primary_window: window,
                 primary_cursor_options: cursor,
                 ..default()
             }),
-            // Diagnostic plugins for logging and frame time diagnostics
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
+            // Twin-Engine plugins
+            CommandHandlerPlugin, // Now handles SHM reading
+            StateEmitterPlugin,   // Now handles SHM writing
+            WebAdapterPlugin,     // Handles WASM SHM init
             // Custom game plugins
-            SystemsLogicPlugin, // Main game phase logic
-            InputsPlugin,
-            TouchInputPlugin, // Touch/mobile support
+            SystemsLogicPlugin,
             DebugFunctionsPlugin,
         ))
-        // Fixed timestep for physics calculations
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
-        // Resource for generating random numbers
         .insert_resource(RandomGen::default())
-        // Resource for the game state
         .insert_resource(GameState::default())
         .run();
 }

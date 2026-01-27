@@ -4,20 +4,19 @@ use rand_chacha::rand_core::SeedableRng;
 use std::time::Duration;
 
 use crate::utils::constants::game_constants::SEED;
+
 use rand_chacha::ChaCha8Rng;
 
 /// Game state enum representing the different states the game can be in
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, States, Hash)]
 pub enum GamePhase {
     #[default]
-    // Initial menu screen
-    MenuUI,
-    // Loading screen after pressing start (scene setup + GPU stabilization)
-    Loading,
     // The game is currently being played
     Playing,
     // The game has been won
     Won,
+    // Transient state for resetting - immediately transitions to Playing
+    Resetting,
 }
 
 /// Different types of pyramids
@@ -33,6 +32,38 @@ impl Default for PyramidType {
     }
 }
 
+/// Configuration used to setup the game (received from Controller)
+#[derive(Debug, Clone, PartialEq)]
+pub struct GameConfig {
+    pub seed: u64,
+    /// 0 or 1
+    pub pyramid_type_code: u32,
+    pub pyramid_base_radius: f32,
+    pub pyramid_height: f32,
+    pub pyramid_start_orientation_rad: f32,
+    pub pyramid_target_door_index: usize,
+    /// 3 faces, 4 channels
+    pub pyramid_color_faces: [[f32; 4]; 3],
+}
+
+impl Default for GameConfig {
+    fn default() -> Self {
+        Self {
+            seed: SEED,
+            pyramid_type_code: 0,
+            pyramid_base_radius: 2.5,
+            pyramid_height: 4.0,
+            pyramid_start_orientation_rad: 0.0,
+            pyramid_target_door_index: 5,
+            pyramid_color_faces: [
+                 [1.0, 0.2, 0.2, 1.0],
+                 [0.2, 0.5, 1.0, 1.0],
+                 [0.2, 1.0, 0.3, 1.0],
+            ],
+        }
+    }
+}
+
 /// Shapes for decorations on the pyramid faces
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum DecorationShape {
@@ -45,13 +76,7 @@ pub enum DecorationShape {
 /// Single decoration on a pyramid face with barycentric coordinates relative to the triangle vertices (top, corner1, corner2)
 #[derive(Clone, Debug)]
 pub struct Decoration {
-    /// Barycentric coordinates (w0, w1, w2) where:
-    /// - w0 = weight for top vertex
-    /// - w1 = weight for corner1 vertex
-    /// - w2 = weight for corner2 vertex
-    /// Position can be reconstructed as: position = w0*top + w1*corner1 + w2*corner2
     pub barycentric: Vec3,
-
     pub size: f32,
 }
 
@@ -112,7 +137,6 @@ impl RandomGen {
 }
 impl Default for RandomGen {
     fn default() -> Self {
-        use rand_chacha::rand_core::SeedableRng;
         Self {
             random_gen: ChaCha8Rng::seed_from_u64(SEED),
         }
@@ -163,9 +187,3 @@ pub struct ScoreBarUI;
 // Component marking the fill bar inside the ScoreBarUI
 #[derive(Component)]
 pub struct ScoreBarFill;
-
-/// Resource to track loading state timing
-#[derive(Resource, Default)]
-pub struct LoadingState {
-    pub load_start_time: Option<Duration>,
-}

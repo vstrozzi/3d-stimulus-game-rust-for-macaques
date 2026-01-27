@@ -1,22 +1,22 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
 
-use crate::utils::touch_inputs::TouchTapEvent;
+use crate::command_handler::PendingCheckAlignment;
 use crate::utils::constants::game_constants::{
     COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD, DOOR_ANIMATION_FADE_IN_DURATION,
-    DOOR_ANIMATION_FADE_OUT_DURATION, DOOR_ANIMATION_STAY_OPEN_DURATION, LOADING_DURATION_SECS,
+    DOOR_ANIMATION_FADE_OUT_DURATION, DOOR_ANIMATION_STAY_OPEN_DURATION,
     SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT,
 };
 use crate::utils::constants::lighting_constants::MAX_SPOTLIGHT_INTENSITY;
 use crate::utils::objects::{
-    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleEmissive, HoleLight, LoadingState,
+    BaseDoor, BaseFrame, GameEntity, GamePhase, GameState, HoleEmissive, HoleLight,
     ScoreBarFill, ScoreBarUI, UIEntity,
 };
 
 /// Helper to despawn ui entities given a mutable commands reference
 pub fn despawn_ui_helper(commands: &mut Commands, query: &Query<Entity, With<UIEntity>>) {
     for entity in query {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 }
 
@@ -28,7 +28,7 @@ pub fn despawn_ui(mut commands: Commands, query: Query<Entity, With<UIEntity>>) 
 /// Helper system to cleanup Game entities
 pub fn cleanup_game_entities(mut commands: Commands, query: Query<Entity, With<GameEntity>>) {
     for entity in &query {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 }
 
@@ -40,26 +40,13 @@ pub fn setup_intro_ui(mut commands: Commands) {
     spawn_centered_text_black_screen(&mut commands, text);
 }
 
-/// Input handling for Menu Phase
-pub fn menu_inputs(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut next_state: ResMut<NextState<GamePhase>>,
-    mut game_state: ResMut<GameState>,
-    mut loading_state: ResMut<LoadingState>,
+/// Setup black screen for Loading state (legacy, kept for reference)
+#[allow(dead_code)]
+pub fn setup_loading_ui(
+    mut commands: Commands,
     time: Res<Time>,
-    mut tap_events: MessageReader<TouchTapEvent>,
 ) {
-    let tap_detected = tap_events.read().next().is_some();
-    if keyboard.just_pressed(KeyCode::Space) || tap_detected {
-        // Record when loading starts, actual game start time will be set after loading
-        loading_state.load_start_time = Some(time.elapsed());
-        game_state.nr_attempts = 0;
-        next_state.set(GamePhase::Loading);
-    }
-}
-
-/// Setup black screen for Loading state
-pub fn setup_loading_ui(mut commands: Commands) {
+    let _ = time; // suppress unused warning
     commands.spawn((Camera2d::default(), UIEntity));
     // Spawn a full-screen black overlay
     commands.spawn((
@@ -71,164 +58,139 @@ pub fn setup_loading_ui(mut commands: Commands) {
         BackgroundColor(Color::BLACK),
         UIEntity,
     ));
+
 }
 
-/// Check if loading is complete and transition to Playing
+/// Check if loading is complete and transition to Playing (legacy, kept for reference)
+#[allow(dead_code)]
 pub fn check_loading_complete(
     time: Res<Time>,
-    loading_state: Res<LoadingState>,
     mut game_state: ResMut<GameState>,
     mut next_state: ResMut<NextState<GamePhase>>,
 ) {
-    if let Some(start) = loading_state.load_start_time {
-        let elapsed = time.elapsed().as_secs_f32() - start.as_secs_f32();
-        if elapsed >= LOADING_DURATION_SECS {
-            // Set actual game start time now that we're ready to play
-            game_state.start_time = Some(time.elapsed());
-            next_state.set(GamePhase::Playing);
-        }
-    }
+    // Set actual game start time now that we're ready to play
+    game_state.start_time = Some(time.elapsed());
+    next_state.set(GamePhase::Playing);
 }
 
-/// Input handling for Playing Phase
-pub fn playing_inputs(
-    keyboard: Res<ButtonInput<KeyCode>>,
+
+
+/// System that applies pending check alignment command from the controller.
+/// This is the command-driven version of the alignment check logic.
+pub fn apply_pending_check_alignment(
+    pending: Res<PendingCheckAlignment>,
     mut game_state: ResMut<GameState>,
     time: Res<Time>,
-    // Queries needed for Playing logic
     camera_query: Query<&Transform, With<Camera3d>>,
-    door_query: Query<(
-        Entity,
-        &BaseDoor,
-        &Transform,
-    )>,
+    door_query: Query<(Entity, &BaseDoor, &Transform)>,
     light_query: Query<Entity, With<HoleLight>>,
     emissive_query: Query<Entity, With<HoleEmissive>>,
     frame_query: Query<(&BaseFrame, &Children)>,
     mut commands: Commands,
-    query: Query<Entity, With<UIEntity>>,
-    mut tap_events: MessageReader<TouchTapEvent>,
+    ui_query: Query<Entity, With<UIEntity>>,
 ) {
-    if game_state.is_animating {
-        return; // Do not allow camera inputs while animating
+    // Only proceed if check alignment was requested and we're not animating
+    if !pending.0 || game_state.is_animating {
+        return;
     }
-    // Check for SPACE key press or touch tap to check alignment
-    let tap_detected = tap_events.read().next().is_some();
-    if keyboard.just_pressed(KeyCode::Space) || tap_detected {
-        game_state.nr_attempts += 1;
-        game_state.is_animating = true; // Ensure not animating
-        // Clean old ui using helper
-        despawn_ui_helper(&mut commands, &query);
-        // Spawn new ui using helper
-        spawn_playing_hud(&mut commands, &game_state);
 
-        let Ok(camera_transform) = camera_query.single() else {
-            return;
-        };
+    // Increment attempt counter and start animation
+    game_state.nr_attempts += 1;
+    game_state.is_animating = true;
 
-        // Get local camera direction
-        let camera_forward = camera_transform.forward();
+    // Clean old UI and spawn new
+    despawn_ui_helper(&mut commands, &ui_query);
+    spawn_playing_hud(&mut commands, &game_state);
 
-        // Project camera forward to XZ plane
-        let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize();
+    let Ok(camera_transform) = camera_query.single() else {
+        return;
+    };
 
-        let mut best_alignment = -1.0;
-        let mut best_door_index = 0;
-        let mut winning_door_alignment = -1.0;
+    // Get local camera direction
+    let camera_forward = camera_transform.forward();
 
-        for (_, door, door_transform) in &door_query {
-            // Get door normal in world space and move to camera door's actual rotation
-            let door_normal_world = door_transform.rotation * door.normal;
+    // Project camera forward to XZ plane
+    let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize();
 
-            // Project to XZ plane
-            let door_normal_xz =
-                Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize();
+    let mut best_alignment = -1.0;
+    let mut best_door_index = 0;
+    let mut winning_door_alignment = -1.0;
 
-            // Calculate alignment (dot product)
-            let alignment = door_normal_xz.dot(camera_forward_xz);
+    for (_, door, door_transform) in &door_query {
+        // Get door normal in world space
+        let door_normal_world = door_transform.rotation * door.normal;
 
-            // Most negative = door facing toward camera
-            if alignment > best_alignment {
-                best_alignment = alignment;
-                best_door_index = door.door_index;
-            }
-            
-            // Save the real door_alignment
-            if door.door_index == game_state.pyramid_target_door_index {
-                winning_door_alignment = alignment;
-            }
+        // Project to XZ plane
+        let door_normal_xz = Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize();
+
+        // Calculate alignment (dot product)
+        let alignment = door_normal_xz.dot(camera_forward_xz);
+
+        // Most positive = door facing toward camera (from outside)
+        if alignment > best_alignment {
+            best_alignment = alignment;
+            best_door_index = door.door_index;
         }
 
-        // Determine if the player wins
-        let has_won = best_alignment > COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD
-            && best_door_index == game_state.pyramid_target_door_index;
-
-        // Always store the alignment for the score bar animation
-        game_state.cosine_alignment = Some(winning_door_alignment);
-
-        // Set pending phase based on win condition
-        if has_won {
-            game_state.pending_phase = Some(GamePhase::Won); // Go to Won
-            game_state.end_time = Some(time.elapsed());
-        } else {
-            game_state.pending_phase = Some(GamePhase::Playing); // Continue playing if lost
+        // Save the alignment for the target door
+        if door.door_index == game_state.pyramid_target_door_index {
+            winning_door_alignment = alignment;
         }
+    }
 
-        // Start animation for the winning door
-        let mut winning_door = None;
+    // Determine if the player wins
+    let has_won = best_alignment > COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD
+        && best_door_index == game_state.pyramid_target_door_index;
 
-        // Ensure the door has a unique material so we only fade THIS door.
-        for (door_entity, door, _) in &door_query {
-            if door.door_index == game_state.pyramid_target_door_index {
-                winning_door = Some(door_entity);
-                break;
-            }
+    // Store alignment for score bar animation
+    game_state.cosine_alignment = Some(winning_door_alignment);
+
+    // Set pending phase based on win condition
+    if has_won {
+        game_state.pending_phase = Some(GamePhase::Won);
+        game_state.end_time = Some(time.elapsed());
+    } else {
+        game_state.pending_phase = Some(GamePhase::Playing);
+    }
+
+    // Start animation for the target door
+    let mut winning_door = None;
+    for (door_entity, door, _) in &door_query {
+        if door.door_index == game_state.pyramid_target_door_index {
+            winning_door = Some(door_entity);
+            break;
         }
+    }
 
+    // Find the corresponding light and emissive
+    let mut found_light = None;
+    let mut found_emissive = None;
 
-        // Find the corresponding light and emissive.
-        let mut found_light = None;
-        let mut found_emissive = None;
-
-        // Iterate frames to find the one with correct side index
-        for (frame, children) in &frame_query {
-            if frame.door_index == game_state.pyramid_target_door_index {
-                // Check children for HoleLight and HoleEmissive
-                for child in children {
-                    if light_query.get(*child).is_ok() {
-                        found_light = Some(*child);
-                    }
-                    if emissive_query.get(*child).is_ok() {
-                        found_emissive = Some(*child);
-                    }
+    for (frame, children) in &frame_query {
+        if frame.door_index == game_state.pyramid_target_door_index {
+            for child in children {
+                if light_query.get(*child).is_ok() {
+                    found_light = Some(*child);
+                }
+                if emissive_query.get(*child).is_ok() {
+                    found_emissive = Some(*child);
                 }
             }
-            if found_light.is_some() && found_emissive.is_some() {
-                break;
-            }
         }
+        if found_light.is_some() && found_emissive.is_some() {
+            break;
+        }
+    }
 
-        if let Some(light_entity) = found_light {
-            // Start Animation
-            game_state.animating_door = Some(winning_door.unwrap());
-            game_state.animating_light = Some(light_entity);
-            game_state.animating_emissive = found_emissive;
-            game_state.animation_start_time = Some(time.elapsed());
-        }
+    if let Some(light_entity) = found_light {
+        game_state.animating_door = winning_door;
+        game_state.animating_light = Some(light_entity);
+        game_state.animating_emissive = found_emissive;
+        game_state.animation_start_time = Some(time.elapsed());
     }
 }
 
-/// Input handling for Won Phase
-pub fn won_inputs(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut next_state: ResMut<NextState<GamePhase>>,
-    mut tap_events: MessageReader<TouchTapEvent>,
-) {
-    let tap_detected = tap_events.read().next().is_some();
-    if keyboard.just_pressed(KeyCode::KeyR) || tap_detected {
-        next_state.set(GamePhase::MenuUI); // Go back to menu, then Loading on next start
-    }
-}
+
 
 /// Setup UI for Playing state
 pub fn setup_playing_ui(mut commands: Commands, game_state: Res<GameState>) {
@@ -414,7 +376,7 @@ pub fn handle_door_animation(
         if let Some(emissive_entity) = game_state.animating_emissive {
             if let Ok((mut emissive_visibility, material_handle)) = emissive_query.get_mut(emissive_entity) {
                 *emissive_visibility = Visibility::Visible;
-                
+
                 if let Some(material) = materials.get_mut(&material_handle.0) {
                     // Use spotlight color for emissive
                     let light_color = spotlight.color.to_linear();
@@ -436,7 +398,7 @@ pub fn handle_door_animation(
         if let Some(emissive_entity) = game_state.animating_emissive {
             if let Ok((mut emissive_visibility, material_handle)) = emissive_query.get_mut(emissive_entity) {
                 *emissive_visibility = Visibility::Hidden;
-                
+
                 if let Some(material) = materials.get_mut(&material_handle.0) {
                     material.emissive = LinearRgba::new(0.0, 0.0, 0.0, 0.0);
                 }
@@ -536,12 +498,12 @@ pub fn update_ui_scale(
 
     // Reference height for UI design (1080p)
     const REFERENCE_HEIGHT: f32 = 1080.0;
-    
+
     // Calculate scale based on window height
     let scale = window.height() / REFERENCE_HEIGHT;
-    
+
     // Clamp scale to reasonable bounds (0.5x to 2.0x)
     let clamped_scale = scale.clamp(0.5, 2.0);
-    
+
     ui_scale.0 = clamped_scale;
 }

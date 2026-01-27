@@ -22,7 +22,7 @@ let inputs = {
   resumeRendering: 0,
 };
 
-// Touch state tracking - optimized for responsiveness
+// Touch state tracking - with momentum for smooth continuous input
 let touchState = {
   // Gesture type lock - once detected, stick with it until touch ends
   gestureType: null, // null, 'swipe', 'pinch', 'tap'
@@ -33,6 +33,7 @@ let touchState = {
   lastX: 0,
   lastY: 0,
   startTime: 0,
+  isDown: false, // Track if finger is currently down
 
   // Pinch tracking
   lastPinchDistance: 0,
@@ -44,14 +45,20 @@ let touchState = {
   zoomIn: false,
   zoomOut: false,
 
+  // Momentum tracking - keep action going briefly after movement stops
+  lastRotateDirection: 0, // -1 left, 0 none, 1 right
+  lastZoomDirection: 0, // -1 out, 0 none, 1 in
+  lastActionTime: 0, // timestamp of last detected movement
+  momentumDuration: 150, // ms to keep action after movement stops
+
   // Tuning parameters
-  swipeMinDistance: 8, // pixels to start recognizing swipe
-  swipeSensitivity: 3, // pixels of movement per frame to trigger rotation
-  pinchMinDistance: 15, // pixels to start recognizing pinch
-  pinchSensitivity: 8, // pixels of pinch change to trigger zoom
-  tapMaxDistance: 15, // max movement for tap recognition
-  tapMaxTime: 250, // max ms for tap
-  gestureDecisionDistance: 20, // pixels before deciding gesture type
+  swipeMinDistance: 5, // pixels to start recognizing swipe (reduced)
+  swipeSensitivity: 2, // pixels of movement per frame to trigger rotation (reduced)
+  pinchMinDistance: 10, // pixels to start recognizing pinch (reduced)
+  pinchSensitivity: 5, // pixels of pinch change to trigger zoom (reduced)
+  tapMaxDistance: 12, // max movement for tap recognition
+  tapMaxTime: 200, // max ms for tap
+  gestureDecisionDistance: 15, // pixels before deciding gesture type (reduced)
 };
 let sharedMem = null;
 let pointers = { cmd: 0, gameStructure: 0 };
@@ -206,39 +213,99 @@ function setKeyUI(key, active) {
   }
 }
 
+// Momentum update - call this periodically to maintain actions during touch
+function updateTouchMomentum() {
+  if (!touchState.isDown) return;
+
+  const now = Date.now();
+  const elapsed = now - touchState.lastActionTime;
+
+  // If finger is down but no recent movement, keep last direction with momentum
+  if (elapsed < touchState.momentumDuration) {
+    // Maintain last direction
+    if (
+      touchState.gestureType === "swipe" &&
+      touchState.lastRotateDirection !== 0
+    ) {
+      touchState.rotateLeft = touchState.lastRotateDirection < 0;
+      touchState.rotateRight = touchState.lastRotateDirection > 0;
+    }
+    if (
+      touchState.gestureType === "pinch" &&
+      touchState.lastZoomDirection !== 0
+    ) {
+      touchState.zoomIn = touchState.lastZoomDirection > 0;
+      touchState.zoomOut = touchState.lastZoomDirection < 0;
+    }
+  }
+}
+
+// =========================================================================
+// TOUCH HELPER FUNCTIONS
+// =========================================================================
+
+function getTouchDistance(touch1, touch2) {
+  const dx = touch2.clientX - touch1.clientX;
+  const dy = touch2.clientY - touch1.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getTouchCenter(touch1, touch2) {
+  return {
+    x: (touch1.clientX + touch2.clientX) / 2,
+    y: (touch1.clientY + touch2.clientY) / 2,
+  };
+}
+
+function setRotation(direction) {
+  // direction: -1 = left, 0 = stop, 1 = right
+  const now = Date.now();
+  if (direction !== 0) {
+    touchState.lastRotateDirection = direction;
+    touchState.lastActionTime = now;
+  }
+  touchState.rotateLeft = direction < 0;
+  touchState.rotateRight = direction > 0;
+  setKeyUI("left", direction < 0);
+  setKeyUI("right", direction > 0);
+}
+
+function setZoom(direction) {
+  // direction: -1 = out, 0 = stop, 1 = in
+  const now = Date.now();
+  if (direction !== 0) {
+    touchState.lastZoomDirection = direction;
+    touchState.lastActionTime = now;
+  }
+  touchState.zoomIn = direction > 0;
+  touchState.zoomOut = direction < 0;
+  setKeyUI("up", direction > 0);
+  setKeyUI("down", direction < 0);
+}
+
+function resetTouchOutputs() {
+  touchState.rotateLeft = false;
+  touchState.rotateRight = false;
+  touchState.zoomIn = false;
+  touchState.zoomOut = false;
+  touchState.lastRotateDirection = 0;
+  touchState.lastZoomDirection = 0;
+  setKeyUI("left", false);
+  setKeyUI("right", false);
+  setKeyUI("up", false);
+  setKeyUI("down", false);
+}
+
+function resetTouchState() {
+  touchState.gestureType = null;
+  touchState.isDown = false;
+  resetTouchOutputs();
+}
+
 function setupInput() {
   // =========================================================================
   // TOUCH INPUT HANDLERS - Optimized for responsiveness
   // =========================================================================
-
-  function getTouchDistance(touch1, touch2) {
-    const dx = touch2.clientX - touch1.clientX;
-    const dy = touch2.clientY - touch1.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  function getTouchCenter(touch1, touch2) {
-    return {
-      x: (touch1.clientX + touch2.clientX) / 2,
-      y: (touch1.clientY + touch2.clientY) / 2,
-    };
-  }
-
-  function resetTouchOutputs() {
-    touchState.rotateLeft = false;
-    touchState.rotateRight = false;
-    touchState.zoomIn = false;
-    touchState.zoomOut = false;
-    setKeyUI("left", false);
-    setKeyUI("right", false);
-    setKeyUI("up", false);
-    setKeyUI("down", false);
-  }
-
-  function resetTouchState() {
-    touchState.gestureType = null;
-    resetTouchOutputs();
-  }
 
   window.addEventListener(
     "touchstart",
@@ -247,6 +314,8 @@ function setupInput() {
       e.preventDefault();
 
       const now = Date.now();
+      touchState.isDown = true;
+      touchState.lastActionTime = now;
 
       if (e.touches.length === 2) {
         // Two fingers - immediately lock to pinch gesture
@@ -256,11 +325,9 @@ function setupInput() {
           e.touches[1],
         );
         touchState.pinchCenter = getTouchCenter(e.touches[0], e.touches[1]);
-        // Clear any rotation from previous single touch
-        touchState.rotateLeft = false;
-        touchState.rotateRight = false;
-        setKeyUI("left", false);
-        setKeyUI("right", false);
+        // Clear rotation but keep zoom momentum
+        touchState.lastRotateDirection = 0;
+        setRotation(0);
       } else if (e.touches.length === 1) {
         // Single finger - could be tap or swipe, decide later
         touchState.gestureType = null; // Will be decided on move or end
@@ -269,6 +336,9 @@ function setupInput() {
         touchState.lastX = e.touches[0].clientX;
         touchState.lastY = e.touches[0].clientY;
         touchState.startTime = now;
+        // Clear zoom but preserve state for potential swipe
+        touchState.lastZoomDirection = 0;
+        setZoom(0);
       }
     },
     { passive: false },
@@ -280,8 +350,10 @@ function setupInput() {
       if (appState !== "GAME") return;
       e.preventDefault();
 
+      const now = Date.now();
+
       if (e.touches.length === 2) {
-        // Handle pinch zoom - immediate response
+        // Handle pinch zoom
         if (touchState.gestureType !== "pinch") {
           // Switching to pinch from another gesture
           touchState.gestureType = "pinch";
@@ -289,36 +361,26 @@ function setupInput() {
             e.touches[0],
             e.touches[1],
           );
-          resetTouchOutputs();
+          touchState.lastRotateDirection = 0;
+          setRotation(0);
         }
 
         const currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
         const delta = currentDistance - touchState.lastPinchDistance;
 
-        // Immediate response with small threshold
+        // Respond to pinch changes
         if (Math.abs(delta) > touchState.pinchSensitivity) {
           if (delta > 0) {
             // Pinch out = zoom in (get closer)
-            touchState.zoomIn = true;
-            touchState.zoomOut = false;
-            setKeyUI("up", true);
-            setKeyUI("down", false);
+            setZoom(1);
           } else {
             // Pinch in = zoom out (get further)
-            touchState.zoomOut = true;
-            touchState.zoomIn = false;
-            setKeyUI("down", true);
-            setKeyUI("up", false);
+            setZoom(-1);
           }
           // Update for continuous tracking
           touchState.lastPinchDistance = currentDistance;
-        } else {
-          // Below threshold - stop zooming
-          touchState.zoomIn = false;
-          touchState.zoomOut = false;
-          setKeyUI("up", false);
-          setKeyUI("down", false);
         }
+        // Don't clear zoom on small movements - momentum handles it
       } else if (e.touches.length === 1) {
         const currentX = e.touches[0].clientX;
         const currentY = e.touches[0].clientY;
@@ -336,7 +398,7 @@ function setupInput() {
           touchState.gestureType = "swipe";
         }
 
-        // Handle swipe rotation - immediate response to movement
+        // Handle swipe rotation
         if (
           touchState.gestureType === "swipe" ||
           deltaFromStart > touchState.swipeMinDistance
@@ -345,26 +407,15 @@ function setupInput() {
             touchState.gestureType = "swipe";
           }
 
-          // Respond to instantaneous movement direction
+          // Respond to movement direction - with momentum
           if (Math.abs(deltaX) > touchState.swipeSensitivity) {
             if (deltaX > 0) {
-              touchState.rotateRight = true;
-              touchState.rotateLeft = false;
-              setKeyUI("right", true);
-              setKeyUI("left", false);
+              setRotation(1); // right
             } else {
-              touchState.rotateLeft = true;
-              touchState.rotateRight = false;
-              setKeyUI("left", true);
-              setKeyUI("right", false);
+              setRotation(-1); // left
             }
-          } else {
-            // Not moving fast enough - stop rotation
-            touchState.rotateLeft = false;
-            touchState.rotateRight = false;
-            setKeyUI("left", false);
-            setKeyUI("right", false);
           }
+          // Don't clear rotation on small movements - momentum handles it
         }
 
         touchState.lastX = currentX;
@@ -405,22 +456,22 @@ function setupInput() {
           }
         }
 
-        // Clear all touch state
+        // Clear all touch state immediately on lift
         resetTouchState();
       } else if (e.touches.length === 1) {
         // One finger remains after lifting one from pinch
         // Transition to potential swipe
+        const now = Date.now();
         touchState.gestureType = null;
         touchState.startX = e.touches[0].clientX;
         touchState.startY = e.touches[0].clientY;
         touchState.lastX = e.touches[0].clientX;
         touchState.lastY = e.touches[0].clientY;
-        touchState.startTime = Date.now();
-        // Clear zoom outputs
-        touchState.zoomIn = false;
-        touchState.zoomOut = false;
-        setKeyUI("up", false);
-        setKeyUI("down", false);
+        touchState.startTime = now;
+        touchState.lastActionTime = now;
+        // Clear zoom
+        touchState.lastZoomDirection = 0;
+        setZoom(0);
       }
     },
     { passive: false },
@@ -539,6 +590,9 @@ function gameLoop() {
     }
     previousHasWon = hasWon;
   }
+
+  // Update touch momentum (keeps actions going smoothly during finger movement)
+  updateTouchMomentum();
 
   // Combine keyboard and touch inputs
   let combinedLeft = inputs.left || (touchState.rotateLeft ? 1 : 0);

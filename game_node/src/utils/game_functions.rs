@@ -6,6 +6,7 @@ use crate::utils::constants::game_constants::{
     COSINE_ALIGNMENT_CAMERA_FACE_THRESHOLD, DOOR_ANIMATION_FADE_IN_DURATION,
     DOOR_ANIMATION_FADE_OUT_DURATION, DOOR_ANIMATION_STAY_OPEN_DURATION,
     SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT,
+    UI_REFERENCE_HEIGHT,
 };
 use crate::utils::constants::lighting_constants::MAX_SPOTLIGHT_INTENSITY;
 use crate::utils::objects::{
@@ -16,63 +17,16 @@ use crate::utils::objects::{
 /// Helper to despawn ui entities given a mutable commands reference
 pub fn despawn_ui_helper(commands: &mut Commands, query: &Query<Entity, With<UIEntity>>) {
     for entity in query {
-        commands.entity(entity).try_despawn();
+        commands.entity(entity).despawn();
     }
-}
-
-/// Helper system to cleanup UI entities (System Wrapper)
-pub fn despawn_ui(mut commands: Commands, query: Query<Entity, With<UIEntity>>) {
-    despawn_ui_helper(&mut commands, &query);
 }
 
 /// Helper system to cleanup Game entities
 pub fn cleanup_game_entities(mut commands: Commands, query: Query<Entity, With<GameEntity>>) {
     for entity in &query {
-        commands.entity(entity).try_despawn();
+        commands.entity(entity).despawn();
     }
 }
-
-/// Setup UI for MenuUI state
-pub fn setup_intro_ui(mut commands: Commands) {
-    commands.spawn((Camera2d::default(), UIEntity));
-    let text =
-        "Press SPACE or TAP to start! \nControls: Arrow Keys/WASD or Swipe to Rotate | SPACE or TAP to Check";
-    spawn_centered_text_black_screen(&mut commands, text);
-}
-
-/// Setup black screen for Loading state (legacy, kept for reference)
-#[allow(dead_code)]
-pub fn setup_loading_ui(
-    mut commands: Commands,
-    time: Res<Time>,
-) {
-    let _ = time; // suppress unused warning
-    commands.spawn((Camera2d::default(), UIEntity));
-    // Spawn a full-screen black overlay
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            ..default()
-        },
-        BackgroundColor(Color::BLACK),
-        UIEntity,
-    ));
-
-}
-
-/// Check if loading is complete and transition to Playing (legacy, kept for reference)
-#[allow(dead_code)]
-pub fn check_loading_complete(
-    time: Res<Time>,
-    mut game_state: ResMut<GameState>,
-    mut next_state: ResMut<NextState<GamePhase>>,
-) {
-    // Set actual game start time now that we're ready to play
-    game_state.start_time = Some(time.elapsed());
-    next_state.set(GamePhase::Playing);
-}
-
 
 
 /// System that applies pending check alignment command from the controller.
@@ -100,7 +54,7 @@ pub fn apply_pending_check_alignment(
 
     // Clean old UI and spawn new
     despawn_ui_helper(&mut commands, &ui_query);
-    spawn_playing_hud(&mut commands, &game_state);
+    spawn_score_bar(commands);
 
     let Ok(camera_transform) = camera_query.single() else {
         return;
@@ -192,38 +146,8 @@ pub fn apply_pending_check_alignment(
 
 
 
-/// Setup UI for Playing state
-pub fn setup_playing_ui(mut commands: Commands, game_state: Res<GameState>) {
-    spawn_playing_hud(&mut commands, &game_state);
-}
-
-pub fn spawn_playing_hud(commands: &mut Commands, game_state: &GameState) {
-    let text = format!(
-        "Swipe or Arrow Keys: Rotate | TAP or SPACE: Check \nFind the RED face! | Attempts: {}",
-        game_state.nr_attempts
-    );
-    commands.spawn((
-        Text::new(text),
-        TextFont {
-            font_size: 24.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-        Node {
-            position_type: PositionType::Absolute,
-            top: Val::Px(10.0),
-            left: Val::Px(10.0),
-            ..default()
-        },
-        UIEntity,
-    ));
-
-    // Spawn the score bar
-    spawn_score_bar(commands);
-}
-
 /// Spawns the energy score bar at the top center of the screen
-pub fn spawn_score_bar(commands: &mut Commands) {
+pub fn spawn_score_bar(mut commands: Commands) {
     // Container for the score bar (centered at top)
     commands
         .spawn((
@@ -262,60 +186,6 @@ pub fn spawn_score_bar(commands: &mut Commands) {
                         ScoreBarFill,
                     ));
                 });
-        });
-}
-
-/// Setup UI for Won state
-pub fn setup_won_ui(mut commands: Commands, game_state: Res<GameState>) {
-    commands.spawn((Camera2d::default(), UIEntity));
-    // Display win screen
-    let elapsed = game_state.end_time.unwrap_or_default().as_secs_f32()
-        - game_state.start_time.unwrap_or_default().as_secs_f32();
-    let accuracy = game_state.cosine_alignment.unwrap_or(0.0) * 100.0;
-
-    let mut text = format!(
-        "TAP or press R to play again\n\n        CONGRATULATIONS! YOU WIN!\n        - Time taken: {:.5} seconds\n        - Attempts: {}\n        - Alignment accuracy: {:.1}%",
-        elapsed, game_state.nr_attempts, accuracy
-    );
-
-    if game_state.nr_attempts == 1 {
-        text.push_str("\nPERFECT! First try!");
-    }
-
-    spawn_centered_text_black_screen(&mut commands, &text);
-}
-
-/// Spawns centered text on a black screen.
-pub fn spawn_centered_text_black_screen(commands: &mut Commands, text: &str) {
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                justify_content: JustifyContent::Center, // horizontally center children
-                align_items: AlignItems::Center,         // vertically center children
-                ..default()
-            },
-            UIEntity,                                    // Marker for despawning
-            BackgroundColor(Color::srgb(0.0, 0.0, 0.0)), // transparent container
-        ))
-        .with_children(|parent| {
-            // Spawn the text child
-            parent.spawn((
-                Text::new(text),
-                TextFont {
-                    font_size: 32.0,
-                    ..default()
-                },
-                TextColor(Color::srgb(1.0, 1.0, 1.0)),
-                Node {
-                    max_width: Val::Percent(90.0), // limit text width for wrapping (responsive)
-                    justify_content: JustifyContent::Center,
-                    align_items: AlignItems::Center,
-                    ..default()
-                },
-            ));
         });
 }
 
@@ -496,11 +366,8 @@ pub fn update_ui_scale(
         return;
     };
 
-    // Reference height for UI design (1080p)
-    const REFERENCE_HEIGHT: f32 = 1080.0;
-
-    // Calculate scale based on window height
-    let scale = window.height() / REFERENCE_HEIGHT;
+    // Calculate scale based on window height (reference: 1080p)
+    let scale = window.height() / UI_REFERENCE_HEIGHT;
 
     // Clamp scale to reasonable bounds (0.5x to 2.0x)
     let clamped_scale = scale.clamp(0.5, 2.0);

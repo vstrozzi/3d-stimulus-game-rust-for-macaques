@@ -26,3 +26,18 @@ lto = "thin"
 inherits = "release"
 opt-level = "s"
 strip = "debuginfo"
+
+
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 0          # keep it debug-friendly
+debug = 2              # good debug info
+debug-assertions = true
+overflow-checks = true
+lto = "off"
+codegen-units = 16
+incremental = true
+
+# optional: keep dependencies not too crazy for wasm-dev
+[profile.wasm-dev.package."*"]
+opt-level = 0

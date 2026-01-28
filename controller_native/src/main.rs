@@ -5,15 +5,16 @@
 
 use minifb::{Key, Window, WindowOptions};
 use serde::Deserialize;
-use shared::{open_shared_memory, SharedMemoryHandle};
+use shared::{open_shared_memory, SharedMemoryHandle, timing::{WIN_BLANK_DURATION_FRAMES, REFRESH_RATE_HZ}};
 use std::{
     error::Error,
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
+use std::sync::atomic::Ordering;
 
 const WIDTH: usize = 600;
 const HEIGHT: usize = 200;
@@ -46,6 +47,17 @@ impl Default for TrialConfig {
             ],
         }
     }
+}
+
+/// Win state machine for frame-based timing
+#[derive(Debug, Clone, PartialEq)]
+enum WinState {
+    /// Normal gameplay, monitoring for win
+    Playing,
+    /// has_won=true, waiting for is_animating=false
+    WaitingForAnimationEnd,
+    /// Black screen active, counting frames
+    BlankScreenActive { start_frame: u64 },
 }
 
 /// Load trials from JSONL file
@@ -83,8 +95,6 @@ fn load_trials() -> Vec<TrialConfig> {
 
 /// Write trial configuration to shared memory (game_structure)
 fn write_trial_config(shm: &shared::SharedMemory, trial: &TrialConfig) {
-    use std::sync::atomic::Ordering;
-
     let gs = &shm.game_structure;
     gs.seed.store(trial.seed, Ordering::Relaxed);
     gs.pyramid_type.store(trial.pyramid_type, Ordering::Relaxed);
@@ -104,13 +114,17 @@ fn write_trial_config(shm: &shared::SharedMemory, trial: &TrialConfig) {
 
 fn main() -> Result<(), Box<dyn Error>> {
     println!("Starting Native Controller...");
+    println!("Frame-based timing: {} frames = {:.2}s at {}Hz", 
+             WIN_BLANK_DURATION_FRAMES, 
+             WIN_BLANK_DURATION_FRAMES as f32 / REFRESH_RATE_HZ as f32,
+             REFRESH_RATE_HZ);
 
     // Load trials
     let trials = load_trials();
     let mut current_trial_index = 0;
-    let mut previous_has_won = false;
-    let mut win_time: Option<Instant> = None;
-    const WIN_DELAY: Duration = Duration::from_secs(2);
+    
+    // Win state machine (frame-based timing)
+    let mut win_state = WinState::Playing;
 
     // Connect to shared memory
     let mut shm_handle: Option<SharedMemoryHandle> = None;
@@ -159,110 +173,144 @@ fn main() -> Result<(), Box<dyn Error>> {
     let buffer: Vec<u32> = vec![0; WIDTH * HEIGHT];
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        // 1. Poll Input from Window
-        let rotate_left = window.is_key_down(Key::Left);
-        let rotate_right = window.is_key_down(Key::Right);
-        let zoom_in = window.is_key_down(Key::Up);
-        let zoom_out = window.is_key_down(Key::Down);
-        let space = window.is_key_down(Key::Space);
-        let r = window.is_key_down(Key::R);
-        let b = window.is_key_down(Key::B);
-        let p = window.is_key_down(Key::P);
-        let o = window.is_key_down(Key::O);
+        // Read game state from shared memory
+        let has_won = shm.game_structure.has_won.load(Ordering::Relaxed);
+        let is_animating = shm.game_structure.is_animating.load(Ordering::Relaxed);
+        let current_frame = shm.game_structure.frame_number.load(Ordering::Relaxed);
 
-        // 2. Read game state and check for win
-        let has_won = shm.game_structure.has_won.load(std::sync::atomic::Ordering::Relaxed);
-
-        // Detect rising edge of win
-        if has_won && !previous_has_won {
-            println!("Trial {} won!", current_trial_index + 1);
-            win_time = Some(Instant::now());
-        }
-        previous_has_won = has_won;
-
-        // Auto-advance after delay
-        if let Some(wt) = win_time {
-            if wt.elapsed() >= WIN_DELAY {
-                current_trial_index = (current_trial_index + 1) % trials.len();
-                println!("Advancing to trial {}/{}", current_trial_index + 1, trials.len());
-                write_trial_config(shm, &trials[current_trial_index]);
-                shm.commands.reset.store(true, std::sync::atomic::Ordering::Release);
-                win_time = None;
+        // Win state machine
+        match win_state {
+            WinState::Playing => {
+                if has_won {
+                    println!("Trial {} won! Waiting for animation to complete...", current_trial_index + 1);
+                    win_state = WinState::WaitingForAnimationEnd;
+                }
+            }
+            WinState::WaitingForAnimationEnd => {
+                if !is_animating {
+                    println!("Animation complete. Activating blank screen for {} frames", WIN_BLANK_DURATION_FRAMES);
+                    
+                    // Prepare next trial config
+                    let next_trial_index = (current_trial_index + 1) % trials.len();
+                    write_trial_config(shm, &trials[next_trial_index]);
+                    
+                    // Send commands: reset + blank_screen + stop_rendering
+                    shm.commands.reset.store(true, Ordering::Release);
+                    shm.commands.blank_screen.store(true, Ordering::Relaxed);
+                    shm.commands.stop_rendering.store(true, Ordering::Relaxed);
+                    
+                    win_state = WinState::BlankScreenActive { start_frame: current_frame };
+                }
+            }
+            WinState::BlankScreenActive { start_frame } => {
+                let frames_elapsed = current_frame.saturating_sub(start_frame);
+                
+                if frames_elapsed >= WIN_BLANK_DURATION_FRAMES {
+                    println!("Blank screen complete ({} frames). Resuming.", frames_elapsed);
+                    
+                    // Send commands: blank_screen (toggle off) + resume_rendering
+                    shm.commands.blank_screen.store(true, Ordering::Relaxed);
+                    shm.commands.resume_rendering.store(true, Ordering::Relaxed);
+                    
+                    // Advance trial index
+                    current_trial_index = (current_trial_index + 1) % trials.len();
+                    println!("Advancing to trial {}/{}", current_trial_index + 1, trials.len());
+                    
+                    win_state = WinState::Playing;
+                }
             }
         }
 
-        // 3. Write Commands
+        // Only process manual inputs when in Playing state
+        if win_state == WinState::Playing {
+            // 1. Poll Input from Window
+            let rotate_left = window.is_key_down(Key::Left);
+            let rotate_right = window.is_key_down(Key::Right);
+            let zoom_in = window.is_key_down(Key::Up);
+            let zoom_out = window.is_key_down(Key::Down);
+            let space = window.is_key_down(Key::Space);
+            let r = window.is_key_down(Key::R);
+            let b = window.is_key_down(Key::B);
+            let p = window.is_key_down(Key::P);
+            let o = window.is_key_down(Key::O);
 
-        // Continuous controls (rotate, zoom) - direct mapping
-        shm.commands.rotate_left.store(rotate_left, std::sync::atomic::Ordering::Relaxed);
-        shm.commands.rotate_right.store(rotate_right, std::sync::atomic::Ordering::Relaxed);
-        shm.commands.zoom_in.store(zoom_in, std::sync::atomic::Ordering::Relaxed);
-        shm.commands.zoom_out.store(zoom_out, std::sync::atomic::Ordering::Relaxed);
+            // Continuous controls (rotate, zoom) - direct mapping
+            shm.commands.rotate_left.store(rotate_left, Ordering::Relaxed);
+            shm.commands.rotate_right.store(rotate_right, Ordering::Relaxed);
+            shm.commands.zoom_in.store(zoom_in, Ordering::Relaxed);
+            shm.commands.zoom_out.store(zoom_out, Ordering::Relaxed);
 
-        // One-shot triggers (with debounce)
-        if space {
-            if !space_was_pressed {
-                shm.commands.check_alignment.store(true, std::sync::atomic::Ordering::Relaxed);
-                space_was_pressed = true;
-                println!("Check Alignment triggered");
+            // One-shot triggers (with debounce)
+            if space {
+                if !space_was_pressed {
+                    shm.commands.check_alignment.store(true, Ordering::Relaxed);
+                    space_was_pressed = true;
+                    println!("Check Alignment triggered");
+                }
+            } else {
+                space_was_pressed = false;
             }
-        } else {
-            space_was_pressed = false;
+
+            if r {
+                if !r_was_pressed {
+                    // Write current trial config before reset
+                    write_trial_config(shm, &trials[current_trial_index]);
+                    shm.commands.reset.store(true, Ordering::Release);
+                    r_was_pressed = true;
+                    println!("Reset triggered (trial {} config written)", current_trial_index + 1);
+                }
+            } else {
+                r_was_pressed = false;
+            }
+
+            if b {
+                if !b_was_pressed {
+                    shm.commands.blank_screen.store(true, Ordering::Relaxed);
+                    b_was_pressed = true;
+                    println!("Blank screen toggled");
+                }
+            } else {
+                b_was_pressed = false;
+            }
+
+            if p {
+                if !p_was_pressed {
+                    shm.commands.stop_rendering.store(true, Ordering::Relaxed);
+                    p_was_pressed = true;
+                    println!("Rendering paused");
+                }
+            } else {
+                p_was_pressed = false;
+            }
+
+            if o {
+                if !o_was_pressed {
+                    shm.commands.resume_rendering.store(true, Ordering::Relaxed);
+                    o_was_pressed = true;
+                    println!("Rendering resumed");
+                }
+            } else {
+                o_was_pressed = false;
+            }
         }
 
-        if r {
-            if !r_was_pressed {
-                // Write current trial config before reset
-                write_trial_config(shm, &trials[current_trial_index]);
-                shm.commands.reset.store(true, std::sync::atomic::Ordering::Release);
-                r_was_pressed = true;
-                println!("Reset triggered (trial {} config written)", current_trial_index + 1);
-            }
-        } else {
-            r_was_pressed = false;
-        }
-
-        if b {
-            if !b_was_pressed {
-                shm.commands.blank_screen.store(true, std::sync::atomic::Ordering::Relaxed);
-                b_was_pressed = true;
-                println!("Blank screen toggled");
-            }
-        } else {
-            b_was_pressed = false;
-        }
-
-        if p {
-            if !p_was_pressed {
-                shm.commands.stop_rendering.store(true, std::sync::atomic::Ordering::Relaxed);
-                p_was_pressed = true;
-                println!("Rendering paused");
-            }
-        } else {
-            p_was_pressed = false;
-        }
-
-        if o {
-            if !o_was_pressed {
-                shm.commands.resume_rendering.store(true, std::sync::atomic::Ordering::Relaxed);
-                o_was_pressed = true;
-                println!("Rendering resumed");
-            }
-        } else {
-            o_was_pressed = false;
-        }
-
-        // 4. Read Game State (Telemetry)
-        let frame = shm.game_structure.frame_number.load(std::sync::atomic::Ordering::Relaxed);
+        // Read Frame for telemetry
+        let frame = shm.game_structure.frame_number.load(Ordering::Relaxed);
 
         // Update Title with Telemetry
+        let state_str = match &win_state {
+            WinState::Playing => "Playing".to_string(),
+            WinState::WaitingForAnimationEnd => "Wait Anim".to_string(),
+            WinState::BlankScreenActive { start_frame } => {
+                format!("Blank {}/{}", frame.saturating_sub(*start_frame), WIN_BLANK_DURATION_FRAMES)
+            }
+        };
         let title = format!(
-            "Trial {}/{} | Frame: {} | Controls: ←→ Rotate, ↑↓ Zoom, Space Check, R Reset, B Blank, P Pause, O Resume",
-            current_trial_index + 1, trials.len(), frame
+            "Trial {}/{} | Frame: {} | {} | ←→ Rotate, ↑↓ Zoom, Space Check, R Reset",
+            current_trial_index + 1, trials.len(), frame, state_str
         );
         window.set_title(&title);
 
-        // 5. Update Window
         // Push black buffer to keep window alive
         window.update_with_buffer(&buffer, WIDTH, HEIGHT)?;
     }

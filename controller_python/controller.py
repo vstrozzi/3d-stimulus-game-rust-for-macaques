@@ -5,6 +5,7 @@ import json
 import os
 import tkinter as tk
 from tkinter import ttk, messagebox
+from enum import Enum, auto
 
 from transitions import Machine
 
@@ -14,6 +15,10 @@ except ImportError:
     print("Error: 'monkey_shared' module not found.")
     print("Build the shared library with 'cargo build --release -p shared --features python' and copy the resulting '.so' to controller_python/monkey_shared.so.")
     sys.exit(1)
+
+# Shared timing constants (matching shared::timing in Rust)
+REFRESH_RATE_HZ = 60
+WIN_BLANK_DURATION_FRAMES = 60  # 1 second at 60fps
 
 PHASE_LABELS = {
     0: "Playing",
@@ -35,6 +40,14 @@ DEFAULT_CONFIG = {
     "target_door": 5,
     "colors": DEFAULT_COLORS,
 }
+
+
+class WinState(Enum):
+    """Win state machine for frame-based timing."""
+    PLAYING = auto()
+    WAITING_FOR_ANIMATION_END = auto()
+    BLANK_SCREEN_ACTIVE = auto()
+
 
 def load_trials(trials_path="trials.jsonl"):
     """Load trials from JSONL file."""
@@ -199,8 +212,10 @@ class MonkeyGameController(tk.Tk):
         # Trials system
         self.trials = load_trials()
         self.current_trial_index = 0
-        self.previous_has_won = False
-        self.win_debounce_time = None
+        
+        # Frame-based win state machine
+        self.win_state = WinState.PLAYING
+        self.blank_start_frame = 0
 
         self.setup_ui()
 
@@ -241,15 +256,6 @@ class MonkeyGameController(tk.Tk):
             trial["target_door"],
             trial["colors"],
         )
-
-    def _trigger_next_trial(self):
-        """Callback to trigger the next trial after a delay."""
-        next_trial = self.advance_to_next_trial()
-        if self.push_trial_config(next_trial):
-            self.pending_reset = True
-            self.previous_has_won = False  # Reset for next win detection
-            self.win_debounce_time = None
-            print(f"Loaded trial {self.current_trial_index + 1}/{len(self.trials)}")
 
     def setup_ui(self):
         header = tk.Frame(self, bg=BG_COLOR)
@@ -352,6 +358,7 @@ class MonkeyGameController(tk.Tk):
         self.lbl_attempts = self.create_metric_label(telemetry, "Attempts")
         self.lbl_status = self.create_metric_label(telemetry, "Status")
         self.lbl_alignment = self.create_metric_label(telemetry, "Alignment")
+        self.lbl_win_state = self.create_metric_label(telemetry, "Win State")
 
         camera_frame = tk.LabelFrame(
             self,
@@ -569,12 +576,13 @@ class MonkeyGameController(tk.Tk):
         self.update_state_visual()
 
     def trigger_check(self, *_):
-        if self.state == "running":
+        if self.state == "running" and self.win_state == WinState.PLAYING:
             self.pending_check = True
 
     def trigger_reset(self, *_):
         if self.push_reset_config():
             self.pending_reset = True
+            self.win_state = WinState.PLAYING
 
     def collect_reset_payload(self):
         try:
@@ -642,28 +650,31 @@ class MonkeyGameController(tk.Tk):
     def on_key_press(self, event):
         key = event.keysym.lower()
 
-        if key == "left":
-            self.inputs["rotate_left"] = True
-        elif key == "right":
-            self.inputs["rotate_right"] = True
-        elif key == "up":
-            self.inputs["zoom_in"] = True
-        elif key == "down":
-            self.inputs["zoom_out"] = True
-        elif key == "space":
-            self.trigger_check()
-        elif key == "r":
-            self.trigger_reset()
-        elif key == "b":
-            self.pending_blank_screen = True
-            print("Blank screen toggled")
-        elif key == "p":
-            self.pending_stop_rendering = True
-            print("Rendering paused")
-        elif key == "o":
-            self.pending_resume_rendering = True
-            print("Rendering resumed")
-        elif key in ("return", "kp_enter"):
+        # Only process inputs when in PLAYING win state
+        if self.win_state == WinState.PLAYING:
+            if key == "left":
+                self.inputs["rotate_left"] = True
+            elif key == "right":
+                self.inputs["rotate_right"] = True
+            elif key == "up":
+                self.inputs["zoom_in"] = True
+            elif key == "down":
+                self.inputs["zoom_out"] = True
+            elif key == "space":
+                self.trigger_check()
+            elif key == "r":
+                self.trigger_reset()
+            elif key == "b":
+                self.pending_blank_screen = True
+                print("Blank screen toggled")
+            elif key == "p":
+                self.pending_stop_rendering = True
+                print("Rendering paused")
+            elif key == "o":
+                self.pending_resume_rendering = True
+                print("Rendering resumed")
+        
+        if key in ("return", "kp_enter"):
             self.toggle_state()
         elif key == "q":
             self.destroy()
@@ -689,6 +700,49 @@ class MonkeyGameController(tk.Tk):
 
         state = self.shm_wrapper.read_game_state()
 
+        # Read game state
+        has_won = state.get("has_won", False)
+        is_animating = state.get("is_animating", False)
+        current_frame = state.get("frame_number", 0)
+
+        # Win state machine (frame-based timing)
+        if self.win_state == WinState.PLAYING:
+            if has_won:
+                print(f"Trial {self.current_trial_index + 1} won! Waiting for animation to complete...")
+                self.win_state = WinState.WAITING_FOR_ANIMATION_END
+        elif self.win_state == WinState.WAITING_FOR_ANIMATION_END:
+            if not is_animating:
+                print(f"Animation complete. Activating blank screen for {WIN_BLANK_DURATION_FRAMES} frames")
+                
+                # Prepare next trial config
+                next_trial_index = (self.current_trial_index + 1) % len(self.trials)
+                next_trial = self.trials[next_trial_index]
+                self.push_trial_config(next_trial)
+                
+                # Send commands: reset + blank_screen + stop_rendering
+                self.pending_reset = True
+                self.pending_blank_screen = True
+                self.pending_stop_rendering = True
+                
+                self.blank_start_frame = current_frame
+                self.win_state = WinState.BLANK_SCREEN_ACTIVE
+        elif self.win_state == WinState.BLANK_SCREEN_ACTIVE:
+            frames_elapsed = current_frame - self.blank_start_frame
+            
+            if frames_elapsed >= WIN_BLANK_DURATION_FRAMES:
+                print(f"Blank screen complete ({frames_elapsed} frames). Resuming.")
+                
+                # Send commands: blank_screen (toggle off) + resume_rendering
+                self.pending_blank_screen = True
+                self.pending_resume_rendering = True
+                
+                # Advance trial index
+                self.current_trial_index = (self.current_trial_index + 1) % len(self.trials)
+                print(f"Advancing to trial {self.current_trial_index + 1}/{len(self.trials)}")
+                
+                self.win_state = WinState.PLAYING
+
+        # Update UI
         phase_code = int(state.get("phase", 0))
         phase_name = PHASE_LABELS.get(phase_code, f"Unknown ({phase_code})")
         self.lbl_phase.config(text=f"{phase_name} [{phase_code}]")
@@ -721,6 +775,19 @@ class MonkeyGameController(tk.Tk):
             align_display = f"{align:.3f}"
             self.lbl_alignment.config(text=align_display, fg=color)
 
+        # Win state display
+        if self.win_state == WinState.PLAYING:
+            win_state_text = "Playing"
+            win_state_color = TEXT_PRIMARY
+        elif self.win_state == WinState.WAITING_FOR_ANIMATION_END:
+            win_state_text = "Wait Anim"
+            win_state_color = TEXT_WARN
+        else:
+            frames_elapsed = current_frame - self.blank_start_frame
+            win_state_text = f"Blank {frames_elapsed}/{WIN_BLANK_DURATION_FRAMES}"
+            win_state_color = TEXT_ACCENT
+        self.lbl_win_state.config(text=win_state_text, fg=win_state_color)
+
         if state.get("has_won"):
             win_time = state.get("win_elapsed_secs")
             if win_time:
@@ -728,16 +795,6 @@ class MonkeyGameController(tk.Tk):
             else:
                 status_text = "WINNER!"
             status_color = TEXT_GOOD
-
-            # Auto-advance to next trial on win (rising edge detection with debounce)
-            current_has_won = True
-            if current_has_won and not self.previous_has_won:
-                if self.win_debounce_time is None:
-                    print(f"Trial {self.current_trial_index + 1} won!")
-                    self.win_debounce_time = time.time()
-                    # Schedule next trial after 2 seconds
-                    self.after(2000, self._trigger_next_trial)
-            self.previous_has_won = current_has_won
         elif state.get("is_animating"):
             status_text = "Animating..."
             status_color = TEXT_WARN
@@ -768,7 +825,8 @@ class MonkeyGameController(tk.Tk):
         stop_rendering_trigger = self.pending_stop_rendering
         resume_rendering_trigger = self.pending_resume_rendering
 
-        if self.state == "running":
+        # Only send movement inputs when in PLAYING win state and controller is running
+        if self.state == "running" and self.win_state == WinState.PLAYING:
             rotate_left = self.inputs["rotate_left"]
             rotate_right = self.inputs["rotate_right"]
             zoom_in = self.inputs["zoom_in"]
@@ -830,6 +888,7 @@ class MonkeyGameController(tk.Tk):
 
 def main():
     print("Starting Monkey Game Controller (Python GUI)...")
+    print(f"Frame-based timing: {WIN_BLANK_DURATION_FRAMES} frames = {WIN_BLANK_DURATION_FRAMES / REFRESH_RATE_HZ:.2f}s at {REFRESH_RATE_HZ}Hz")
     print("Waiting for shared memory region 'monkey_game'...")
 
     shm_test = None

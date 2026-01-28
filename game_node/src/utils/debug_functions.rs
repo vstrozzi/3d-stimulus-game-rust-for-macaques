@@ -4,7 +4,7 @@ use bevy::{prelude::*, window::*};
 pub struct DebugFunctionsPlugin;
 
 impl Plugin for DebugFunctionsPlugin {
-    /// Pplugin by adding the `toggle_vsync` system to the app.
+    /// Builds the plugin by adding the `toggle_vsync` system to the app.
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (toggle_vsync, visualize_lights));
     }

@@ -52,7 +52,7 @@ cargo build --release -p shared --features python
 cp target/release/libshared.so controller_python/monkey_shared.so
 
 # Run the GUI controller
-python controller_python/controller.py
+    python controller_python/controller.py
 ```
 
 #### Web Controller

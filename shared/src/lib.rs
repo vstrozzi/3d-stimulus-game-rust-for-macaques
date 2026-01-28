@@ -14,6 +14,27 @@
 //! - Write: commands + game_structure (to send commands and set/restore state)
 //! - Read: game_structure (to observe current state)
 
+/// Shared timing constants for stimulus experiments.
+/// These constants ensure consistent timing across all controllers.
+pub mod timing {
+    /// Target refresh rate in Hz (game runs at 60fps)
+    pub const REFRESH_RATE_HZ: u64 = 60;
+    
+    /// Duration to show black screen after win (in frames)
+    /// At 60fps, 60 frames = 1 second
+    pub const WIN_BLANK_DURATION_FRAMES: u64 = 60;
+    
+    /// Convert frames to approximate seconds
+    pub const fn frames_to_seconds(frames: u64) -> f32 {
+        frames as f32 / REFRESH_RATE_HZ as f32
+    }
+    
+    /// Convert seconds to frames
+    pub const fn seconds_to_frames(seconds: f32) -> u64 {
+        (seconds * REFRESH_RATE_HZ as f32) as u64
+    }
+}
+
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 
 /// Commands sent from Controller to Game.

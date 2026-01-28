@@ -147,7 +147,7 @@ impl Default for RandomGen {
 #[derive(Component)]
 pub struct Pyramid;
 
-// A component that mars an entity to be rotated by the camera controls
+// A component that marks an entity to be rotated by the camera controls
 #[derive(Component)]
 pub struct RotableComponent;
 
@@ -166,6 +166,10 @@ pub struct GameEntity;
 /// A component that marks an entity as a UI entity
 #[derive(Component)]
 pub struct UIEntity;
+
+/// A component that marks an entity as persistent (not despawned on reset)
+#[derive(Component)]
+pub struct PersistentCamera;
 
 /// Component to mark the base frame (wooden panel with hole)
 #[derive(Component)]

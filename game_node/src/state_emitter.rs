@@ -47,9 +47,18 @@ fn emit_state_to_shm(
     // Time & Frame
     gs.frame_number.store(frame_counter.0, Ordering::Relaxed);
 
-    let elapsed = internal_state.start_time
-        .map(|start| (time.elapsed() - start).as_secs_f32())
-        .unwrap_or(0.0);
+    // Elapsed time: freeze at win_time if won, otherwise current elapsed
+    let elapsed = if internal_state.end_time.is_some() {
+        // Game was won - use frozen win time for precise stimulus timing
+        internal_state.start_time.zip(internal_state.end_time)
+            .map(|(start, end)| (end - start).as_secs_f32())
+            .unwrap_or(0.0)
+    } else {
+        // Game in progress - use current elapsed time
+        internal_state.start_time
+            .map(|start| (time.elapsed() - start).as_secs_f32())
+            .unwrap_or(0.0)
+    };
     gs.elapsed_secs.store(elapsed.to_bits(), Ordering::Relaxed);
 
     // Camera

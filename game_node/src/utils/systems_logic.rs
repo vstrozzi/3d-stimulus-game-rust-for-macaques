@@ -3,16 +3,18 @@
 //! Twin-Engine Architecture: The game no longer handles inputs directly.
 //! All inputs are processed by the Controller which sends GameCommands.
 
-use crate::command_handler::{PendingBlankScreen, PendingReset, RenderingPaused, WinPauseActive};
+use crate::command_handler::{PendingBlankScreen, PendingReset, RenderingPaused};
 use crate::utils::camera::{apply_pending_rotation, apply_pending_zoom};
 use crate::utils::game_functions::{
     apply_pending_check_alignment, handle_door_animation,
-    setup_playing_ui, update_score_bar_animation, update_ui_scale,
+    spawn_score_bar, update_score_bar_animation, update_ui_scale,
 };
-use crate::utils::objects::{GameEntity, GamePhase, GameState, UIEntity};
+use crate::utils::objects::{GameEntity, GamePhase, GameState, PersistentCamera, UIEntity};
 use crate::utils::setup::{setup, SetupConfig};
+use crate::utils::constants::camera_3d_constants::{
+    CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z,
+};
 use bevy::prelude::*;
-use std::time::Duration;
 
 // Plugin for managing all the game systems based on the current game phase.
 pub struct SystemsLogicPlugin;
@@ -24,7 +26,8 @@ impl Plugin for SystemsLogicPlugin {
         app.insert_state(GamePhase::Playing)
             .init_resource::<SetupConfig>()
             .init_resource::<BlankScreenState>()
-            .init_resource::<WinBlankTimer>()
+            // Spawn persistent camera once at startup
+            .add_systems(Startup, spawn_persistent_camera)
             // Global UI responsiveness system (runs every frame)
             .add_systems(Update, update_ui_scale)
             // Global command-driven system for reset (runs any time, handles reset from any state)
@@ -34,7 +37,7 @@ impl Plugin for SystemsLogicPlugin {
             // Resetting State - transient state that immediately goes to Playing
             .add_systems(OnEnter(GamePhase::Resetting), on_enter_resetting)
             // Playing State
-            .add_systems(OnEnter(GamePhase::Playing), (setup, setup_playing_ui).chain())
+            .add_systems(OnEnter(GamePhase::Playing), (setup, spawn_score_bar).chain())
             .add_systems(
                 Update,
                 (
@@ -49,14 +52,8 @@ impl Plugin for SystemsLogicPlugin {
             .add_systems(
                 OnExit(GamePhase::Playing),
                 despawn_all_game_and_ui,
-            )
-            // Won State - no UI, just auto-blank then wait for reset
-            .add_systems(OnEnter(GamePhase::Won), on_enter_won)
-            .add_systems(
-                Update,
-                handle_win_blank_timer.run_if(in_state(GamePhase::Won)),
-            )
-            .add_systems(OnExit(GamePhase::Won), on_exit_won);
+            );
+            // Won State is now passive - controller handles black screen and timing
     }
 }
 
@@ -64,14 +61,30 @@ impl Plugin for SystemsLogicPlugin {
 // RUN CONDITIONS
 // ============================================================================
 
-/// Returns true when NOT animating
 fn is_not_animating(game_state: Res<GameState>) -> bool {
     !game_state.is_animating
 }
 
-/// Returns true when rendering is NOT paused
 fn is_not_paused(rendering_paused: Res<RenderingPaused>) -> bool {
     !rendering_paused.0
+}
+
+// ============================================================================
+// PERSISTENT CAMERA SETUP
+// ============================================================================
+
+/// Spawns the 3D camera once at startup. This camera persists across resets.
+fn spawn_persistent_camera(mut commands: Commands) {
+    commands.spawn((
+        Camera3d::default(),
+        Transform::from_xyz(
+            CAMERA_3D_INITIAL_X,
+            CAMERA_3D_INITIAL_Y,
+            CAMERA_3D_INITIAL_Z,
+        )
+        .looking_at(Vec3::ZERO, Vec3::Y),
+        PersistentCamera,
+    ));
 }
 
 // ============================================================================
@@ -88,10 +101,21 @@ pub struct BlankScreenState {
 #[derive(Component)]
 pub struct BlankScreenOverlay;
 
-/// Timer for auto-blank after win
-#[derive(Resource, Default)]
-pub struct WinBlankTimer {
-    pub timer: Option<Timer>,
+/// Helper function to spawn a fullscreen black overlay
+fn spawn_blank_overlay(commands: &mut Commands) {
+    commands.spawn((
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            top: Val::Px(0.0),
+            ..default()
+        },
+        BackgroundColor(Color::BLACK),
+        GlobalZIndex(1000),
+        BlankScreenOverlay,
+    ));
 }
 
 // ============================================================================
@@ -104,18 +128,12 @@ fn handle_reset_command(
     mut pending_reset: ResMut<PendingReset>,
     mut commands: Commands,
     mut next_state: ResMut<NextState<GamePhase>>,
-    mut blank_state: ResMut<BlankScreenState>,
-    mut win_timer: ResMut<WinBlankTimer>,
 ) {
     let Some(config) = pending_reset.0.take() else {
         return;
     };
 
     info!("Reset command received with config seed: {}", config.seed);
-
-    // Reset state
-    blank_state.is_active = false;
-    win_timer.timer = None;
 
     // Store config for setup to use when entering Playing state
     commands.insert_resource(SetupConfig(Some(config)));
@@ -132,7 +150,6 @@ fn on_enter_resetting(
     mut commands: Commands,
     entities_query: Query<Entity, With<GameEntity>>,
     ui_entities_query: Query<Entity, With<UIEntity>>,
-    overlay_query: Query<Entity, With<BlankScreenOverlay>>,
     mut next_state: ResMut<NextState<GamePhase>>,
 ) {
     info!("Entering Resetting state - cleaning up and transitioning to Playing");
@@ -147,90 +164,14 @@ fn on_enter_resetting(
         commands.entity(entity).try_despawn();
     }
 
-    // Despawn blank screen overlay if present
-    for entity in overlay_query.iter() {
-        commands.entity(entity).despawn();
-    }
+    // Note: BlankScreenOverlay is preserved - only removed via explicit B key toggle
 
     // Immediately transition to Playing
     next_state.set(GamePhase::Playing);
 }
 
-// ============================================================================
-// WIN STATE HANDLING
-// ============================================================================
-
-/// Called when entering Won state - start blank timer, show black screen, pause inputs
-fn on_enter_won(
-    mut commands: Commands,
-    mut blank_state: ResMut<BlankScreenState>,
-    mut win_timer: ResMut<WinBlankTimer>,
-    mut win_pause_active: ResMut<WinPauseActive>,
-    overlay_query: Query<Entity, With<BlankScreenOverlay>>,
-) {
-    info!("Won state entered - showing blank screen and pausing inputs for 0.5s");
-
-    // Pause input reading during the blank period
-    win_pause_active.0 = true;
-
-    // Despawn any existing overlay first
-    for entity in overlay_query.iter() {
-        commands.entity(entity).despawn();
-    }
-
-    // Spawn black screen overlay
-    commands.spawn((
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            position_type: PositionType::Absolute,
-            left: Val::Px(0.0),
-            top: Val::Px(0.0),
-            ..default()
-        },
-        BackgroundColor(Color::BLACK),
-        GlobalZIndex(1000),
-        BlankScreenOverlay,
-    ));
-
-    blank_state.is_active = true;
-
-    // Start 0.5 second timer
-    win_timer.timer = Some(Timer::new(Duration::from_millis(500), TimerMode::Once));
-}
-
-/// Handle the win blank timer - after 0.5s, resume input reading and wait for reset
-fn handle_win_blank_timer(
-    time: Res<Time>,
-    mut win_timer: ResMut<WinBlankTimer>,
-    mut win_pause_active: ResMut<WinPauseActive>,
-) {
-    if let Some(ref mut timer) = win_timer.timer {
-        timer.tick(time.delta());
-        if timer.just_finished() {
-            // Timer finished, blank screen stays up but inputs resume
-            // Game just waits for reset command from controller
-            // The has_won flag in shared memory tells controller we're in won state
-            win_timer.timer = None;
-            win_pause_active.0 = false;
-            info!("Win blank timer finished - inputs resumed, waiting for reset from controller");
-        }
-    }
-}
-
-/// Called when exiting Won state - cleanup overlay and reset pause state
-fn on_exit_won(
-    mut commands: Commands,
-    overlay_query: Query<Entity, With<BlankScreenOverlay>>,
-    mut blank_state: ResMut<BlankScreenState>,
-    mut win_pause_active: ResMut<WinPauseActive>,
-) {
-    for entity in overlay_query.iter() {
-        commands.entity(entity).despawn();
-    }
-    blank_state.is_active = false;
-    win_pause_active.0 = false;
-}
+// Win state is now passive - controller handles black screen and timing via shared memory.
+// The game just remains in Won state until controller sends reset command.
 
 // ============================================================================
 // RENDERING CONTROL SYSTEMS
@@ -249,19 +190,7 @@ fn apply_blank_screen(
 
         if blank_state.is_active {
             // Spawn black fullscreen overlay
-            commands.spawn((
-                Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(100.0),
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(0.0),
-                    top: Val::Px(0.0),
-                    ..default()
-                },
-                BackgroundColor(Color::BLACK),
-                GlobalZIndex(1000),
-                BlankScreenOverlay,
-            ));
+            spawn_blank_overlay(&mut commands);
             info!("Blank screen activated");
         } else {
             // Despawn the overlay
@@ -273,10 +202,10 @@ fn apply_blank_screen(
     }
 }
 
-/// System to handle rendering pause - hides/shows game entities
+/// System to handle rendering pause - hides/shows the persistent camera
 fn handle_rendering_pause(
     rendering_paused: Res<RenderingPaused>,
-    mut visibility_query: Query<&mut Visibility, With<Camera3d>>,
+    mut visibility_query: Query<&mut Visibility, With<PersistentCamera>>,
 ) {
     // Only act when the resource has changed
     if !rendering_paused.is_changed() {

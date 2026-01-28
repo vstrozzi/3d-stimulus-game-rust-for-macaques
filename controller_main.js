@@ -7,6 +7,17 @@ import init, {
   wasm_main,
 } from "./game_node/pkg/game_node.js";
 
+// Shared timing constants (matching shared::timing in Rust)
+const REFRESH_RATE_HZ = 60;
+const WIN_BLANK_DURATION_FRAMES = 60; // 1 second at 60fps
+
+// Win state machine states
+const WinState = {
+  PLAYING: "PLAYING",
+  WAITING_FOR_ANIMATION_END: "WAITING_FOR_ANIMATION_END",
+  BLANK_SCREEN_ACTIVE: "BLANK_SCREEN_ACTIVE",
+};
+
 // Application State
 let appState = "MENU"; // MENU, GAME
 let running = false;
@@ -21,6 +32,10 @@ let inputs = {
   stopRendering: 0,
   resumeRendering: 0,
 };
+
+// Win state machine
+let winState = WinState.PLAYING;
+let blankStartFrame = 0;
 
 // Touch state - virtual button system (instant like keyboard)
 let touchState = {
@@ -61,7 +76,6 @@ let memory = null;
 // Trials System
 let trials = [];
 let currentTrialIndex = 0;
-let previousHasWon = false;
 
 // Default Config for pyramid spawn (matching Python's DEFAULT_CONFIG)
 const DEFAULT_CONFIG = {
@@ -118,6 +132,9 @@ async function start() {
   await loadTrials();
 
   document.getElementById("status-bar").innerText = "Ready";
+  console.log(
+    `Frame-based timing: ${WIN_BLANK_DURATION_FRAMES} frames = ${(WIN_BLANK_DURATION_FRAMES / REFRESH_RATE_HZ).toFixed(2)}s at ${REFRESH_RATE_HZ}Hz`
+  );
 
   // Create shared memory
   const sharedPtr = create_shared_memory_wasm();
@@ -165,7 +182,7 @@ function advanceToNextTrial() {
 function startGame() {
   appState = "GAME";
   running = true;
-  previousHasWon = false;
+  winState = WinState.PLAYING;
 
   // Write current trial config before triggering reset
   const trial = getCurrentTrial();
@@ -311,7 +328,7 @@ function setupInput() {
   window.addEventListener(
     "touchstart",
     (e) => {
-      if (appState !== "GAME") return;
+      if (appState !== "GAME" || winState !== WinState.PLAYING) return;
       e.preventDefault();
 
       if (e.touches.length >= 2) {
@@ -349,7 +366,7 @@ function setupInput() {
   window.addEventListener(
     "touchmove",
     (e) => {
-      if (appState !== "GAME") return;
+      if (appState !== "GAME" || winState !== WinState.PLAYING) return;
       e.preventDefault();
 
       if (e.touches.length >= 2 && touchState.twoFingerTouch.active) {
@@ -378,7 +395,7 @@ function setupInput() {
 
       if (e.touches.length === 0) {
         // All fingers lifted - check for tap first
-        if (touchState.singleTouch.active) {
+        if (touchState.singleTouch.active && winState === WinState.PLAYING) {
           const elapsed = Date.now() - touchState.singleTouch.startTime;
           const deltaX = Math.abs(
             touchState.singleTouch.currentX - touchState.singleTouch.startX,
@@ -435,6 +452,9 @@ function setupInput() {
 
     if (appState !== "GAME") return;
 
+    // Only process inputs when in PLAYING win state
+    if (winState !== WinState.PLAYING) return;
+
     let handled = false;
     switch (e.code) {
       case "ArrowLeft":
@@ -464,6 +484,7 @@ function setupInput() {
       case "KeyR":
         writeGameStructure(getCurrentTrial());
         inputs.reset = 1;
+        winState = WinState.PLAYING;
         handled = true;
         break;
       case "KeyB":
@@ -511,36 +532,85 @@ function setupInput() {
 function gameLoop() {
   if (!memory) return;
 
-  // Read game state to detect win
+  // Read game state
   if (appState === "GAME" && running) {
     const hasWon = readGameHasWon();
+    const isAnimating = readGameIsAnimating();
+    const currentFrame = readGameFrameNumber();
 
-    // Detect rising edge of win (transition from not-won to won)
-    if (hasWon && !previousHasWon) {
-      console.log(`Trial ${currentTrialIndex + 1} won!`);
+    // Win state machine (frame-based timing)
+    switch (winState) {
+      case WinState.PLAYING:
+        if (hasWon) {
+          console.log(
+            `Trial ${currentTrialIndex + 1} won! Waiting for animation to complete...`
+          );
+          winState = WinState.WAITING_FOR_ANIMATION_END;
+        }
+        break;
 
-      // Advance to next trial after a short delay
-      setTimeout(() => {
-        advanceToNextTrial();
-        const nextTrial = getCurrentTrial();
-        writeGameStructure(nextTrial);
-        inputs.reset = 1;
-        document.getElementById("status-bar").innerText =
-          `Trial ${currentTrialIndex + 1}/${trials.length}`;
-      }, 2000);
+      case WinState.WAITING_FOR_ANIMATION_END:
+        if (!isAnimating) {
+          console.log(
+            `Animation complete. Activating blank screen for ${WIN_BLANK_DURATION_FRAMES} frames`
+          );
+
+          // Prepare next trial config
+          const nextTrialIndex = (currentTrialIndex + 1) % trials.length;
+          writeGameStructure(trials[nextTrialIndex]);
+
+          // Send commands: reset + blank_screen + stop_rendering
+          inputs.reset = 1;
+          inputs.blankScreen = 1;
+          inputs.stopRendering = 1;
+
+          blankStartFrame = currentFrame;
+          winState = WinState.BLANK_SCREEN_ACTIVE;
+        }
+        break;
+
+      case WinState.BLANK_SCREEN_ACTIVE:
+        const framesElapsed = currentFrame - blankStartFrame;
+
+        if (framesElapsed >= WIN_BLANK_DURATION_FRAMES) {
+          console.log(`Blank screen complete (${framesElapsed} frames). Resuming.`);
+
+          // Send commands: blank_screen (toggle off) + resume_rendering
+          inputs.blankScreen = 1;
+          inputs.resumeRendering = 1;
+
+          // Advance trial index
+          currentTrialIndex = (currentTrialIndex + 1) % trials.length;
+          console.log(
+            `Advancing to trial ${currentTrialIndex + 1}/${trials.length}`
+          );
+
+          // Update status bar
+          document.getElementById("status-bar").innerText =
+            `Trial ${currentTrialIndex + 1}/${trials.length}`;
+
+          winState = WinState.PLAYING;
+        }
+        break;
     }
-    previousHasWon = hasWon;
   }
 
   // Update touch states (virtual button system - instant like keyboard)
   updateRotationFromTouch();
   updateZoomFromTouch();
 
-  // Combine keyboard and touch inputs
-  let combinedLeft = inputs.left || (touchState.rotateLeft ? 1 : 0);
-  let combinedRight = inputs.right || (touchState.rotateRight ? 1 : 0);
-  let combinedUp = inputs.up || (touchState.zoomIn ? 1 : 0);
-  let combinedDown = inputs.down || (touchState.zoomOut ? 1 : 0);
+  // Combine keyboard and touch inputs (only when in PLAYING state)
+  let combinedLeft = 0;
+  let combinedRight = 0;
+  let combinedUp = 0;
+  let combinedDown = 0;
+
+  if (winState === WinState.PLAYING) {
+    combinedLeft = inputs.left || (touchState.rotateLeft ? 1 : 0);
+    combinedRight = inputs.right || (touchState.rotateRight ? 1 : 0);
+    combinedUp = inputs.up || (touchState.zoomIn ? 1 : 0);
+    combinedDown = inputs.down || (touchState.zoomOut ? 1 : 0);
+  }
 
   // Write Commands
   if (appState !== "GAME" || !running) {
@@ -569,32 +639,25 @@ function gameLoop() {
 
 function readGameHasWon() {
   // SharedGameStructure layout - we need to read has_won field
-  // Config fields:
-  //   seed: u64 (8 bytes) - offset 0
-  //   pyramid_type: u32 (4 bytes) - offset 8
-  //   base_radius: u32 (4 bytes) - offset 12
-  //   height: u32 (4 bytes) - offset 16
-  //   start_orient: u32 (4 bytes) - offset 20
-  //   target_door: u32 (4 bytes) - offset 24
-  //   colors: [u32; 12] (48 bytes) - offset 28
-  // State fields:
-  //   phase: u32 (4 bytes) - offset 76
-  //   frame_number: u64 (8 bytes) - offset 80
-  //   elapsed_secs: u32 (4 bytes) - offset 88
-  //   camera_radius: u32 (4 bytes) - offset 92
-  //   camera_x: u32 (4 bytes) - offset 96
-  //   camera_y: u32 (4 bytes) - offset 100
-  //   camera_z: u32 (4 bytes) - offset 104
-  //   pyramid_yaw: u32 (4 bytes) - offset 108
-  //   attempts: u32 (4 bytes) - offset 112
-  //   alignment: u32 (4 bytes) - offset 116
-  //   is_animating: bool (1 byte) - offset 120
-  //   has_won: bool (1 byte) - offset 121
-  //   _padding: [u8; 2] (2 bytes) - offset 122
-  //   win_time: u32 (4 bytes) - offset 124
-  const view = new DataView(memory.buffer, pointers.gameStructure);
   // has_won is at offset 121
+  const view = new DataView(memory.buffer, pointers.gameStructure);
   return view.getUint8(121) !== 0;
+}
+
+function readGameIsAnimating() {
+  // is_animating is at offset 120
+  const view = new DataView(memory.buffer, pointers.gameStructure);
+  return view.getUint8(120) !== 0;
+}
+
+function readGameFrameNumber() {
+  // frame_number is at offset 80 (u64, but we only need lower 32 bits for comparison)
+  const view = new DataView(memory.buffer, pointers.gameStructure);
+  // Read as u64 little-endian (low 32 bits at offset 80, high at 84)
+  const low = view.getUint32(80, true);
+  const high = view.getUint32(84, true);
+  // For practical purposes, just use as Number (safe up to 2^53)
+  return high * 0x100000000 + low;
 }
 
 function writeCommands(
@@ -666,6 +729,7 @@ function writeGameStructure(config) {
 
   // target_door (u32)
   view.setUint32(offset, config.targetDoor, true);
+
   offset += 4;
 
   // colors: 3 faces * 4 channels = 12 floats as u32 bits

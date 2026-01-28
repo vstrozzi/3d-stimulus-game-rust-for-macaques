@@ -10,7 +10,7 @@ pub mod camera_3d_constants {
     pub const CAMERA_3D_SPEED_Z: f32 = 1.0;
 
     // Radius range for the camera's orbit.
-    pub const CAMERA_3D_MIN_RADIUS: f32 = 9.0;
+    pub const CAMERA_3D_MIN_RADIUS: f32 = 12.0;
     pub const CAMERA_3D_MAX_RADIUS: f32 = 20.0;
 }
 
@@ -31,8 +31,8 @@ pub mod pyramid_constants {
     pub const PYRAMID_HEIGHT_MAX: f32 = 4.0;
 
     // Angle's offset for the pyramid's base in radians from the camera
-    pub static PYRAMID_ANGLE_OFFSET_RAD_MIN: f32 = 0.0 * (std::f32::consts::PI / 180.0);
-    pub static PYRAMID_ANGLE_OFFSET_RAD_MAX: f32 = 360.0 * (std::f32::consts::PI / 180.0);
+    pub const PYRAMID_ANGLE_OFFSET_RAD_MIN: f32 = 0.0 * (std::f32::consts::PI / 180.0);
+    pub const PYRAMID_ANGLE_OFFSET_RAD_MAX: f32 = 360.0 * (std::f32::consts::PI / 180.0);
 
     // Angle increment of each side of the pyramid's base in radians
     pub const PYRAMID_ANGLE_INCREMENT_RAD: f32 = 120.0 * (std::f32::consts::PI / 180.0);
@@ -97,10 +97,7 @@ pub mod lighting_constants {
     // Main scene spotlight intensity
     pub const MAIN_SPOTLIGHT_INTENSITY: f32 = 50_000_000.0;
 
-    // Hole spotlight intensity (for door animations)
-    pub const HOLE_SPOTLIGHT_INTENSITY: f32 = 2_000_000.0;
-
-    // Max spotlight intensity during animation
+    // Spotlight intensity for hole/door animations
     pub const MAX_SPOTLIGHT_INTENSITY: f32 = 2_000_000.0;
 
     // Ambient light brightness

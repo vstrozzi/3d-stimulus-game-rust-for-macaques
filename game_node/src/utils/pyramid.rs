@@ -1,7 +1,7 @@
 //! Logic for spawning the pyramid base with interactive doors.
 
 use crate::utils::constants::{
-    lighting_constants::{HOLE_SPOTLIGHT_INTENSITY, SHADOWS_ENABLED},
+    lighting_constants::{MAX_SPOTLIGHT_INTENSITY, SHADOWS_ENABLED},
     object_constants::GROUND_Y,
     pyramid_constants::*,
 };
@@ -147,7 +147,7 @@ pub fn spawn_pyramid_base(
                 // Spawn spotlight
                 parent.spawn((
                     SpotLight {
-                        intensity: HOLE_SPOTLIGHT_INTENSITY,
+                        intensity: MAX_SPOTLIGHT_INTENSITY,
                         shadows_enabled: SHADOWS_ENABLED,
                         inner_angle: std::f32::consts::PI / 6.0, // Soft falloff
                         outer_angle: std::f32::consts::PI / 4.0,

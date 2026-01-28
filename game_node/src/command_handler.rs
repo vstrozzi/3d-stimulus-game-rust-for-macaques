@@ -42,10 +42,6 @@ pub struct PendingBlankScreen(pub bool);
 #[derive(Resource, Default)]
 pub struct RenderingPaused(pub bool);
 
-/// Resource tracking whether inputs should be paused during win transition (0.5s blank period)
-#[derive(Resource, Default)]
-pub struct WinPauseActive(pub bool);
-
 // ============================================================================
 // PLUGIN
 // ============================================================================
@@ -61,7 +57,6 @@ impl Plugin for CommandHandlerPlugin {
             .init_resource::<PendingCheckAlignment>()
             .init_resource::<PendingBlankScreen>()
             .init_resource::<RenderingPaused>()
-            .init_resource::<WinPauseActive>()
             .add_systems(Startup, init_shared_memory_system)
             .add_systems(PreUpdate, (clear_pending_actions, read_shared_memory).chain());
     }
@@ -110,15 +105,9 @@ fn read_shared_memory(
     mut pending_blank: ResMut<PendingBlankScreen>,
     mut rendering_paused: ResMut<RenderingPaused>,
     mut active_config: ResMut<ActiveConfig>,
-    win_pause_active: Res<WinPauseActive>,
 ) {
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
-
-    // Skip all input processing during win pause period (0.5s blank screen)
-    if win_pause_active.0 {
-        return;
-    }
 
     // 1. Read Continuous Inputs using atomics
     const ROT_SPEED: f32 = 0.05;

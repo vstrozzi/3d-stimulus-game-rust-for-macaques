@@ -58,8 +58,7 @@ impl WebSharedMemory {
             js_sys::Reflect::set(&offsets, &JsValue::from_str(key), &JsValue::from_f64(val as f64)).unwrap();
         };
 
-        set("seed", make_offset(&gs.seed as *const _));
-        set("pyramid_type", make_offset(&gs.pyramid_type as *const _));
+        set("decoration_seeds", make_offset(&gs.decoration_seeds as *const _));
         set("base_radius", make_offset(&gs.base_radius as *const _));
         set("height", make_offset(&gs.height as *const _));
         set("start_orient", make_offset(&gs.start_orient as *const _));

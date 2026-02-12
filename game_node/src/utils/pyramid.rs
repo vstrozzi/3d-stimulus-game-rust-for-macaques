@@ -2,12 +2,13 @@
 
 use crate::utils::objects::{
     BaseDoor, BaseFrame, Decoration, DecorationSet, DecorationShape, GameEntity, HoleEmissive,
-    HoleLight, Pyramid, RandomGen, RotableComponent,
+    HoleLight, Pyramid, RotableComponent,
 };
 use bevy::prelude::*;
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 
 use rand::{Rng, RngCore};
+use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
 /// Creates a pentagon mesh for the hole emissive effect
@@ -360,7 +361,7 @@ pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    random_gen: &mut ResMut<RandomGen>,
+    decoration_seeds: [u64; 3],
     p_radius: f32,
     p_height: f32,
     p_orientation_rad: f32,
@@ -443,7 +444,9 @@ pub fn spawn_pyramid(
     // We treat the rectangle as two triangles:
     // Tri A: (TopLeft, BaseLeft, BaseRight)
     // Tri B: (TopLeft, BaseRight, TopRight)
-    for i in 0..2 {
+    for i in 0..3 {
+        // Create a fresh RNG from the per-face seed so identical seeds produce identical aesthetics
+        let mut face_rng = ChaCha8Rng::seed_from_u64(decoration_seeds[i]);
         // Generate for first 2 faces
         let next = (i + 1) % 3;
 
@@ -454,7 +457,7 @@ pub fn spawn_pyramid(
 
         // Set A (Bottom-Left Triangle)
         dec_sets.push(Some(generate_decoration_set(
-            &mut random_gen.random_gen,
+            &mut face_rng,
             tl,
             bl,
             br,
@@ -464,7 +467,7 @@ pub fn spawn_pyramid(
 
         // Set B (Top-Right Triangle)
         dec_sets.push(Some(generate_decoration_set(
-            &mut random_gen.random_gen,
+            &mut face_rng,
             tl,
             br,
             tr,
@@ -472,33 +475,6 @@ pub fn spawn_pyramid(
             decoration_sizes[i],
         )));
     }
-
-  
-    // Generate fresh sets for Face 3
-    let i = 2;
-    let next = 0;
-    let tl = top_corners[i];
-    let tr = top_corners[next];
-    let bl = base_corners[i];
-    let br = base_corners[next];
-
-    dec_sets.push(Some(generate_decoration_set(
-        &mut random_gen.random_gen,
-        tl,
-        bl,
-        br,
-        decoration_counts[i],
-        decoration_sizes[i],
-    )));
-    dec_sets.push(Some(generate_decoration_set(
-        &mut random_gen.random_gen,
-        tl,
-        br,
-        tr,
-        decoration_counts[i],
-        decoration_sizes[i],
-    )));
-    
 
     // Spawn the pyramid faces
     for i in 0..3 {

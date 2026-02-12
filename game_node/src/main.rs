@@ -20,7 +20,7 @@ use game_node::{
     web_adapter::WebAdapterPlugin,
     utils::{
         debug_functions::DebugFunctionsPlugin,
-        objects::{RandomGen, DoorWinEntities, RoundStartTimestamp},
+        objects::{DoorWinEntities, RoundStartTimestamp},
         systems_logic::SystemsLogicPlugin,
     },
 };
@@ -61,7 +61,6 @@ fn main() {
             WebAdapterPlugin, 
         ))
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ)) 
-        .insert_resource(RandomGen::default())
         .insert_resource(DoorWinEntities::default())
         .insert_resource(RoundStartTimestamp::default())
         .run();

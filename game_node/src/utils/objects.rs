@@ -1,10 +1,5 @@
 //! This file defines the various objects, resources, and components used in the game.
 use bevy::prelude::*;
-use rand_chacha::rand_core::SeedableRng;
-
-use shared::constants::game_constants::SEED;
-
-use rand_chacha::ChaCha8Rng;
 use std::time::Duration;
 
 
@@ -47,27 +42,6 @@ pub struct DoorWinEntities {
 /// Resource to track the start time of the current round
 #[derive(Resource, Default)]
 pub struct RoundStartTimestamp(pub Option<Duration>);
-
-/// Random number generator
-#[derive(Resource)]
-pub struct RandomGen {
-    pub random_gen: ChaCha8Rng,
-}
-
-impl RandomGen {
-    pub fn from_seed(seed: u64) -> Self {
-        Self {
-            random_gen: ChaCha8Rng::seed_from_u64(seed),
-        }
-    }
-}
-impl Default for RandomGen {
-    fn default() -> Self {
-        Self {
-            random_gen: ChaCha8Rng::seed_from_u64(SEED),
-        }
-    }
-}
 
 /// Pyramid component
 #[derive(Component)]

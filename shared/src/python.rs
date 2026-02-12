@@ -36,7 +36,11 @@ impl SharedMemoryWrapper {
             let dict = pyo3::types::PyDict::new(py);
 
             // Fixed vars in trial
-            dict.set_item("seed", gs.seed.load(Ordering::Relaxed))?;
+            dict.set_item("decoration_seeds", [
+                gs.decoration_seeds[0].load(Ordering::Relaxed),
+                gs.decoration_seeds[1].load(Ordering::Relaxed),
+                gs.decoration_seeds[2].load(Ordering::Relaxed),
+            ])?;
             dict.set_item("base_radius", f32::from_bits(gs.base_radius.load(Ordering::Relaxed)))?;
             dict.set_item("height", f32::from_bits(gs.height.load(Ordering::Relaxed)))?;
             dict.set_item("start_orient", f32::from_bits(gs.start_orient.load(Ordering::Relaxed)))?;
@@ -123,7 +127,7 @@ impl SharedMemoryWrapper {
     /// Write in controller region
     fn write_game_structure(
         &mut self,
-        seed: u64,
+        decoration_seeds: [u64; 3],
         base_radius: f32,
         height: f32,
         start_orient: f32,
@@ -149,7 +153,9 @@ impl SharedMemoryWrapper {
         let shm = self.inner.get();
         let gs = &shm.game_structure_control;
 
-        gs.seed.store(seed, Ordering::Relaxed);
+        for i in 0..3 {
+            gs.decoration_seeds[i].store(decoration_seeds[i], Ordering::Relaxed);
+        }
         gs.base_radius.store(base_radius.to_bits(), Ordering::Relaxed);
         gs.height.store(height.to_bits(), Ordering::Relaxed);
         gs.start_orient.store(start_orient.to_bits(), Ordering::Relaxed);
@@ -188,7 +194,7 @@ fn monkey_shared(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Export constants from constants.rs so Python can import them directly.
     use crate::constants::game_constants;
     m.add("REFRESH_RATE_HZ", game_constants::REFRESH_RATE_HZ)?;
-    m.add("SEED", game_constants::SEED)?;
+    m.add("DECORATION_SEEDS", game_constants::DECORATION_SEEDS.to_vec())?;
     m.add("COSINE_ALIGNMENT_TO_WIN", game_constants::COSINE_ALIGNMENT_TO_WIN)?;
 
     // pyramid_constants

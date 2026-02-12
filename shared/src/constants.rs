@@ -9,8 +9,9 @@ pub mod game_constants {
     // Cosine alignment with door to win
     pub const COSINE_ALIGNMENT_TO_WIN: f32 = 0.95; // approx ~8 degrees
 
-    // Seed for the random number generator.
-    pub const SEED: u64 = 69;
+    // Seeds for the random number generator, one per face.
+    // If two faces share the same seed (and same count/size), they get identical decorations.
+    pub const DECORATION_SEEDS: [u64; 3] = [69, 70, 71];
 
     // UI responsive design reference
     pub const UI_REFERENCE_HEIGHT: f32 = 1080.0; // 1080p as reference
@@ -60,7 +61,7 @@ pub mod pyramid_constants {
 
     // Angle increment of each side of the pyramid's base in radians
     pub const PYRAMID_ANGLE_INCREMENT_RAD: f32 = 120.0 * (std::f32::consts::PI / 180.0);
-    
+
     pub const PYRAMID_COLORS: [[f32; 4]; 3] = [
     [1.0, 0.0, 0.0, 1.0], // red, green, blue, alpha
     [0.0, 1.0, 0.0, 1.0], // green

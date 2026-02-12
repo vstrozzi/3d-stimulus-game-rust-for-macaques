@@ -80,7 +80,8 @@ pub enum Phase {
 pub struct SharedGameStructure {
 
     // Fixed trials fields
-    pub seed: AtomicU64,
+    /// Per-face decoration seeds: 3 faces, one u64 seed each
+    pub decoration_seeds: [AtomicU64; 3],
     pub base_radius: AtomicU32,
     pub height: AtomicU32,
     pub start_orient: AtomicU32,
@@ -123,7 +124,7 @@ impl SharedGameStructure {
         // Constant initialization from constants.rs module file.
         use constants::{
             game_constants::{
-                SEED,
+                DECORATION_SEEDS,
                 COSINE_ALIGNMENT_TO_WIN},
             pyramid_constants::{
                 PYRAMID_BASE_RADIUS,
@@ -152,7 +153,11 @@ impl SharedGameStructure {
             
         Self {
             // Fixed trials vars
-            seed: AtomicU64::new(SEED),
+            decoration_seeds: [
+                AtomicU64::new(DECORATION_SEEDS[0]),
+                AtomicU64::new(DECORATION_SEEDS[1]),
+                AtomicU64::new(DECORATION_SEEDS[2]),
+            ],
             base_radius: AtomicU32::new(PYRAMID_BASE_RADIUS.to_bits()),
             height: AtomicU32::new(PYRAMID_HEIGHT.to_bits()),
             start_orient: AtomicU32::new(PYRAMID_START_ANGLE_OFFSET_RAD.to_bits()),
@@ -201,7 +206,9 @@ impl SharedGameStructure {
     }
 
     pub fn reset_all_fields(&self, other: &SharedGameStructure) {
-        self.seed.store(other.seed.load(Ordering::Relaxed), Ordering::Relaxed);
+        for i in 0..3 {
+            self.decoration_seeds[i].store(other.decoration_seeds[i].load(Ordering::Relaxed), Ordering::Relaxed);
+        }
         self.base_radius.store(other.base_radius.load(Ordering::Relaxed), Ordering::Relaxed);
         self.height.store(other.height.load(Ordering::Relaxed), Ordering::Relaxed);
         self.start_orient.store(other.start_orient.load(Ordering::Relaxed), Ordering::Relaxed);

@@ -37,7 +37,7 @@ DEFAULT_COLORS = [list(face) for face in monkey_shared.PYRAMID_COLORS]
 
 # Default config sourced from shared/src/constants.rs via monkey_shared
 DEFAULT_CONFIG = {
-    "seed": monkey_shared.SEED,
+    "decoration_seeds": list(monkey_shared.DECORATION_SEEDS),
     "base_radius": monkey_shared.PYRAMID_BASE_RADIUS,
     "height": monkey_shared.PYRAMID_HEIGHT,
     "start_orient": monkey_shared.PYRAMID_START_ANGLE_OFFSET_RAD,
@@ -68,7 +68,7 @@ DEFAULT_STATE = {
     "has_won": False,
     "win_elapsed_secs": None,
     # Config part of the structure (read back)
-    "seed": 0,
+    "decoration_seeds": [0, 0, 0],
     "base_radius": 0.0,
     "height": 0.0,
     "start_orient": 0.0,
@@ -94,7 +94,7 @@ def load_trials(trials_path="trials.jsonl"):
                 if line:
                     t = json.loads(line)
                     trials.append({
-                        "seed": t["seed"],
+                        "decoration_seeds": t.get("decoration_seeds", DEFAULT_CONFIG["decoration_seeds"]),
                         "base_radius": t["base_radius"],
                         "height": t["height"],
                         "start_orient": t["start_orient"],
@@ -168,7 +168,7 @@ class SharedMemory:
             print(f"SHM Write Error: {exc}")
             self.inner = None
 
-    def write_reset_config(self, seed, base_radius, height, start_orient, target_door, colors,
+    def write_reset_config(self, decoration_seeds, base_radius, height, start_orient, target_door, colors,
                            decorations_count, decorations_size,
                            cosine_alignment_threshold,
                            door_anim_fade_out, door_anim_stay_open, door_anim_fade_in,
@@ -180,7 +180,7 @@ class SharedMemory:
                 return False
         try:
             self.inner.write_game_structure(
-                int(seed),
+                [int(x) for x in decoration_seeds],
                 float(base_radius),
                 float(height),
                 float(start_orient),
@@ -453,7 +453,7 @@ class MonkeyGameController(tk.Tk):
         trial = self.trials[self.current_trial_index % len(self.trials)]
         
         cfg_data = {
-            "Seed": trial.get("seed"),
+            "Seeds": str(trial.get("decoration_seeds", DEFAULT_CONFIG["decoration_seeds"])),
             "Target Door": trial.get("target_door"),
             "Threshold": trial.get("cosine_alignment_threshold", DEFAULT_CONFIG["cosine_alignment_threshold"]),
             "Decors Count": str(trial.get("decorations_count", DEFAULT_CONFIG["decorations_count"])),
@@ -575,7 +575,7 @@ class MonkeyGameController(tk.Tk):
                         False, True, False, False, False, False  # reset=True
                     )
                     self.shm_wrapper.write_reset_config(
-                        trial["seed"], trial["base_radius"], 
+                        trial.get("decoration_seeds", DEFAULT_CONFIG["decoration_seeds"]), trial["base_radius"], 
                         trial["height"], trial["start_orient"], trial["target_door"], trial["colors"],
                         trial.get("decorations_count", DEFAULT_CONFIG["decorations_count"]),
                         trial.get("decorations_size", DEFAULT_CONFIG["decorations_size"]),
@@ -658,7 +658,7 @@ class MonkeyGameController(tk.Tk):
         
         print(f"Sending Reset Config (Trial {self.current_trial_index})")
         self.shm_wrapper.write_reset_config(
-            trial["seed"],
+            trial.get("decoration_seeds", DEFAULT_CONFIG["decoration_seeds"]),
             trial["base_radius"],
             trial["height"],
             trial["start_orient"],
@@ -708,7 +708,7 @@ class MonkeyGameController(tk.Tk):
             )
             # Send Reset Config (Initial Layout)
             self.shm_wrapper.write_reset_config(
-                trial["seed"], trial["base_radius"], 
+                trial.get("decoration_seeds", DEFAULT_CONFIG["decoration_seeds"]), trial["base_radius"], 
                 trial["height"], trial["start_orient"], trial["target_door"], trial["colors"],
                 trial.get("decorations_count", DEFAULT_CONFIG["decorations_count"]),
                 trial.get("decorations_size", DEFAULT_CONFIG["decorations_size"]),

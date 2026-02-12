@@ -9,7 +9,7 @@ use crate::utils::game_functions::{
     update_score_bar_animation, update_ui_scale,
 };
 use crate::utils::objects::{
-    DoorWinEntities, GameEntity, PersistentCamera, RandomGen, RoundStartTimestamp,
+    DoorWinEntities, GameEntity, PersistentCamera, RoundStartTimestamp,
     UIEntity,
 };
 use crate::utils::setup::setup_environment;
@@ -121,7 +121,6 @@ fn handle_reset_command(
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
-    random_gen: ResMut<RandomGen>,
     time: Res<Time>,
     mut frame_counter: ResMut<FrameCounterResource>,
     camera_query: Query<&mut Transform, With<PersistentCamera>>,
@@ -160,7 +159,6 @@ fn handle_reset_command(
         commands.reborrow(),
         meshes,
         materials,
-        random_gen,
         camera_query,
         spotlight_query,
         ambient_light,

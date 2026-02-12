@@ -15,8 +15,6 @@ use shared::constants::{
 
 use crate::command_handler::SharedMemResource;
 use core::sync::atomic::Ordering;
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid.
 /// Setup the persistent entitites across resets.
@@ -79,7 +77,6 @@ pub fn setup_round(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut random_gen: ResMut<RandomGen>,
     mut camera_query: Query<&mut Transform, With<PersistentCamera>>,
     mut spotlight_query: Query<&mut SpotLight, (Without<HoleLight>, Without<GameEntity>)>,
     ambient_light: Option<ResMut<GlobalAmbientLight>>,
@@ -106,8 +103,10 @@ pub fn setup_round(
     gs_game.reset_all_fields(gs_ctrl);
 
     // Update all the game resoruces based on the new configuration
-    let seed = gs_game.seed.load(Ordering::Relaxed);
-    random_gen.random_gen = ChaCha8Rng::seed_from_u64(seed);
+    let mut decoration_seeds = [0u64; 3];
+    for i in 0..3 {
+        decoration_seeds[i] = gs_game.decoration_seeds[i].load(Ordering::Relaxed);
+    }
 
     let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity.load(Ordering::Relaxed));
     let ambient_intensity = f32::from_bits(gs_game.ambient_brightness.load(Ordering::Relaxed));
@@ -163,7 +162,7 @@ pub fn setup_round(
         &mut commands,
         &mut meshes,
         &mut materials,
-        &mut random_gen,
+        decoration_seeds,
         radius,
         height,
         orient,

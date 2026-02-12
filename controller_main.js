@@ -79,7 +79,7 @@ let currentTrialIndex = 0;
 
 // Default Config for pyramid spawn (matching Python's DEFAULT_CONFIG)
 const DEFAULT_CONFIG = {
-  seed: 69,
+  decorationSeeds: [69, 70, 71],
   pyramidType: 0,
   baseRadius: 2.5,
   height: 4.0,
@@ -103,7 +103,7 @@ async function loadTrials() {
     trials = lines.map((line) => {
       const t = JSON.parse(line);
       return {
-        seed: t.seed,
+        decorationSeeds: t.decoration_seeds || DEFAULT_CONFIG.decorationSeeds,
         pyramidType: t.pyramid_type,
         baseRadius: t.base_radius,
         height: t.height,
@@ -794,13 +794,15 @@ function floatToU32Bits(f) {
 
 function writeGameStructure(config) {
   // Use offsets for robust writing
-  if (!offsets.seed) return; // Not ready?
+  if (!offsets.decoration_seeds) return; // Not ready?
 
   const view = new DataView(memory.buffer, pointers.gameStructure);
 
-  // seed (u64)
-  view.setUint32(offsets.seed, config.seed & 0xffffffff, true);
-  view.setUint32(offsets.seed + 4, 0, true);
+  // decoration_seeds (3 x u64)
+  for (let i = 0; i < 3; i++) {
+    view.setUint32(offsets.decoration_seeds + i * 8, config.decorationSeeds[i] & 0xffffffff, true);
+    view.setUint32(offsets.decoration_seeds + i * 8 + 4, 0, true);
+  }
 
   // pyramid_type (u32)
   view.setUint32(offsets.pyramid_type, config.pyramidType, true);
@@ -1375,25 +1377,22 @@ function floatToU32Bits(f) {
 
 function writeGameStructure(config) {
   // SharedGameStructure config fields layout (all little-endian):
-  // seed: u64 (8 bytes) - offset 0
-  // pyramid_type: u32 (4 bytes) - offset 8
-  // base_radius: u32 (4 bytes) - offset 12 (f32 bits)
-  // height: u32 (4 bytes) - offset 16 (f32 bits)
-  // start_orient: u32 (4 bytes) - offset 20 (f32 bits)
-  // target_door: u32 (4 bytes) - offset 24
-  // colors: [u32; 12] (48 bytes) - offset 28 (f32 bits)
+  // decoration_seeds: [u64; 3] (24 bytes) - offset 0
+  // base_radius: u32 (4 bytes) - offset 24 (f32 bits)
+  // height: u32 (4 bytes) - offset 28 (f32 bits)
+  // start_orient: u32 (4 bytes) - offset 32 (f32 bits)
+  // target_door: u32 (4 bytes) - offset 36
+  // colors: [u32; 12] (48 bytes) - offset 40 (f32 bits)
 
   const view = new DataView(memory.buffer, pointers.gameStructure);
   let offset = 0;
 
-  // seed (u64 - use two u32 writes, little-endian)
-  view.setUint32(offset, config.seed & 0xffffffff, true);
-  view.setUint32(offset + 4, 0, true); // High 32 bits (seed is small)
-  offset += 8;
-
-  // pyramid_type (u32)
-  view.setUint32(offset, config.pyramidType, true);
-  offset += 4;
+  // decoration_seeds ([u64; 3] - 3 x two u32 writes, little-endian)
+  for (let i = 0; i < 3; i++) {
+    view.setUint32(offset, config.decorationSeeds[i] & 0xffffffff, true);
+    view.setUint32(offset + 4, 0, true); // High 32 bits
+    offset += 8;
+  }
 
   // base_radius (f32 as u32 bits)
   view.setUint32(offset, floatToU32Bits(config.baseRadius), true);

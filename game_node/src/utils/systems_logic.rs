@@ -1,8 +1,5 @@
-//! Systems logic based on the gamephase.
+//! Game logic wrapped up using the various plugins.
 //!
-//! Twin-Engine Architecture: The game no longer handles inputs directly.
-//! All inputs are processed by the Controller which sends GameCommands.
-
 use crate::command_handler::SharedMemResource;
 use crate::command_handler::{PendingAnimation, PendingBlankScreen, PendingReset, RenderingPaused};
 use crate::state_emitter::FrameCounterResource;
@@ -19,9 +16,6 @@ use crate::utils::setup::setup_environment;
 use bevy::prelude::*;
 use crate::utils::setup::setup_round;
 use core::sync::atomic::Ordering;
-use shared::constants::camera_3d_constants::{
-    CAMERA_3D_INITIAL_X, CAMERA_3D_INITIAL_Y, CAMERA_3D_INITIAL_Z,
-};
 
 // Plugin for managing all the game systems.config
 pub struct SystemsLogicPlugin;
@@ -34,7 +28,7 @@ impl Plugin for SystemsLogicPlugin {
             .add_systems(Startup, (spawn_persistent_camera, setup_environment))
             // Global UI responsiveness system (runs every frame)
             .add_systems(Update, update_ui_scale)
-            // Global command-driven systems
+            // Command driven
             .add_systems(
                 Update,
                 (handle_reset_command, handle_animation_door_command),
@@ -51,14 +45,12 @@ impl Plugin for SystemsLogicPlugin {
                         apply_pending_rotation,
                         apply_pending_zoom,
                         apply_pending_check_alignment,
+                        handle_door_animation,
+                        update_score_bar_animation,
                     )
                         .run_if(is_not_paused),
-                    // Animation systems
-                    (handle_door_animation, update_score_bar_animation).run_if(is_not_paused),
-                    // Ensure local score bar exists (if cleared by reset)
-                    // Note: In new flow, score bar spawning is handled by check_alignment or reset?
-                    // Actually check_alignment spawns it. Reset clears it.
-                ),
+
+                ).chain(),
             );
     }
 }
@@ -68,13 +60,26 @@ fn is_not_paused(rendering_paused: Res<RenderingPaused>) -> bool {
 }
 
 /// This camera persists across resets to avoid artifacts.
-fn spawn_persistent_camera(mut commands: Commands) {
+fn spawn_persistent_camera(mut commands: Commands, shm_res: Option<Res<SharedMemResource>>) {
+    // Get initial of camera
+    let (camera_3d_initial_x, camera_3d_initial_y, camera_3d_initial_z) = if let Some(ref shm_res) = shm_res {
+        let shm = shm_res.0.get();
+        (
+            f32::from_bits(shm.game_structure_game.camera_x.load(Ordering::Relaxed)),
+            f32::from_bits(shm.game_structure_game.camera_y.load(Ordering::Relaxed)),
+            f32::from_bits(shm.game_structure_game.camera_z.load(Ordering::Relaxed)),
+        )
+    } else {
+        (0.0, 0.0, 0.0)
+    };
+
+
     commands.spawn((
         Camera3d::default(),
         Transform::from_xyz(
-            CAMERA_3D_INITIAL_X,
-            CAMERA_3D_INITIAL_Y,
-            CAMERA_3D_INITIAL_Z,
+            camera_3d_initial_x,
+            camera_3d_initial_y,
+            camera_3d_initial_z,
         )
         .looking_at(Vec3::ZERO, Vec3::Y),
         PersistentCamera,
@@ -103,16 +108,14 @@ fn spawn_blank_overlay(commands: &mut Commands) {
             ..default()
         },
         BackgroundColor(Color::BLACK),
-        GlobalZIndex(1000),
+        GlobalZIndex(1000), // In front
         BlankScreenOverlay,
     ));
 }
 
 
 
-/// Unified reset handler that works from any state.
-/// Always transitions to Resetting state first, which then goes to Playing.
-/// Unified reset handler.
+/// Reset state
 fn handle_reset_command(
     mut pending_reset: ResMut<PendingReset>,
     mut commands: Commands,
@@ -130,6 +133,7 @@ fn handle_reset_command(
     round_start: ResMut<RoundStartTimestamp>,
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
+    
     if !pending_reset.0 {
         return;
     }
@@ -140,10 +144,9 @@ fn handle_reset_command(
     frame_counter.0 = 0;
 
     // Clear animation state to avoid stale entity references after despawn
-    door_win_entities.animating_door = None;
-    door_win_entities.animating_light = None;
-    door_win_entities.animating_emissive = None;
     door_win_entities.animation_start_time = None;
+    door_win_entities.winning_light = None;
+    door_win_entities.winning_emissive = None;
 
     // Clear is_animating flag in SHM
     if let Some(ref shm_res) = shm_res {
@@ -164,6 +167,7 @@ fn handle_reset_command(
         shm_res,
         round_start,
         time,
+        door_win_entities,
     );
 
     spawn_score_bar(&mut commands);
@@ -177,10 +181,6 @@ fn handle_animation_door_command(
     mut door_win_entities: ResMut<DoorWinEntities>,
     shm_res: Option<Res<SharedMemResource>>,
     time: Res<Time>,
-    // Queries to find entities (similar to game_functions)
-    frame_query: Query<&crate::utils::objects::BaseFrame>,
-    light_query: Query<(Entity, &ChildOf), With<crate::utils::objects::HoleLight>>,
-    emissive_query: Query<(Entity, &ChildOf), With<crate::utils::objects::HoleEmissive>>,
 ) {
     if !pending_anim.0 {
         return;
@@ -195,42 +195,17 @@ fn handle_animation_door_command(
         return;
     }
 
-    // Find entities matching target
-    let target = shm
-        .game_structure_game
-        .target_door
-        .load(Ordering::Relaxed) as usize;
-
-    let mut found_light = None;
-    let mut found_emissive = None;
-
-    for (light_entity, parent) in light_query.iter() {
-        if let Ok(frame) = frame_query.get(parent.parent()) {
-            if frame.door_index == target {
-                found_light = Some(light_entity);
-                break;
-            }
-        }
-    }
-
-    for (emissive_entity, parent) in emissive_query.iter() {
-        if let Ok(frame) = frame_query.get(parent.parent()) {
-            if frame.door_index == target {
-                found_emissive = Some(emissive_entity);
-                break;
-            }
-        }
-    }
+    // Use the pre-populated winning door entities from setup_round
+    let found_light = door_win_entities.winning_light;
+    let found_emissive = door_win_entities.winning_emissive;
 
     if found_light.is_none() && found_emissive.is_none() {
-        warn!("Animation door command: no light/emissive entities found for target_door={}", target);
+        warn!("Animation door command: no winning door entities found (not populated in setup_round)");
         return;
     }
 
     // Only start animation if we found at least one entity
-    info!("Starting door animation for target_door={}, light={:?}, emissive={:?}", target, found_light, found_emissive);
-    door_win_entities.animating_light = found_light;
-    door_win_entities.animating_emissive = found_emissive;
+    info!("Starting door animation from pre-populated entities: light={:?}, emissive={:?}", found_light, found_emissive);
     door_win_entities.animation_start_time = Some(time.elapsed());
     shm.game_structure_game
         .is_animating

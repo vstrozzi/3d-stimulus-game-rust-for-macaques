@@ -6,6 +6,7 @@ use crate::utils::objects::{BaseDoor, RoundStartTimestamp};
 
 use core::sync::atomic::Ordering;
 
+// Count frames since beginning of game
 #[derive(Resource, Default)]
 pub struct FrameCounterResource(pub u64);
 
@@ -31,7 +32,7 @@ fn increment_frame_counter(
     counter.0 += 1;
 }
 
-// Emit the current game state to shared memory read by the controller.
+// Write state of the game to shared memory to be read by controller
 fn emit_state_to_shm(
     time: Res<Time>,
     frame_counter: Res<FrameCounterResource>,
@@ -43,8 +44,6 @@ fn emit_state_to_shm(
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
     let gs_game = &shm.game_structure_game;
-    // We also need config to know target door
-    let gs_control = &shm.game_structure_control;
 
     // Time & Frame
     gs_game.frame_number.store(frame_counter.0, Ordering::Relaxed);
@@ -68,10 +67,10 @@ fn emit_state_to_shm(
     }
 
     // Continuous Alignment Calculation
-    let  current_alignment; 
+    let current_alignment; 
     let current_angle;
     
-    let target_door_idx = gs_control.target_door.load(Ordering::Relaxed) as usize;
+    let target_door_idx = gs_game.target_door.load(Ordering::Relaxed) as usize;
 
     if let Ok(camera_transform) = camera_query.single() {
         let camera_forward = camera_transform.forward();

@@ -47,10 +47,10 @@ pub struct DecorationSet {
 /// The current winning doors and animation state
 #[derive(Resource, Default)]
 pub struct DoorWinEntities {
-    // Animation entities
-    pub animating_door: Option<Entity>,
-    pub animating_light: Option<Entity>,
-    pub animating_emissive: Option<Entity>,
+    // Winning door entities (set once per round in setup_round)
+    pub winning_light: Option<Entity>,
+    pub winning_emissive: Option<Entity>,
+    // Animation entities (active during door animation)
     
     // Animation timing
     pub animation_start_time: Option<Duration>,

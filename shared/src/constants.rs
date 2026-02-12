@@ -114,8 +114,7 @@ pub mod lighting_constants {
 
     pub const SPOTLIGHT_LIGHT_INTENSITY: f32 = 5_000_000.0;
     pub const GLOBAL_AMBIENT_LIGHT_INTENSITY: f32 = 200.0;
-    pub const MAX_SPOTLIGHT_INTENSITY: f32 = 100.0;
-
+    pub const MAX_SPOTLIGHT_INTENSITY: f32 = 1000000.0;
 }
 
 

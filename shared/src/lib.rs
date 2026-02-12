@@ -105,7 +105,6 @@ pub struct SharedGameStructure {
     pub ambient_brightness: AtomicU32,      
     pub max_spotlight_intensity: AtomicU32, 
 
-
     // Dynamic trials fields
     pub frame_number: AtomicU64,
     pub elapsed_secs: AtomicU32,

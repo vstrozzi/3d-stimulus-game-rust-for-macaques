@@ -11,7 +11,6 @@ use shared::constants::camera_3d_constants::{
 };
 
 /// Apply rotation to all rotable entities by the given delta (in radians).
-/// Positive delta rotates right, negative rotates left.
 pub fn apply_rotation(
     delta: f32,
     rot_entities: &mut Query<&mut Transform, (With<RotableComponent>, Without<Camera3d>)>,
@@ -24,7 +23,6 @@ pub fn apply_rotation(
 }
 
 /// Apply zoom to the camera by the given delta.
-/// Positive delta zooms out, negative zooms in.
 pub fn apply_zoom(delta: f32, camera_query: &mut Query<&mut Transform, With<Camera3d>>) {
     let Ok(mut transform) = camera_query.single_mut() else {
         return;

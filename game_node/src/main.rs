@@ -54,13 +54,13 @@ fn main() {
             }),
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
-            CommandHandlerPlugin, 
-            StateEmitterPlugin,  
+            CommandHandlerPlugin, // Read shared memory and init bevy resources, preupdate
+            SystemsLogicPlugin,   // Game logic systems, update
+            DebugFunctionsPlugin, // Debug functions, update
+            StateEmitterPlugin,   // Write shared memory, update timing, init timing resource, postupdate
             WebAdapterPlugin, 
-            SystemsLogicPlugin,
-            DebugFunctionsPlugin,
         ))
-        .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
+        .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ)) 
         .insert_resource(RandomGen::default())
         .insert_resource(DoorWinEntities::default())
         .insert_resource(RoundStartTimestamp::default())

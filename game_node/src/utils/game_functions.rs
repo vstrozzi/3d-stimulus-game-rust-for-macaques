@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use crate::command_handler::PendingCheckAlignment;
 use crate::command_handler::SharedMemResource;
 use crate::utils::objects::{
-    BaseDoor, BaseFrame, DoorWinEntities, GameEntity, HoleEmissive, HoleLight, ScoreBarFill,
+    BaseDoor, DoorWinEntities, GameEntity, HoleEmissive, HoleLight, ScoreBarFill,
     ScoreBarUI, UIEntity,
 };
 use core::sync::atomic::Ordering;
@@ -27,22 +27,19 @@ pub fn cleanup_game_entities(mut commands: Commands, query: Query<Entity, With<G
     }
 }
 
-/// System that applies pending check alignment command from the controller.
-/// This is the command-driven version of the alignment check logic.
+/// Applies pending check alignment
 pub fn apply_pending_check_alignment(
     pending: Res<PendingCheckAlignment>,
     shm_res: Option<Res<SharedMemResource>>,
     camera_query: Query<&Transform, With<Camera3d>>,
     door_query: Query<(Entity, &BaseDoor, &Transform)>,
-    _light_query: Query<Entity, With<HoleLight>>,
-    _emissive_query: Query<Entity, With<HoleEmissive>>,
-    _frame_query: Query<(&BaseFrame, &Children)>,
     mut commands: Commands,
+    time: Res<Time>,
     ui_query: Query<Entity, With<UIEntity>>,
+    mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
-    let gs_control = &shm.game_structure_control;
     let gs_game = &shm.game_structure_game;
 
     // Only proceed check alignment was requested
@@ -53,10 +50,6 @@ pub fn apply_pending_check_alignment(
     // Increment attempt counter
     let attempts = gs_game.attempts.load(Ordering::Relaxed) + 1;
     gs_game.attempts.store(attempts, Ordering::Relaxed);
-
-    // Clean old UI and spawn new
-    despawn_ui_helper(&mut commands, &ui_query);
-    spawn_score_bar(&mut commands);
 
     let Ok(camera_transform) = camera_query.single() else {
         return;
@@ -73,7 +66,7 @@ pub fn apply_pending_check_alignment(
     let mut winning_door_alignment = -1.0;
 
     // Determine target door from SHM
-    let target_door_idx = gs_control.target_door.load(Ordering::Relaxed);
+    let target_door_idx = gs_game.target_door.load(Ordering::Relaxed);
 
     for (_, door, door_transform) in &door_query {
         // Get door normal in world space
@@ -98,10 +91,19 @@ pub fn apply_pending_check_alignment(
     }
 
     // Store alignment for score bar animation AND SHM
-    // game_state.cosine_alignment = Some(winning_door_alignment);
     gs_game
         .current_alignment
         .store(winning_door_alignment.to_bits(), Ordering::Relaxed);
+
+    // Player wins
+    if winning_door_alignment > f32::from_bits(gs_game.cosine_alignment_threshold.load(Ordering::Relaxed)) {
+        // Player wins! Set win time in SHM to trigger win state
+        gs_game.win_time.store(time.elapsed().as_secs_f32().to_bits(), Ordering::Relaxed);
+    }
+
+    // Every alignment check triggers the door animation on the winning light/emissive
+    gs_game.is_animating.store(true, Ordering::Relaxed);
+    door_win_entities.animation_start_time = Some(time.elapsed());
 
     // Clean old UI and spawn new (Score Bar)
     despawn_ui_helper(&mut commands, &ui_query);
@@ -164,6 +166,7 @@ pub fn handle_door_animation(
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
     let gs_game = &shm.game_structure_game;
@@ -173,13 +176,15 @@ pub fn handle_door_animation(
     if !is_animating {
         return;
     }
-
+    use crate::log;
+    log!("Door animation tick: is_animating=true, processing animation...");
     let Some(start_time) = door_win_entities.animation_start_time else {
         // No start time set — animation state is inconsistent, clear it
-        warn!("handle_door_animation: is_animating=true but no start_time, clearing.");
+        log!("handle_door_animation: is_animating=true but no start_time, clearing.");
         gs_game.is_animating.store(false, Ordering::Relaxed);
         return;
     };
+    log!("time is time={} and start time={}", time.elapsed().as_secs_f32(), start_time.as_secs_f32());
     let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
     // Config values from SHM
@@ -189,10 +194,10 @@ pub fn handle_door_animation(
     let fade_in_end =
         stay_open_end + f32::from_bits(gs_game.door_anim_fade_in.load(Ordering::Relaxed));
 
-    // Get light entity from door_win_entities
-    let Some(light_entity) = door_win_entities.animating_light else {
-        // Entity was despawned (e.g. by reset) — clear animation state
-        warn!("handle_door_animation: animating_light is None, clearing animation.");
+    // Get light entity from door_win_entities (winning_light = SpotLight/HoleLight)
+    let Some(light_entity) = door_win_entities.winning_light else {
+        // Entity was despawned (e.g. by reset)
+        log!("handle_door_animation: winning_light is None, clearing animation.");
         door_win_entities.animation_start_time = None;
         gs_game.is_animating.store(false, Ordering::Relaxed);
         return;
@@ -200,15 +205,15 @@ pub fn handle_door_animation(
 
     // Get light visibility and component
     let Ok((mut light_visibility, mut spotlight)) = light_query.get_mut(light_entity) else {
-        // Entity no longer valid — clear animation state
+        // Entity no longer valid 
         warn!("handle_door_animation: light entity not found in query, clearing animation.");
-        door_win_entities.animating_light = None;
-        door_win_entities.animating_emissive = None;
         door_win_entities.animation_start_time = None;
         gs_game.is_animating.store(false, Ordering::Relaxed);
         return;
     };
 
+    log!("handle_door_animation: elapsed={:.2}s, fade_out_end={:.2}s, stay_open_end={:.2}s, fade_in_end={:.2}s",
+        elapsed, fade_out_end, stay_open_end, fade_in_end);
     // Calculate animation intensity (0.0 to 1.0)
     let intensity_factor = if elapsed < fade_out_end {
         // Phase 1: Fade Out (Opening) - 0.0 to 1.0
@@ -228,12 +233,15 @@ pub fn handle_door_animation(
     let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity.load(Ordering::Relaxed));
 
     if intensity_factor > 0.0 {
+        
         // Animation is in progress — update spotlight
         *light_visibility = Visibility::Visible;
         spotlight.intensity = max_spotlight_intensity * intensity_factor;
+        log!("handle_door_animation: spotlight set visible, intensity={:.0}, range={:.1}, inner_angle={:.3}, outer_angle={:.3}",
+            spotlight.intensity, spotlight.range, spotlight.inner_angle, spotlight.outer_angle);
 
         // Also update emissive material
-        if let Some(emissive_entity) = door_win_entities.animating_emissive {
+        if let Some(emissive_entity) = door_win_entities.winning_emissive {
             if let Ok((mut emissive_visibility, material_handle)) =
                 emissive_query.get_mut(emissive_entity)
             {
@@ -256,7 +264,7 @@ pub fn handle_door_animation(
         spotlight.intensity = 0.0;
 
         // Hide emissive and clear state
-        if let Some(emissive_entity) = door_win_entities.animating_emissive {
+        if let Some(emissive_entity) = door_win_entities.winning_emissive {
             if let Ok((mut emissive_visibility, material_handle)) =
                 emissive_query.get_mut(emissive_entity)
             {
@@ -268,9 +276,7 @@ pub fn handle_door_animation(
             }
         }
 
-        // Clear animation state
-        door_win_entities.animating_light = None;
-        door_win_entities.animating_emissive = None;
+        // Clear animation timing state (winning entities persist for the round)
         door_win_entities.animation_start_time = None;
         gs_game.is_animating.store(false, Ordering::Relaxed);
     }
@@ -300,7 +306,7 @@ pub fn update_score_bar_animation(
 
     let is_animating = shm.game_structure_game.is_animating.load(Ordering::Relaxed);
 
-    // Calculate the bar width
+    // Calculate the bar width — only show fill during animation, otherwise empty
     let current_width = if is_animating {
         // During animation: fill progressively based on animation progress
         let Some(start_time) = door_win_entities.animation_start_time else {
@@ -329,8 +335,8 @@ pub fn update_score_bar_animation(
         let target_width = alignment_normalized * 100.0;
         fill_progress * target_width
     } else {
-        // Not animating: show the current alignment directly
-        alignment_normalized * 100.0
+        // Not animating: bar stays empty
+        0.0
     };
 
     node.width = Val::Percent(current_width);

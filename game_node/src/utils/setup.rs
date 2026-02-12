@@ -86,6 +86,7 @@ pub fn setup_round(
     shm_res: Option<Res<SharedMemResource>>,
     mut round_start: ResMut<crate::utils::objects::RoundStartTimestamp>,
     time: Res<Time>,
+    mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
     // Read shared memory
     let Some(shm_res) = shm_res else {
@@ -105,7 +106,6 @@ pub fn setup_round(
     gs_game.reset_all_fields(gs_ctrl);
 
     // Update all the game resoruces based on the new configuration
-
     let seed = gs_game.seed.load(Ordering::Relaxed);
     random_gen.random_gen = ChaCha8Rng::seed_from_u64(seed);
 
@@ -162,8 +162,11 @@ pub fn setup_round(
         decoration_sizes[i] = f32::from_bits(gs_game.decorations_size[i].load(Ordering::Relaxed));
     }
 
-    // Spawn the pyramid
-    spawn_pyramid(
+    // Read target door from shared memory
+    let target_door = gs_game.target_door.load(Ordering::Relaxed) as usize;
+    
+    // Spawn the pyramid and capture winning door entities
+    let (winning_light, winning_emissive) = spawn_pyramid(
         &mut commands,
         &mut meshes,
         &mut materials,
@@ -175,9 +178,15 @@ pub fn setup_round(
         colors,
         decoration_counts,
         decoration_sizes,
+        target_door,
     );
 
-    log!("🎮 Round Started!");
+    // Populate DoorWinEntities with the target door's entities and reset timer
+    door_win_entities.winning_light = winning_light;
+    door_win_entities.winning_emissive = winning_emissive;
+    door_win_entities.animation_start_time = None;
+
+    log!("🎮 Round Started! target_door={}, winning_light={:?}, winning_emissive={:?}", target_door, winning_light, winning_emissive);
 }
 
 

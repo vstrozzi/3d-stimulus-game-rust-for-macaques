@@ -71,17 +71,22 @@ fn init_shared_memory_system(mut commands: Commands) {
 }
 
 fn clear_pending_actions(
+    mut pending_reset: ResMut<PendingReset>,
     mut pending_rotation: ResMut<PendingRotation>,
     mut pending_zoom: ResMut<PendingZoom>,
     mut pending_check: ResMut<PendingCheckAlignment>,
     mut pending_blank: ResMut<PendingBlankScreen>,
+    mut rendering_paused: ResMut<RenderingPaused>,
     mut pending_anim: ResMut<PendingAnimation>,
+    
 ) {
     pending_rotation.0 = 0.0;
     pending_zoom.0 = 0.0;
     pending_check.0 = false;
     pending_blank.0 = false;
     pending_anim.0 = false;
+    pending_reset.0 = false;
+    rendering_paused.0 = false;
 }
 
 fn read_shared_memory(
@@ -112,27 +117,26 @@ fn read_shared_memory(
     }
 
     // Read Trigger Inputs (swap to clear after reading)
-    if shm.commands.check_alignment.swap(false, Ordering::Relaxed) {
+    if shm.commands.check_alignment.load( Ordering::Relaxed) {
         pending_check.0 = true;
     }
 
     // New rendering control commands
-    if shm.commands.blank_screen.swap(false, Ordering::Relaxed) {
+    if shm.commands.blank_screen.load( Ordering::Relaxed) {
         pending_blank.0 = true;
     }
-    if shm.commands.stop_rendering.swap(false, Ordering::Relaxed) {
+    if shm.commands.stop_rendering.load( Ordering::Relaxed) {
         rendering_paused.0 = true;
     }
-    if shm.commands.resume_rendering.swap(false, Ordering::Relaxed) {
+    if shm.commands.resume_rendering.load(Ordering::Relaxed) {
         rendering_paused.0 = false;
     }
 
-    if shm.commands.animation_door.swap(false, Ordering::Relaxed) {
+    if shm.commands.animation_door.load(Ordering::Relaxed) {
         pending_anim.0 = true;
     }
 
-    // 4. Reset Handshake
-    if shm.commands.reset.swap(false, Ordering::Relaxed) {
+    if shm.commands.reset.load(Ordering::Relaxed) {
         pending_reset.0 = true;
     }
 

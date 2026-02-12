@@ -66,16 +66,20 @@ fn create_pentagon_mesh(
     mesh
 }
 
-/// Spawns the wooden base with holes for the pyramid
+/// Spawns the wooden base with holes for the pyramid.
+/// Returns `(Option<Entity>, Option<Entity>)` = (winning_light, winning_emissive) for the target door.
 pub fn spawn_pyramid_base(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     p_start_orientation_rad: f32, // Replaced GameState
-    max_spotlight_intensity: f32, // New Arg
-) {
+    target_door: usize,           // Target door index for winning door entities
+) -> (Option<Entity>, Option<Entity>) {
     let base_radius = BASE_RADIUS;
     let angle_increment = std::f32::consts::TAU / BASE_NR_SIDES as f32;
+
+    let mut winning_light: Option<Entity> = None;
+    let mut winning_emissive: Option<Entity> = None;
 
     for i in 0..BASE_NR_SIDES {
         let angle1 =
@@ -123,7 +127,9 @@ pub fn spawn_pyramid_base(
         );
 
         // Spawn the base frame and a light in front to have a nice effect
-        commands
+        let is_target = i == target_door;
+
+        let frame_id = commands
             .spawn((
                 Mesh3d(meshes.add(frame_mesh)),
                 MeshMaterial3d(materials.add(StandardMaterial {
@@ -137,41 +143,46 @@ pub fn spawn_pyramid_base(
                 GameEntity,
                 RotableComponent,
             ))
-            .with_children(|parent| {
-                // Spawn emissive pentagon glow
-                parent.spawn((
-                    Mesh3d(meshes.add(pentagon_mesh)),
-                    MeshMaterial3d(materials.add(StandardMaterial {
-                        emissive: LinearRgba::new(0.0, 0.0, 0.0, 1.0), // Start with no emission
-                        cull_mode: None,
-                        ..default()
-                    })),
-                    Transform::default(), // Mesh vertices are already in world-space (like frame mesh)
-                    HoleEmissive,
-                    GameEntity,
-                    Visibility::Hidden, // Initially hidden
-                ));
+            .id();
 
-                // Spawn spotlight
-                parent.spawn((
-                    SpotLight {
-                        intensity: max_spotlight_intensity,
-                        shadows_enabled: true, // Hardcoded for now, or pass from config
-                        inner_angle: std::f32::consts::PI / 6.0, // Soft falloff
-                        outer_angle: std::f32::consts::PI / 4.0,
-                        range: 25.0,
-                        radius: 0.5,
-                        ..default()
-                    },
-                    GameEntity,
-                    HoleLight,
-                    Visibility::Hidden, // Initially hidden
-                    // Position is RELATIVE to the Frame.
-                    // 'light_pos' must be the offset from the Frame's center.
-                    Transform::from_translation(light_pos)
-                        .looking_at(light_pos + 2.0 * normal, Vec3::Y),
-                ));
-            });
+        // Spawn emissive pentagon glow as child of frame
+        let emissive_id = commands.spawn((
+            Mesh3d(meshes.add(pentagon_mesh)),
+            MeshMaterial3d(materials.add(StandardMaterial {
+                emissive: LinearRgba::new(0.0, 0.0, 0.0, 1.0), // Start with no emission
+                cull_mode: None,
+                ..default()
+            })),
+            Transform::default(), // Mesh vertices are already in world-space (like frame mesh)
+            HoleEmissive,
+            GameEntity,
+            Visibility::Hidden, // Initially hidden
+            ChildOf(frame_id),
+        )).id();
+
+        // Spawn spotlight as child of frame
+        let light_id = commands.spawn((
+            SpotLight {
+                intensity: 0.0,  // Starts at 0; animation will set the actual intensity
+                shadows_enabled: true,
+                inner_angle: std::f32::consts::PI / 6.0, // Soft falloff
+                outer_angle: std::f32::consts::PI / 4.0,
+                range: 25.0,
+                radius: 0.5,
+                ..default()
+            },
+            GameEntity,
+            HoleLight,
+            Visibility::Hidden, // Initially hidden
+            Transform::from_translation(light_pos)
+                .looking_at(light_pos + 2.0 * normal, Vec3::Y),
+            ChildOf(frame_id),
+        )).id();
+
+        if is_target {
+            winning_light = Some(light_id);
+            winning_emissive = Some(emissive_id);
+        }
 
         // Spawn the door entity
         commands.spawn((
@@ -204,6 +215,8 @@ pub fn spawn_pyramid_base(
         RotableComponent,
         GameEntity,
     ));
+
+    (winning_light, winning_emissive)
 }
 
 /// Creates a polygonal lid mesh for the top of the base
@@ -341,7 +354,8 @@ fn create_frame_with_hole(
     (mesh, normal, local_right, local_up, center, pentagon_radius)
 }
 
-/// Spawns a triangular prism (Toblerone-shape) instead of a pyramid.
+/// Spawns a triangular prism.
+/// Returns `(Option<Entity>, Option<Entity>)` = (winning_light, winning_emissive) for the target door.
 pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -354,7 +368,8 @@ pub fn spawn_pyramid(
     p_colors: [Color; 3],
     decoration_counts: [u32; 3],
     decoration_sizes: [f32; 3],
-) {
+    target_door: usize,
+) -> (Option<Entity>, Option<Entity>) {
     let height_y = p_height;
 
     // Build the symmetric triangular vertices for the BASE.
@@ -423,8 +438,6 @@ pub fn spawn_pyramid(
 
     // Generate Decoration Sets
 
-    // We need 2 decoration sets per face to fill the rectangle (treated as 2 triangles).
-    // Structure: [Face1_SetA, Face1_SetB, Face2_SetA, ... ]
     let mut dec_sets: Vec<Option<DecorationSet>> = Vec::new();
 
     // Indices for the loop below to generate sets for Face 0 and Face 1
@@ -584,9 +597,11 @@ pub fn spawn_pyramid(
         }
     }
 
-    // Spawn the base (unchanged)
-    spawn_pyramid_base(commands, meshes, materials, p_orientation_rad, f32::MAX);
+    // Spawn the base and capture winning door entities
+    let (winning_light, winning_emissive) = spawn_pyramid_base(commands, meshes, materials, p_orientation_rad, target_door);
     // Max intensity not vital here or pass it in
+
+    (winning_light, winning_emissive)
 }
 
 /// Generates a decoration set for a pyramid face using Poisson-like sampling.

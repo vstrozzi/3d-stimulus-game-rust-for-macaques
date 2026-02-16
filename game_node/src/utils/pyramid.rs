@@ -356,7 +356,6 @@ fn create_frame_with_hole(
 }
 
 /// Spawns a triangular prism.
-/// Returns `(Option<Entity>, Option<Entity>)` = (winning_light, winning_emissive) for the target door.
 pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,

@@ -1,7 +1,7 @@
 //! This file defines the various objects, resources, and components used in the game.
 use bevy::prelude::*;
 use std::time::Duration;
-
+use shared::{SharedGameState, SharedGameStateLocal};
 
 /// Shapes for decorations on the pyramid faces
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -27,21 +27,29 @@ pub struct DecorationSet {
     pub decorations: Vec<Decoration>,
 }
 
+
 /// The current winning doors and animation state
 #[derive(Resource, Default)]
 pub struct DoorWinEntities {
     // Winning door entities (set once per round in setup_round)
     pub winning_light: Option<Entity>,
-    pub winning_emissive: Option<Entity>,
-    // Animation entities (active during door animation)
-    
+    pub winning_emissive: Option<Entity>,    
     // Animation timing
     pub animation_start_time: Option<Duration>,
 }
 
-/// Resource to track the start time of the current round
+/// Resource to track the start time of the current trial
 #[derive(Resource, Default)]
 pub struct RoundStartTimestamp(pub Option<Duration>);
+
+/// Local resource for the game structure
+#[derive(Resource)]
+pub struct GameStateLocal(pub SharedGameStateLocal);
+impl Default for GameStateLocal {
+    fn default() -> Self {
+        GameStateLocal(SharedGameState::default().to_not_atomic())
+    }
+}
 
 /// Pyramid component
 #[derive(Component)]
@@ -91,3 +99,7 @@ pub struct ScoreBarUI;
 // Component marking the fill bar inside the ScoreBarUI
 #[derive(Component)]
 pub struct ScoreBarFill;
+
+/// Marker component for the blank screen overlay entity
+#[derive(Component)]
+pub struct BlankScreen;

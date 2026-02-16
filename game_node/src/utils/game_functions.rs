@@ -1,36 +1,17 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
 
-use crate::command_handler::PendingCheckAlignment;
-use crate::command_handler::SharedMemResource;
+use crate::shared_memory::shared_memory_reader::PendingCommands;
 use crate::utils::objects::{
-    BaseDoor, DoorWinEntities, GameEntity, HoleEmissive, HoleLight, ScoreBarFill,
-    ScoreBarUI, UIEntity,
+    BaseDoor, DoorWinEntities, HoleEmissive, HoleLight, ScoreBarFill, UIEntity, GameStateLocal
 };
-use core::sync::atomic::Ordering;
-use shared::constants::game_constants::{
-    SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT,
-    UI_REFERENCE_HEIGHT,
-};
-
-/// Helper to despawn ui entities given a mutable commands reference
-pub fn despawn_ui_helper(commands: &mut Commands, query: &Query<Entity, With<UIEntity>>) {
-    for entity in query {
-        commands.entity(entity).despawn();
-    }
-}
-
-/// Helper system to cleanup Game entities
-pub fn cleanup_game_entities(mut commands: Commands, query: Query<Entity, With<GameEntity>>) {
-    for entity in &query {
-        commands.entity(entity).despawn();
-    }
-}
+use crate::utils::utils::{despawn_ui};
+use crate::utils::ui::{spawn_score_bar};
 
 /// Applies pending check alignment
 pub fn apply_pending_check_alignment(
-    pending: Res<PendingCheckAlignment>,
-    shm_res: Option<Res<SharedMemResource>>,
+    pending: Res<PendingCommands>,
+    mut local_game_struct: ResMut<GameStateLocal>,
     camera_query: Query<&Transform, With<Camera3d>>,
     door_query: Query<(Entity, &BaseDoor, &Transform)>,
     mut commands: Commands,
@@ -38,18 +19,15 @@ pub fn apply_pending_check_alignment(
     ui_query: Query<Entity, With<UIEntity>>,
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
-    let Some(shm_res) = shm_res else { return };
-    let shm = shm_res.0.get();
-    let gs_game = &shm.game_structure_game;
-
     // Only proceed check alignment was requested
-    if !pending.0 {
+    if !pending.check_alignment {
         return;
     }
 
+    let gs_game= &mut local_game_struct.0;
+
     // Increment attempt counter
-    let attempts = gs_game.attempts.load(Ordering::Relaxed) + 1;
-    gs_game.attempts.store(attempts, Ordering::Relaxed);
+    gs_game.attempts += 1;
 
     let Ok(camera_transform) = camera_query.single() else {
         return;
@@ -66,7 +44,7 @@ pub fn apply_pending_check_alignment(
     let mut winning_door_alignment = -1.0;
 
     // Determine target door from SHM
-    let target_door_idx = gs_game.target_door.load(Ordering::Relaxed);
+    let target_door_idx = gs_game.target_door;
 
     for (_, door, door_transform) in &door_query {
         // Get door normal in world space
@@ -90,112 +68,64 @@ pub fn apply_pending_check_alignment(
         }
     }
 
-    // Store alignment for score bar animation AND SHM
-    gs_game
-        .current_alignment
-        .store(winning_door_alignment.to_bits(), Ordering::Relaxed);
+    // Store alignment for score bar animation and shm
+    gs_game.current_alignment = winning_door_alignment.to_bits();
 
     // Player wins
-    if winning_door_alignment > f32::from_bits(gs_game.cosine_alignment_threshold.load(Ordering::Relaxed)) {
+    if winning_door_alignment > f32::from_bits(gs_game.cosine_alignment_threshold) {
         // Player wins! Set win time in SHM to trigger win state
-        gs_game.win_time.store(time.elapsed().as_secs_f32().to_bits(), Ordering::Relaxed);
+        gs_game.win_time = time.elapsed().as_secs_f32().to_bits();
     }
 
     // Every alignment check triggers the door animation on the winning light/emissive
-    gs_game.is_animating.store(true, Ordering::Relaxed);
+    gs_game.is_animating = true;
     door_win_entities.animation_start_time = Some(time.elapsed());
 
     // Clean old UI and spawn new (Score Bar)
-    despawn_ui_helper(&mut commands, &ui_query);
+    despawn_ui(&mut commands, &ui_query);
     spawn_score_bar(&mut commands);
 }
 
-/// Spawns the energy score bar at the top center of the screen
-pub fn spawn_score_bar(commands: &mut Commands) {
-    // Container for the score bar (centered at top)
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                top: Val::Px(SCORE_BAR_TOP_OFFSET),
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            UIEntity,
-        ))
-        .with_children(|parent| {
-            // Outer border/background of the bar
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Percent(SCORE_BAR_WIDTH_PERCENT),
-                        height: Val::Px(SCORE_BAR_HEIGHT),
-                        border: UiRect::all(Val::Px(SCORE_BAR_BORDER_THICKNESS)),
-                        padding: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.5)), // Dark subtle background
-                    ScoreBarUI,
-                ))
-                .with_children(|bar_parent| {
-                    // Inner fill bar (starts empty)
-                    bar_parent.spawn((
-                        Node {
-                            width: Val::Percent(0.0), // Starts empty
-                            height: Val::Percent(100.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgba(0.2, 0.6, 1.0, 0.3)), // Dim cyan glow when empty
-                        ScoreBarFill,
-                    ));
-                });
-        });
-}
+
 
 /// Handles the light animation
 pub fn handle_door_animation(
     mut door_win_entities: ResMut<DoorWinEntities>,
-    shm_res: Option<Res<SharedMemResource>>,
+    mut local_game_struct: ResMut<GameStateLocal>,
     time: Res<Time>,
     mut light_query: Query<(&mut Visibility, &mut SpotLight), With<HoleLight>>,
-
     mut emissive_query: Query<
         (&mut Visibility, &MeshMaterial3d<StandardMaterial>),
         (With<HoleEmissive>, Without<HoleLight>),
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-
-    let Some(shm_res) = shm_res else { return };
-    let shm = shm_res.0.get();
-    let gs_game = &shm.game_structure_game;
+    let gs_game = &mut local_game_struct.0;
 
     // Animation is started by handle_animation_door_command (sets is_animating + entities)
-    let is_animating = gs_game.is_animating.load(Ordering::Relaxed);
-    if !is_animating {
+    if !gs_game.is_animating {
         return;
     }
 
     let Some(start_time) = door_win_entities.animation_start_time else {
         // No start time set — animation state is inconsistent, clear it
-        gs_game.is_animating.store(false, Ordering::Relaxed);
+        gs_game.is_animating = false;
         return;
     };
     let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
     // Config values from SHM
-    let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out.load(Ordering::Relaxed));
+    let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out);
     let stay_open_end =
-        fade_out_end + f32::from_bits(gs_game.door_anim_stay_open.load(Ordering::Relaxed));
+        fade_out_end + f32::from_bits(gs_game.door_anim_stay_open);
     let fade_in_end =
-        stay_open_end + f32::from_bits(gs_game.door_anim_fade_in.load(Ordering::Relaxed));
+        stay_open_end + f32::from_bits(gs_game.door_anim_fade_in);
 
     // Get light entity from door_win_entities (winning_light = SpotLight/HoleLight)
     let Some(light_entity) = door_win_entities.winning_light else {
         // Entity was despawned (e.g. by reset)
         door_win_entities.animation_start_time = None;
-        gs_game.is_animating.store(false, Ordering::Relaxed);
+        gs_game.is_animating = false;
         return;
     };
 
@@ -203,7 +133,7 @@ pub fn handle_door_animation(
     let Ok((mut light_visibility, mut spotlight)) = light_query.get_mut(light_entity) else {
         // Entity no longer valid 
         door_win_entities.animation_start_time = None;
-        gs_game.is_animating.store(false, Ordering::Relaxed);
+        gs_game.is_animating = false;
         return;
     };
 
@@ -216,14 +146,14 @@ pub fn handle_door_animation(
         1.0
     } else if elapsed < fade_in_end {
         // Phase 3: Fade In (Closing) - 1.0 to 0.0
-        1.0 - ((elapsed - stay_open_end) / f32::from_bits(gs_game.door_anim_fade_in.load(Ordering::Relaxed)))
+        1.0 - ((elapsed - stay_open_end) / f32::from_bits(gs_game.door_anim_fade_in))
     } else {
         // Animation finished
         0.0
     };
 
     // Max intensity values 
-    let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity.load(Ordering::Relaxed));
+    let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
 
     if intensity_factor > 0.0 {
         
@@ -271,33 +201,28 @@ pub fn handle_door_animation(
 
         // Clear animation timing state (winning entities persist for the round)
         door_win_entities.animation_start_time = None;
-        gs_game.is_animating.store(false, Ordering::Relaxed);
+        gs_game.is_animating = false;
     }
 }
-
 
 /// Updates the score bar fill and color during the door animation
 pub fn update_score_bar_animation(
     door_win_entities: Res<DoorWinEntities>,
-    shm_res: Option<Res<SharedMemResource>>,
+    mut local_game_struct: ResMut<GameStateLocal>,
     time: Res<Time>,
     mut fill_query: Query<(&mut Node, &mut BackgroundColor), With<ScoreBarFill>>,
 ) {
     let Ok((mut node, mut bg_color)) = fill_query.single_mut() else {
         return;
     };
-    let Some(shm_res) = shm_res else { return };
-    let shm = shm_res.0.get();
+  
+    let gs_game = &mut local_game_struct.0;
 
     // Get alignment score (normalized to 0.0 - 1.0 range from -1.0 - 1.0)
-    let alignment_bits = shm
-        .game_structure_game
-        .current_alignment
-        .load(Ordering::Relaxed);
-    let alignment = f32::from_bits(alignment_bits);
+    let alignment = f32::from_bits(gs_game.current_alignment);
     let alignment_normalized = ((alignment + 1.0) / 2.0).clamp(0.0, 1.0);
 
-    let is_animating = shm.game_structure_game.is_animating.load(Ordering::Relaxed);
+    let is_animating = gs_game.is_animating;
 
     // Calculate the bar width — only show fill during animation, otherwise empty
     let current_width = if is_animating {
@@ -307,21 +232,9 @@ pub fn update_score_bar_animation(
         };
         let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
-        let fade_out_end = f32::from_bits(
-            shm.game_structure_game
-                .door_anim_fade_out
-                .load(Ordering::Relaxed),
-        );
-        let stay_open_dur = f32::from_bits(
-            shm.game_structure_game
-                .door_anim_stay_open
-                .load(Ordering::Relaxed),
-        );
-        let fade_in_dur = f32::from_bits(
-            shm.game_structure_game
-                .door_anim_fade_in
-                .load(Ordering::Relaxed),
-        );
+        let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out);
+        let stay_open_dur = f32::from_bits(gs_game.door_anim_stay_open);
+        let fade_in_dur = f32::from_bits(gs_game.door_anim_fade_in);
 
         let total_duration = fade_out_end + stay_open_dur + fade_in_dur;
         let fill_progress = (elapsed / total_duration).clamp(0.0, 1.0);
@@ -356,18 +269,3 @@ pub fn update_score_bar_animation(
     *bg_color = BackgroundColor(color);
 }
 
-/// Updates UI scale based on window size for responsive design
-/// Targets 1080p (1920x1080) as the reference resolution
-pub fn update_ui_scale(mut ui_scale: ResMut<UiScale>, window_query: Query<&Window>) {
-    let Ok(window) = window_query.single() else {
-        return;
-    };
-
-    // Calculate scale based on window height (reference: 1080p)
-    let scale = window.height() / UI_REFERENCE_HEIGHT;
-
-    // Clamp scale to reasonable bounds (0.5x to 2.0x)
-    let clamped_scale = scale.clamp(0.5, 2.0);
-
-    ui_scale.0 = clamped_scale;
-}

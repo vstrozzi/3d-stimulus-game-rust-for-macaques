@@ -7,20 +7,22 @@ use bevy::{
     window::*,
 };
 
+
 // Re-export shared memory functions for WASM
 #[cfg(target_arch = "wasm32")]
 use shared::{create_shared_memory_wasm, WebSharedMemory};
 
-
+// TODO: use constants from structure
 use shared::constants::game_constants::REFRESH_RATE_HZ;
-
 use game_node::{
-    command_handler::CommandHandlerPlugin,
-    state_emitter::StateEmitterPlugin,
-    web_adapter::WebAdapterPlugin,
+    shared_memory::{
+        shared_memory_reader::SharedMemoryReaderPlugin,
+        shared_memory_writer::StateEmitterPlugin,
+        shared_memory_web_extension::WebAdapterPlugin,
+    },
     utils::{
         debug_functions::DebugFunctionsPlugin,
-        objects::{DoorWinEntities, RoundStartTimestamp},
+        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal},
         systems_logic::SystemsLogicPlugin,
     },
 };
@@ -40,7 +42,7 @@ fn main() {
     });
 
     let cursor = Some(CursorOptions {
-        grab_mode: CursorGrabMode::Locked,
+        grab_mode: CursorGrabMode::None,
         visible: false,
         ..default()
     });
@@ -54,14 +56,16 @@ fn main() {
             }),
             LogDiagnosticsPlugin::default(),
             FrameTimeDiagnosticsPlugin::default(),
-            CommandHandlerPlugin, // Read shared memory and init bevy resources, preupdate
+            SharedMemoryReaderPlugin, // Read shared memory and init bevy resources, preupdate
             SystemsLogicPlugin,   // Game logic systems, update
             DebugFunctionsPlugin, // Debug functions, update
             StateEmitterPlugin,   // Write shared memory, update timing, init timing resource, postupdate
             WebAdapterPlugin, 
         ))
+        // Fixed resources across trials
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ)) 
         .insert_resource(DoorWinEntities::default())
         .insert_resource(RoundStartTimestamp::default())
+        .insert_resource(GameStateLocal::default())
         .run();
 }

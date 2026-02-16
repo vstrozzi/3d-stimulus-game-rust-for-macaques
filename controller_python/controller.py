@@ -680,7 +680,6 @@ class MonkeyGameController(tk.Tk):
         self.triggers["retry"] = True
         
         try:
-            # 2. Pause Controller
             self.is_paused = True
             
             # 3. Get Current Trial Config

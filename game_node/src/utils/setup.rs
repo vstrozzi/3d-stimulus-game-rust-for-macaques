@@ -1,20 +1,17 @@
 //! Setup logic for the monkey_3d_game, with main setup plugin and functions for initializing the game scene and state.
 use bevy::prelude::*;
-
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::render::render_resource::PrimitiveTopology;
 
-use crate::log;
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
+// TODO: Add these to the shared memory
 use shared::constants::{
     lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},
     object_constants::GROUND_Y,
 };
-
-use crate::command_handler::SharedMemResource;
-use core::sync::atomic::Ordering;
+use crate::shared_memory::shared_memory_reader::SharedMemResource;
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid.
 /// Setup the persistent entitites across resets.
@@ -67,8 +64,6 @@ pub fn setup_environment(
         brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY, // Default start value
         affects_lightmapped_meshes: true,
     });
-
-    log!("🌍 Environment Setup Complete");
 }
 
 /// Setup a specific game trial.
@@ -83,6 +78,7 @@ pub fn setup_round(
     shm_res: Option<Res<SharedMemResource>>,
     mut round_start: ResMut<crate::utils::objects::RoundStartTimestamp>,
     time: Res<Time>,
+    mut local_game_struct: ResMut<GameStateLocal>,
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
     // Read shared memory
@@ -96,20 +92,20 @@ pub fn setup_round(
     // Set round start time
     round_start.0 = Some(time.elapsed());
 
-    // Read control values from sh,
+    // Read control values from sh
     let gs_ctrl = &shm.game_structure_control;
-    // Reset all fields of game structure
-    let gs_game = &shm.game_structure_game;
-    gs_game.reset_all_fields(gs_ctrl);
-
+    // Reset all fields of local game structure
+    let gs_game = &mut local_game_struct.0;
+    *gs_game = gs_ctrl.to_not_atomic();
+    
     // Update all the game resoruces based on the new configuration
     let mut decoration_seeds = [0u64; 3];
     for i in 0..3 {
-        decoration_seeds[i] = gs_game.decoration_seeds[i].load(Ordering::Relaxed);
+        decoration_seeds[i] = gs_game.decoration_seeds[i];
     }
 
-    let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity.load(Ordering::Relaxed));
-    let ambient_intensity = f32::from_bits(gs_game.ambient_brightness.load(Ordering::Relaxed));
+    let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity);
+    let ambient_intensity = f32::from_bits(gs_game.ambient_brightness);
     // Update Lights
     for mut spot in spotlight_query.iter_mut() {
         spot.intensity = main_intensity;
@@ -122,40 +118,40 @@ pub fn setup_round(
     // Reset the persistent camera position
     if let Ok(mut camera_transform) = camera_query.single_mut() {
         *camera_transform = Transform::from_xyz(
-            f32::from_bits(gs_ctrl.camera_x.load(Ordering::Relaxed)),
-            f32::from_bits(gs_ctrl.camera_y.load(Ordering::Relaxed)),
-            f32::from_bits(gs_ctrl.camera_z.load(Ordering::Relaxed)),
+            f32::from_bits(gs_game.camera_x),
+            f32::from_bits(gs_game.camera_y),
+            f32::from_bits(gs_game.camera_z),
         )
         .looking_at(Vec3::ZERO, Vec3::Y);
     }
 
-    gs_game.win_time.store(0, Ordering::Relaxed);
+    gs_game.win_time = 0;
 
-    let radius = f32::from_bits(gs_game.base_radius.load(Ordering::Relaxed));
-    let height = f32::from_bits(gs_game.height.load(Ordering::Relaxed));
-    let orient = f32::from_bits(gs_game.start_orient.load(Ordering::Relaxed));
+    let radius = f32::from_bits(gs_game.base_radius);
+    let height = f32::from_bits(gs_game.height);
+    let orient = f32::from_bits(gs_game.start_orient);
 
     let mut colors = [Color::WHITE; 3];
     for i in 0..3 {
-        let r = f32::from_bits(gs_game.colors[i * 4 + 0].load(Ordering::Relaxed));
-        let g = f32::from_bits(gs_game.colors[i * 4 + 1].load(Ordering::Relaxed));
-        let b = f32::from_bits(gs_game.colors[i * 4 + 2].load(Ordering::Relaxed));
-        let a = f32::from_bits(gs_game.colors[i * 4 + 3].load(Ordering::Relaxed));
+        let r = f32::from_bits(gs_game.colors[i * 4 + 0]);
+        let g = f32::from_bits(gs_game.colors[i * 4 + 1]);
+        let b = f32::from_bits(gs_game.colors[i * 4 + 2]);
+        let a = f32::from_bits(gs_game.colors[i * 4 + 3]);
         colors[i] = Color::srgba(r, g, b, a);
     }
 
     let mut decoration_counts = [0; 3];
     for i in 0..3 {
-        decoration_counts[i] = gs_game.decorations_count[i].load(Ordering::Relaxed);
+        decoration_counts[i] = gs_game.decorations_count[i];
     }
 
     let mut decoration_sizes = [0.0; 3];
     for i in 0..3 {
-        decoration_sizes[i] = f32::from_bits(gs_game.decorations_size[i].load(Ordering::Relaxed));
+        decoration_sizes[i] = f32::from_bits(gs_game.decorations_size[i]);
     }
 
     // Read target door from shared memory
-    let target_door = gs_game.target_door.load(Ordering::Relaxed) as usize;
+    let target_door = gs_game.target_door as usize;
     
     // Spawn the pyramid and capture winning door entities
     let (winning_light, winning_emissive) = spawn_pyramid(
@@ -176,8 +172,6 @@ pub fn setup_round(
     door_win_entities.winning_light = winning_light;
     door_win_entities.winning_emissive = winning_emissive;
     door_win_entities.animation_start_time = None;
-
-    log!("🎮 Round Started! target_door={}, winning_light={:?}, winning_emissive={:?}", target_door, winning_light, winning_emissive);
 }
 
 

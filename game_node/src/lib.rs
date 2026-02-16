@@ -10,18 +10,18 @@ use bevy::{
     window::*,
 };
 
-/// Command handler for receiving commands from the Controller
-pub mod command_handler;
-
-/// State emitter for sending game state to the Controller
-pub mod state_emitter;
-
-/// Web adapter for WASM integration
-pub mod web_adapter;
-
-/// Various utility functions, constants, and objects
+// Shared memory helpers
+pub mod shared_memory{
+    pub mod shared_memory_reader;
+    pub mod shared_memory_writer;
+    pub mod shared_memory_web_extension;
+}
+/// Game functions
 pub mod utils {
     pub mod camera;
+    pub mod utils;
+    pub mod ui;
+    pub mod handle_commands;
     pub mod debug_functions;
     pub mod game_functions;
     pub mod macros;

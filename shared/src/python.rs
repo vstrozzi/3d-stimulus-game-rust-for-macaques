@@ -104,7 +104,6 @@ impl SharedMemoryWrapper {
         reset: bool,
         blank_screen: bool,
         stop_rendering: bool,
-        resume_rendering: bool,
         animation_door: bool,
     ) {
         let shm = self.inner.get();
@@ -118,7 +117,6 @@ impl SharedMemoryWrapper {
         cmd.reset.store(reset, Ordering::Release);
         cmd.blank_screen.store(blank_screen, Ordering::Relaxed);
         cmd.stop_rendering.store(stop_rendering, Ordering::Relaxed);
-        cmd.resume_rendering.store(resume_rendering, Ordering::Relaxed);
         cmd.animation_door.store(animation_door, Ordering::Relaxed);
         
     }

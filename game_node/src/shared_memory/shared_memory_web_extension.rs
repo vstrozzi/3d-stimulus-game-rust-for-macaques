@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-use crate::command_handler::SharedMemResource;
+use crate::shared_memory_reader::SharedMemResource;
 
 #[cfg(target_arch = "wasm32")]
 use shared::open_shared_memory;

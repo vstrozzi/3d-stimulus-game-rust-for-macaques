@@ -79,26 +79,12 @@ pub fn handle_animation_door_command(
         return;
     }
 
-    let gs_game = &mut local_game_struct.0;
-
-    if gs_game.is_animating {
-        info!("Animation door command ignored: already animating");
-        return;
-    }
-
-    // Use the pre-populated winning door entities from setup_round
-    let found_light = door_win_entities.winning_light;
-    let found_emissive = door_win_entities.winning_emissive;
-
-    if found_light.is_none() && found_emissive.is_none() {
-        warn!("Animation door command: no winning door entities found (not populated in setup_round)");
-        return;
-    }
-
-    // Only start animation if we found at least one entity
+    // Start animation
     door_win_entities.animation_start_time = Some(time.elapsed());
-
-    gs_game.is_animating = true;
+    
+    // Set animation flag
+    
+    local_game_struct.0.is_animating = true;
 }
 
 /// System to apply blank screen command - spawns/despawns a black fullscreen overlay

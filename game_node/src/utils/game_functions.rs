@@ -17,7 +17,6 @@ pub fn apply_pending_check_alignment(
     mut commands: Commands,
     time: Res<Time>,
     ui_query: Query<Entity, With<UIEntity>>,
-    mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
     // Only proceed check alignment was requested
     if !pending.check_alignment {
@@ -77,10 +76,6 @@ pub fn apply_pending_check_alignment(
         gs_game.win_time = time.elapsed().as_secs_f32().to_bits();
     }
 
-    // Every alignment check triggers the door animation on the winning light/emissive
-    gs_game.is_animating = true;
-    door_win_entities.animation_start_time = Some(time.elapsed());
-
     // Clean old UI and spawn new (Score Bar)
     despawn_ui(&mut commands, &ui_query);
     spawn_score_bar(&mut commands);
@@ -101,17 +96,17 @@ pub fn handle_door_animation(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let gs_game = &mut local_game_struct.0;
-
-    // Animation is started by handle_animation_door_command (sets is_animating + entities)
-    if !gs_game.is_animating {
+    if !gs_game.is_animating {   
         return;
     }
 
     let Some(start_time) = door_win_entities.animation_start_time else {
-        // No start time set — animation state is inconsistent, clear it
-        gs_game.is_animating = false;
         return;
     };
+
+    println!("handle_door_animation: is_animating = {}", gs_game.is_animating);
+    println!("Elapsed time since animation start: {:.2} seconds", (time.elapsed() - start_time).as_secs_f32());
+
     let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
     // Config values from SHM
@@ -122,25 +117,22 @@ pub fn handle_door_animation(
         stay_open_end + f32::from_bits(gs_game.door_anim_fade_in);
 
     // Get light entity from door_win_entities (winning_light = SpotLight/HoleLight)
+    if door_win_entities.winning_light.is_none() {
+        return;
+    }
     let Some(light_entity) = door_win_entities.winning_light else {
-        // Entity was despawned (e.g. by reset)
-        door_win_entities.animation_start_time = None;
-        gs_game.is_animating = false;
         return;
     };
 
     // Get light visibility and component
     let Ok((mut light_visibility, mut spotlight)) = light_query.get_mut(light_entity) else {
-        // Entity no longer valid 
-        door_win_entities.animation_start_time = None;
-        gs_game.is_animating = false;
         return;
     };
 
     // Calculate animation intensity (0.0 to 1.0)
     let intensity_factor = if elapsed < fade_out_end {
         // Phase 1: Fade Out (Opening) - 0.0 to 1.0
-        elapsed / fade_out_end
+        elapsed / fade_out_end + 0.0001 // Add to avoid edge case
     } else if elapsed < stay_open_end {
         // Phase 2: Stay Open - 1.0
         1.0
@@ -152,14 +144,13 @@ pub fn handle_door_animation(
         0.0
     };
 
-    // Max intensity values 
-    let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
-
     if intensity_factor > 0.0 {
         
         // Animation is in progress — update spotlight
         *light_visibility = Visibility::Visible;
 
+        // Max intensity values 
+        let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
         let light_intensity = max_spotlight_intensity * intensity_factor;
         spotlight.intensity = light_intensity;
 
@@ -222,10 +213,8 @@ pub fn update_score_bar_animation(
     let alignment = f32::from_bits(gs_game.current_alignment);
     let alignment_normalized = ((alignment + 1.0) / 2.0).clamp(0.0, 1.0);
 
-    let is_animating = gs_game.is_animating;
-
     // Calculate the bar width — only show fill during animation, otherwise empty
-    let current_width = if is_animating {
+    let current_width = if gs_game.is_animating {
         // During animation: fill progressively based on animation progress
         let Some(start_time) = door_win_entities.animation_start_time else {
             return;

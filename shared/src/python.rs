@@ -28,7 +28,7 @@ impl SharedMemoryWrapper {
     /// Read the full game structure from shared memory as a dictionary.
     /// It reads one written by the game.
     /// Some values need to be read as f32 from bits
-    fn read_game_structure(&self) -> PyResult<Py<PyAny>> {
+    fn read_game_state(&self) -> PyResult<Py<PyAny>> {
         let shm = self.inner.get();
         let gs= &shm.game_structure_game;
 
@@ -59,12 +59,12 @@ impl SharedMemoryWrapper {
             dict.set_item("main_spotlight_intensity", f32::from_bits(gs.main_spotlight_intensity.load(Ordering::Relaxed)))?;
             dict.set_item("ambient_brightness", f32::from_bits(gs.ambient_brightness.load(Ordering::Relaxed)))?;
             dict.set_item("max_spotlight_intensity", f32::from_bits(gs.max_spotlight_intensity.load(Ordering::Relaxed)))?;
-            dict.set_item("decoration_count", [
+            dict.set_item("decorations_count", [
                 gs.decorations_count[0].load(Ordering::Relaxed),
                 gs.decorations_count[1].load(Ordering::Relaxed),
                 gs.decorations_count[2].load(Ordering::Relaxed)
             ])?;
-            dict.set_item("decoration_size", [
+            dict.set_item("decorations_size", [
                 f32::from_bits(gs.decorations_size[0].load(Ordering::Relaxed)),
                 f32::from_bits(gs.decorations_size[1].load(Ordering::Relaxed)),
                 f32::from_bits(gs.decorations_size[2].load(Ordering::Relaxed))
@@ -121,9 +121,8 @@ impl SharedMemoryWrapper {
         
     }
 
-    /// Write game structure config fields to shared memory.
-    /// Write in controller region
-    fn write_game_structure(
+    /// Write game structure config fields to controller shared memory.
+    fn write_game_state(
         &mut self,
         decoration_seeds: [u64; 3],
         base_radius: f32,
@@ -131,15 +130,24 @@ impl SharedMemoryWrapper {
         start_orient: f32,
         target_door: u32,
         colors: Vec<Vec<f32>>,
+        main_spotlight_intensity: f32,
+        ambient_brightness: f32,
+        max_spotlight_intensity: f32,
         decorations_count: [u32; 3],
         decorations_size: [f32; 3],
         cosine_alignment_threshold: f32,
         door_anim_fade_out: f32,
         door_anim_stay_open: f32,
         door_anim_fade_in: f32,
-        main_spotlight_intensity: f32,
-        ambient_brightness: f32,
-        max_spotlight_intensity: f32,
+        frame_number: u64,
+        elapsed_secs: f32,
+        camera_radius: f32,
+        camera_position: [f32; 3],
+        nr_attempts: u32,
+        cosine_alignment: f32,
+        current_angle: f32,
+        is_animating: bool,
+        win_elapsed_secs: f32,
     ) -> PyResult<()> {
         if colors.len() != 3 || colors.iter().any(|face| face.len() != 4) {
             return Err(PyErr::new::<PyValueError, _>(format!(
@@ -151,6 +159,7 @@ impl SharedMemoryWrapper {
         let shm = self.inner.get();
         let gs = &shm.game_structure_control;
 
+        // Fixed vars in trial
         for i in 0..3 {
             gs.decoration_seeds[i].store(decoration_seeds[i], Ordering::Relaxed);
         }
@@ -165,23 +174,36 @@ impl SharedMemoryWrapper {
                 gs.colors[index].store(value.to_bits(), Ordering::Relaxed);
             }
         }
-        
-        // Store decorations
+
+        gs.main_spotlight_intensity.store(main_spotlight_intensity.to_bits(), Ordering::Relaxed);
+        gs.ambient_brightness.store(ambient_brightness.to_bits(), Ordering::Relaxed);
+        gs.max_spotlight_intensity.store(max_spotlight_intensity.to_bits(), Ordering::Relaxed);
+
         for i in 0..3 {
             gs.decorations_count[i].store(decorations_count[i], Ordering::Relaxed);
             gs.decorations_size[i].store(decorations_size[i].to_bits(), Ordering::Relaxed);
         }
+
+        // Dynamic vars in trial
         gs.cosine_alignment_threshold.store(cosine_alignment_threshold.to_bits(), Ordering::Relaxed);
         gs.door_anim_fade_out.store(door_anim_fade_out.to_bits(), Ordering::Relaxed);
         gs.door_anim_stay_open.store(door_anim_stay_open.to_bits(), Ordering::Relaxed);
         gs.door_anim_fade_in.store(door_anim_fade_in.to_bits(), Ordering::Relaxed);
-        gs.main_spotlight_intensity.store(main_spotlight_intensity.to_bits(), Ordering::Relaxed);
-        gs.ambient_brightness.store(ambient_brightness.to_bits(), Ordering::Relaxed);
-        gs.max_spotlight_intensity.store(max_spotlight_intensity.to_bits(), Ordering::Relaxed);
+        gs.frame_number.store(frame_number, Ordering::Relaxed);
+        gs.elapsed_secs.store(elapsed_secs.to_bits(), Ordering::Relaxed);
+        gs.camera_radius.store(camera_radius.to_bits(), Ordering::Relaxed);
+        gs.camera_x.store(camera_position[0].to_bits(), Ordering::Relaxed);
+        gs.camera_y.store(camera_position[1].to_bits(), Ordering::Relaxed);
+        gs.camera_z.store(camera_position[2].to_bits(), Ordering::Relaxed);
+        gs.attempts.store(nr_attempts, Ordering::Relaxed);
+        gs.current_alignment.store(cosine_alignment.to_bits(), Ordering::Relaxed);
+        gs.current_angle.store(current_angle.to_bits(), Ordering::Relaxed);
+        gs.is_animating.store(is_animating, Ordering::Relaxed);
+        gs.win_time.store(win_elapsed_secs.to_bits(), Ordering::Relaxed);
+
         Ok(())
     }
-
-
+    
 }
 
 #[pymodule]

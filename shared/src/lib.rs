@@ -26,7 +26,6 @@ pub struct SharedCommands {
     pub rotate_right: AtomicBool,
     pub zoom_in: AtomicBool,
     pub zoom_out: AtomicBool,
-    /// Trigger once
     pub check_alignment: AtomicBool,
     pub reset: AtomicBool,
     pub blank_screen: AtomicBool,
@@ -90,7 +89,6 @@ macro_rules! shared_game_state {
             pub decorations_size: [$U32; 3],
             pub decoration_seeds: [$U64; 3],
 
-            
             pub cosine_alignment_threshold: $U32,
 
             // Animation Durations
@@ -223,7 +221,6 @@ impl SharedGameState {
             self.decorations_count[i].store(other.decorations_count[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_size[i].store(other.decorations_size[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decoration_seeds[i].store(other.decoration_seeds[i].load(Ordering::Relaxed), Ordering::Relaxed);
-
         }
         self.cosine_alignment_threshold.store(other.cosine_alignment_threshold.load(Ordering::Relaxed), Ordering::Relaxed);
         self.door_anim_fade_out.store(other.door_anim_fade_out.load(Ordering::Relaxed), Ordering::Relaxed);

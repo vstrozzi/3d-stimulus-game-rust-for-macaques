@@ -244,6 +244,9 @@ impl SharedGameState {
         self.win_time.store(other.win_time.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
+    pub fn reset_all_fields_to_default(&self) {
+        self.reset_all_fields(&SharedGameState::new());
+    }
 
     pub fn to_not_atomic(&self) -> SharedGameStateLocal {
         SharedGameStateLocal {

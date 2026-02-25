@@ -1,5 +1,5 @@
 //! Python bindings for shared memroy of native.rs
-use crate::{SharedMemoryHandle, create_shared_memory};
+use crate::{SharedMemoryHandle, create_shared_memory, SharedGameState};
 use std::sync::atomic::Ordering;
 use pyo3::exceptions::PyValueError;
 use pyo3::{prelude::*};
@@ -26,71 +26,15 @@ impl SharedMemoryWrapper {
     }
 
     /// Read the full game structure from shared memory as a dictionary.
-    /// It reads one written by the game.
-    /// Some values need to be read as f32 from bits
     fn read_game_state(&self) -> PyResult<Py<PyAny>> {
         let shm = self.inner.get();
         let gs= &shm.game_structure_game;
 
-        Python::attach(|py| {
-            let dict = pyo3::types::PyDict::new(py);
+        read_game_state(gs)
+    }
 
-            // Fixed vars in trial
-            dict.set_item("decoration_seeds", [
-                gs.decoration_seeds[0].load(Ordering::Relaxed),
-                gs.decoration_seeds[1].load(Ordering::Relaxed),
-                gs.decoration_seeds[2].load(Ordering::Relaxed),
-            ])?;
-            dict.set_item("base_radius", f32::from_bits(gs.base_radius.load(Ordering::Relaxed)))?;
-            dict.set_item("height", f32::from_bits(gs.height.load(Ordering::Relaxed)))?;
-            dict.set_item("start_orient", f32::from_bits(gs.start_orient.load(Ordering::Relaxed)))?;
-            dict.set_item("target_door", gs.target_door.load(Ordering::Relaxed))?;
-            let mut colors: Vec<Vec<f32>> = Vec::with_capacity(3);  // Colors as 3x4 list
-            for face_idx in 0..3 {
-                let mut face_colors: Vec<f32> = Vec::with_capacity(4);
-                for channel_idx in 0..4 {
-                    let index = face_idx * 4 + channel_idx;
-                    face_colors.push(f32::from_bits(gs.colors[index].load(Ordering::Relaxed)));
-                }
-                colors.push(face_colors);
-            }
-            dict.set_item("colors", colors)?;
-
-            dict.set_item("main_spotlight_intensity", f32::from_bits(gs.main_spotlight_intensity.load(Ordering::Relaxed)))?;
-            dict.set_item("ambient_brightness", f32::from_bits(gs.ambient_brightness.load(Ordering::Relaxed)))?;
-            dict.set_item("max_spotlight_intensity", f32::from_bits(gs.max_spotlight_intensity.load(Ordering::Relaxed)))?;
-            dict.set_item("decorations_count", [
-                gs.decorations_count[0].load(Ordering::Relaxed),
-                gs.decorations_count[1].load(Ordering::Relaxed),
-                gs.decorations_count[2].load(Ordering::Relaxed)
-            ])?;
-            dict.set_item("decorations_size", [
-                f32::from_bits(gs.decorations_size[0].load(Ordering::Relaxed)),
-                f32::from_bits(gs.decorations_size[1].load(Ordering::Relaxed)),
-                f32::from_bits(gs.decorations_size[2].load(Ordering::Relaxed))
-            ])?;
-
-            // Dynamic vars in trial
-            dict.set_item("cosine_alignment_threshold", f32::from_bits(gs.cosine_alignment_threshold.load(Ordering::Relaxed)))?;
-            dict.set_item("door_anim_fade_out", f32::from_bits(gs.door_anim_fade_out.load(Ordering::Relaxed)))?;
-            dict.set_item("door_anim_stay_open", f32::from_bits(gs.door_anim_stay_open.load(Ordering::Relaxed)))?;
-            dict.set_item("door_anim_fade_in", f32::from_bits(gs.door_anim_fade_in.load(Ordering::Relaxed)))?;
-            dict.set_item("frame_number", gs.frame_number.load(Ordering::Relaxed))?;
-            dict.set_item("elapsed_secs", f32::from_bits(gs.elapsed_secs.load(Ordering::Relaxed)))?;
-            dict.set_item("camera_radius", f32::from_bits(gs.camera_radius.load(Ordering::Relaxed)))?;
-            dict.set_item("camera_position", vec![
-                f32::from_bits(gs.camera_x.load(Ordering::Relaxed)),
-                f32::from_bits(gs.camera_y.load(Ordering::Relaxed)),
-                f32::from_bits(gs.camera_z.load(Ordering::Relaxed)),
-            ])?;
-            dict.set_item("nr_attempts", gs.attempts.load(Ordering::Relaxed))?;
-            dict.set_item("cosine_alignment", f32::from_bits(gs.current_alignment.load(Ordering::Relaxed)))?;
-            dict.set_item("current_angle", f32::from_bits(gs.current_angle.load(Ordering::Relaxed)))?;
-            dict.set_item("is_animating", gs.is_animating.load(Ordering::Relaxed))?;
-            dict.set_item("win_elapsed_secs", f32::from_bits(gs.win_time.load(Ordering::Relaxed)))?;
-
-            Ok(dict.into())
-        })
+    fn read_default_game_state(&mut self) -> Result<pyo3::Py<pyo3::PyAny>, pyo3::PyErr>{        
+        read_game_state(&SharedGameState::new())
     }
 
     /// Write commands to shared memory.
@@ -203,8 +147,74 @@ impl SharedMemoryWrapper {
 
         Ok(())
     }
-    
+
 }
+
+
+// Read a game state as a python dict
+fn read_game_state(gs: &SharedGameState) -> PyResult<Py<PyAny>>{
+    Python::attach(|py| {
+        let dict = pyo3::types::PyDict::new(py);
+
+        // Fixed vars in trial
+        dict.set_item("decoration_seeds", [
+            gs.decoration_seeds[0].load(Ordering::Relaxed),
+            gs.decoration_seeds[1].load(Ordering::Relaxed),
+            gs.decoration_seeds[2].load(Ordering::Relaxed),
+        ])?;
+        dict.set_item("base_radius", f32::from_bits(gs.base_radius.load(Ordering::Relaxed)))?;
+        dict.set_item("height", f32::from_bits(gs.height.load(Ordering::Relaxed)))?;
+        dict.set_item("start_orient", f32::from_bits(gs.start_orient.load(Ordering::Relaxed)))?;
+        dict.set_item("target_door", gs.target_door.load(Ordering::Relaxed))?;
+        let mut colors: Vec<Vec<f32>> = Vec::with_capacity(3);  // Colors as 3x4 list
+        for face_idx in 0..3 {
+            let mut face_colors: Vec<f32> = Vec::with_capacity(4);
+            for channel_idx in 0..4 {
+                let index = face_idx * 4 + channel_idx;
+                face_colors.push(f32::from_bits(gs.colors[index].load(Ordering::Relaxed)));
+            }
+            colors.push(face_colors);
+        }
+        dict.set_item("colors", colors)?;
+
+        dict.set_item("main_spotlight_intensity", f32::from_bits(gs.main_spotlight_intensity.load(Ordering::Relaxed)))?;
+        dict.set_item("ambient_brightness", f32::from_bits(gs.ambient_brightness.load(Ordering::Relaxed)))?;
+        dict.set_item("max_spotlight_intensity", f32::from_bits(gs.max_spotlight_intensity.load(Ordering::Relaxed)))?;
+        dict.set_item("decorations_count", [
+            gs.decorations_count[0].load(Ordering::Relaxed),
+            gs.decorations_count[1].load(Ordering::Relaxed),
+            gs.decorations_count[2].load(Ordering::Relaxed)
+        ])?;
+        dict.set_item("decorations_size", [
+            f32::from_bits(gs.decorations_size[0].load(Ordering::Relaxed)),
+            f32::from_bits(gs.decorations_size[1].load(Ordering::Relaxed)),
+            f32::from_bits(gs.decorations_size[2].load(Ordering::Relaxed))
+        ])?;
+
+        // Dynamic vars in trial
+        dict.set_item("cosine_alignment_threshold", f32::from_bits(gs.cosine_alignment_threshold.load(Ordering::Relaxed)))?;
+        dict.set_item("door_anim_fade_out", f32::from_bits(gs.door_anim_fade_out.load(Ordering::Relaxed)))?;
+        dict.set_item("door_anim_stay_open", f32::from_bits(gs.door_anim_stay_open.load(Ordering::Relaxed)))?;
+        dict.set_item("door_anim_fade_in", f32::from_bits(gs.door_anim_fade_in.load(Ordering::Relaxed)))?;
+        dict.set_item("frame_number", gs.frame_number.load(Ordering::Relaxed))?;
+        dict.set_item("elapsed_secs", f32::from_bits(gs.elapsed_secs.load(Ordering::Relaxed)))?;
+        dict.set_item("camera_radius", f32::from_bits(gs.camera_radius.load(Ordering::Relaxed)))?;
+        dict.set_item("camera_position", vec![
+            f32::from_bits(gs.camera_x.load(Ordering::Relaxed)),
+            f32::from_bits(gs.camera_y.load(Ordering::Relaxed)),
+            f32::from_bits(gs.camera_z.load(Ordering::Relaxed)),
+        ])?;
+        dict.set_item("nr_attempts", gs.attempts.load(Ordering::Relaxed))?;
+        dict.set_item("cosine_alignment", f32::from_bits(gs.current_alignment.load(Ordering::Relaxed)))?;
+        dict.set_item("current_angle", f32::from_bits(gs.current_angle.load(Ordering::Relaxed)))?;
+        dict.set_item("is_animating", gs.is_animating.load(Ordering::Relaxed))?;
+        dict.set_item("win_elapsed_secs", f32::from_bits(gs.win_time.load(Ordering::Relaxed)))?;
+
+        Ok(dict.into())
+    })
+}
+
+
 
 #[pymodule]
 #[pyo3(name = "monkey_shared")]

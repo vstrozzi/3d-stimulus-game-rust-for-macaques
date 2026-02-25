@@ -120,7 +120,7 @@ class MonkeyGameController:
 
         self._running = True
 
-        # Keyboard listener runs in its own thread, callbacks fire on press/release
+        # Keyboard listener runs in its own threa
         self.listener = keyboard.Listener(
             on_press=self.on_key_press,
             on_release=self.on_key_release
@@ -152,7 +152,8 @@ class MonkeyGameController:
             if self.check_has_won(state):
                 self.current_trial_index = (self.current_trial_index + 1) % self.trials_length
 
-            # Load the trial to reset
+            # Load the default game state and apply current config
+            state = self.shm_wrapper.read_default_game_state()
             state = self.write_config_on_state(self.trials[self.current_trial_index], state)
 
         # TODO: Handle inputs
@@ -229,6 +230,10 @@ class MonkeyGameController:
         # Add pressed keys to current preset
         self.pressed_keys.add(key)
 
+    # Update a state to the default values not set by config
+    def state_update_to_default(self, state):
+
+        print(f"Transitioning from {event.transition.source} to {event.transition.dest} on event '{event.event.name}'")
 
 if __name__ == "__main__":
     app = MonkeyGameController()

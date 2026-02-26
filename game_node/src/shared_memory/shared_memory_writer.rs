@@ -25,8 +25,7 @@ pub fn increment_timing(
 ) {
     // Increment the frames regardless
     counter.0 += 1;
-
-    println!("Frame: {}, Elapsed: {:?}, Stop Rendering: {}", counter.0, round_start.0, game_conditions.stop_rendering);
+    
     if game_conditions.stop_rendering {
         return;
     }

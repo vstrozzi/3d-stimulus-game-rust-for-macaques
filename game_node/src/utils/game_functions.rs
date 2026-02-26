@@ -104,9 +104,6 @@ pub fn handle_door_animation(
         return;
     };
 
-    println!("handle_door_animation: is_animating = {}", gs_game.is_animating);
-    println!("Elapsed time since animation start: {:.2} seconds", (time.elapsed() - start_time).as_secs_f32());
-
     let elapsed = (time.elapsed() - start_time).as_secs_f32();
 
     // Config values from SHM
@@ -203,38 +200,41 @@ pub fn update_score_bar_animation(
     time: Res<Time>,
     mut fill_query: Query<(&mut Node, &mut BackgroundColor), With<ScoreBarFill>>,
 ) {
+    let gs_game = &mut local_game_struct.0;
+
     let Ok((mut node, mut bg_color)) = fill_query.single_mut() else {
         return;
     };
-  
-    let gs_game = &mut local_game_struct.0;
-
     // Get alignment score (normalized to 0.0 - 1.0 range from -1.0 - 1.0)
     let alignment = f32::from_bits(gs_game.current_alignment);
     let alignment_normalized = ((alignment + 1.0) / 2.0).clamp(0.0, 1.0);
 
     // Calculate the bar width — only show fill during animation, otherwise empty
-    let current_width = if gs_game.is_animating {
-        // During animation: fill progressively based on animation progress
-        let Some(start_time) = door_win_entities.animation_start_time else {
-            return;
+    if gs_game.is_animating {
+        let current_width = {
+            // During animation: fill progressively based on animation progress
+            let Some(start_time) = door_win_entities.animation_start_time else {
+                return;
+            };
+            let elapsed = (time.elapsed() - start_time).as_secs_f32();
+
+            let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out);
+            let stay_open_dur = f32::from_bits(gs_game.door_anim_stay_open);
+            let fade_in_dur = f32::from_bits(gs_game.door_anim_fade_in);
+
+            let total_duration = fade_out_end + stay_open_dur + fade_in_dur;
+            let fill_progress = (elapsed / total_duration).clamp(0.0, 1.0);
+            let target_width = alignment_normalized * 100.0;
+            fill_progress * target_width
         };
-        let elapsed = (time.elapsed() - start_time).as_secs_f32();
-
-        let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out);
-        let stay_open_dur = f32::from_bits(gs_game.door_anim_stay_open);
-        let fade_in_dur = f32::from_bits(gs_game.door_anim_fade_in);
-
-        let total_duration = fade_out_end + stay_open_dur + fade_in_dur;
-        let fill_progress = (elapsed / total_duration).clamp(0.0, 1.0);
-        let target_width = alignment_normalized * 100.0;
-        fill_progress * target_width
-    } else {
+        node.width = Val::Percent(current_width);
+    }  else {
         // Not animating: bar stays empty
-        0.0
+        *bg_color = BackgroundColor(Color::srgba(0.2, 0.6, 1.0, 0.3)); // Dim cyan glow when empty
+        node.width = Val::Percent(0.0);
+        return;
     };
 
-    node.width = Val::Percent(current_width);
 
     // Color gradient based on alignment quality (cyan -> yellow -> white)
     let color = if alignment_normalized < 0.5 {

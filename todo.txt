@@ -1,21 +1,3 @@
-# Add to each trials the following informaiton in trials.jsonl
-    - nr_attempts_to_win
-    - nr_attempts_suggestion
-    - nr_attempts_to_retroceed
-    - elapsed_time_to_retroceed
-    - elapsed_time_to_win
-
-# Controller add the following behaviours
-    - load everything and issue black screen command + rendering_paused
-    - wait for R command 
-    - issue black_screen comand i.e. rmeove current black screen and load trial
-    - play the game and save the start state written + command send, and then read state + commands sent, indexed by the frame numbrs.
-      Save it in a json file per trials
-    - When playing the game:
-        - Advance the game to next trial when nr_attempts <= nr_attempts_to_win and elapsed_time <= elapsed_time_to_win
-        - Stay in same trial i.e. reload it when nr_attempts_to_retroceed > nr_attempts > nr_attempts_to_win or elapsed_time_to_retroceed > elapsed_time > elapsed_time_to_win
-        - Downgrade to previous level when nr_attempts >= nr_attempts_to_retroceed or elapsed_time >= elapsed_time_to_retroceed
-        - When nr_attempts < nr_attempts_suggestion, when pressing check issue animation_door and stop_rendering, wait until you read that game_animation = False from gae state to issue again stop_rendering (i.e. resume)
-        - When nr_attempts >= nr_attempts_suggestion only issue check.
-
-        
+# Add light check when no more trial to illuminate all doors at the same time with smaller light  (keep same timing)
+# Clean the bar after animating
+# Log only relant information i.e. dump whole at the beginning then only things that changes

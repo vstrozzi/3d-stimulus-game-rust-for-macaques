@@ -1,4 +1,6 @@
 //! Setup logic for the monkey_3d_game, with main setup plugin and functions for initializing the game scene and state.
+use std::time::Duration;
+
 use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
@@ -77,7 +79,6 @@ pub fn setup_round(
     ambient_light: Option<ResMut<GlobalAmbientLight>>,
     shm_res: Option<Res<SharedMemResource>>,
     mut round_start: ResMut<crate::utils::objects::RoundStartTimestamp>,
-    time: Res<Time>,
     mut local_game_struct: ResMut<GameStateLocal>,
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
@@ -90,7 +91,7 @@ pub fn setup_round(
     let shm = shm_res.0.get();
 
     // Set round start time
-    round_start.0 = Some(time.elapsed());
+    round_start.0 = Some(Duration::from_secs(0));
 
     // Read control values from sh
     let gs_ctrl = &shm.game_structure_control;

@@ -82,8 +82,7 @@ pub fn read_shared_memory_commands(
     }
 
     // New rendering control commands
-    pending_commands.stop_rendering = shm.commands.stop_rendering.load(Ordering::Relaxed);
-    
+    pending_commands.stop_rendering = shm.commands.stop_rendering.load(Ordering::Relaxed);    
     pending_commands.animation_door = shm.commands.animation_door.load(Ordering::Relaxed);
     pending_commands.check_alignment = shm.commands.check_alignment.load(Ordering::Relaxed);
     pending_commands.blank_screen = shm.commands.blank_screen.load(Ordering::Relaxed);

@@ -1,8 +1,8 @@
 //! This module collects game state and writes it to atomic shared memory
 
-use bevy::prelude::*;
-use crate::shared_memory::shared_memory_reader::{SharedMemResource, PendingCommands};
-use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal};
+use bevy::{prelude::*};
+use crate::shared_memory::shared_memory_reader::{SharedMemResource};
+use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameConditions};
 
 // Count frames since beginning of game
 #[derive(Resource, Default)]
@@ -17,20 +17,30 @@ impl Plugin for StateEmitterPlugin {
     }
 }
 
-pub fn increment_frame_counter(
+pub fn increment_timing(
     mut counter: ResMut<FrameCounterResource>,
-    pending: Res<PendingCommands>,
+    time: Res<Time>,
+    mut round_start: ResMut<RoundStartTimestamp>,
+    game_conditions: Res<GameConditions>,
 ) {
-    if pending.stop_rendering {
+    // Increment the frames regardless
+    counter.0 += 1;
+
+    println!("Frame: {}, Elapsed: {:?}, Stop Rendering: {}", counter.0, round_start.0, game_conditions.stop_rendering);
+    if game_conditions.stop_rendering {
         return;
     }
-    counter.0 += 1;
+
+
+    // Add the delta 
+    if let Some(ref mut total) = round_start.0 {
+        *total += time.delta();
+    }
 }
 
 // Update local memory
 pub fn update_shared_memory_local(
     mut game_state_local: ResMut<GameStateLocal>,
-    time: Res<Time>,
     frame_counter: Res<FrameCounterResource>,
     round_start: Res<RoundStartTimestamp>,
     camera_query: Query<&Transform, With<Camera3d>>,
@@ -38,7 +48,7 @@ pub fn update_shared_memory_local(
 ) {
     game_state_local.0.frame_number = frame_counter.0;
     game_state_local.0.elapsed_secs = if let Some(start) = round_start.0 {
-        (time.elapsed() - start).as_secs_f32().to_bits()
+        start.as_secs_f32().to_bits()
     } else {
         0.0_f32.to_bits()
     };

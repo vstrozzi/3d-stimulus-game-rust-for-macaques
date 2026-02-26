@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
 use crate::shared_memory::shared_memory_writer::FrameCounterResource;
-use crate::utils::objects::{DoorWinEntities, RotableComponent, PersistentCamera, RoundStartTimestamp, UIEntity, BlankScreen, GameEntity, GameStateLocal};
+use crate::utils::objects::{DoorWinEntities, RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions, UIEntity, BlankScreen, GameEntity, GameStateLocal};
 use crate::utils::ui::{spawn_score_bar};
 use crate::utils::utils::{spawn_blank_screen, despawn_all_game_and_ui};
 use crate::utils::setup::{setup_round};
@@ -19,7 +19,6 @@ pub fn handle_reset_command(
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
-    time: Res<Time>,
     mut frame_counter: ResMut<FrameCounterResource>,
     camera_query: Query<&mut Transform, With<PersistentCamera>>,
     game_entities: Query<Entity, With<GameEntity>>,
@@ -58,7 +57,6 @@ pub fn handle_reset_command(
     ambient_light,
     shm,
     round_start,
-    time,
     local_game_struct,
     door_win_entities,
     );
@@ -68,7 +66,7 @@ pub fn handle_reset_command(
 }
 
 
-/// System to handle animation door command
+/// Handle animation door command
 pub fn handle_animation_door_command(
     pending: ResMut<PendingCommands>,
     mut door_win_entities: ResMut<DoorWinEntities>,
@@ -83,28 +81,31 @@ pub fn handle_animation_door_command(
     door_win_entities.animation_start_time = Some(time.elapsed());
     
     // Set animation flag
-    
     local_game_struct.0.is_animating = true;
 }
 
-/// System to apply blank screen command - spawns/despawns a black fullscreen overlay
+/// Apply blank screen command
 pub fn handle_blank_screen(
     mut commands: Commands,
     pending: Res<PendingCommands>,
     overlay_query: Query<Entity, With<BlankScreen>>,
+    mut game_conditions: ResMut<GameConditions>,
+
 ) {
-    if pending.blank_screen {
-        // Modulo through blank screen state
-        if overlay_query.is_empty() {
-            // Spawn black fullscreen overlay
-            spawn_blank_screen(&mut commands);
-            info!("Blank screen activated");
-        } else {
-            // Despawn the overlay
-            for entity in overlay_query.iter() {
-                commands.entity(entity).despawn();
-            }
-            info!("Blank screen deactivated");
+    if !pending.blank_screen {
+        return;
+    }
+
+    game_conditions.blank_screen = !game_conditions.blank_screen;
+    // Modulo through blank screen state
+    if overlay_query.is_empty() {
+        // Spawn black fullscreen overlay
+        spawn_blank_screen(&mut commands);
+        info!("Blank screen activated");
+    } else {
+        // Despawn the overlay
+        for entity in overlay_query.iter() {
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -137,4 +138,18 @@ pub fn handle_zoom(
 
     transform.translation = Vec3::new(radius * yaw.sin(), CAMERA_3D_INITIAL_Y, radius * yaw.cos());
     transform.look_at(Vec3::ZERO, Vec3::Y);
+}
+
+
+/// Apply stop rendering
+pub fn handle_stop_rendering(
+    pending: Res<PendingCommands>,
+    mut game_conditions: ResMut<GameConditions>,
+) {
+    if !pending.stop_rendering {
+        return;
+    }
+    // Modulo through blank screen state
+    game_conditions.stop_rendering = !game_conditions.stop_rendering;
+    
 }

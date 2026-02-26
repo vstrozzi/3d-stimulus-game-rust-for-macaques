@@ -22,7 +22,7 @@ use game_node::{
     },
     utils::{
         debug_functions::DebugFunctionsPlugin,
-        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal},
+        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions},
         systems_logic::SystemsLogicPlugin,
     },
 };
@@ -66,6 +66,7 @@ fn main() {
         .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ)) 
         .insert_resource(DoorWinEntities::default())
         .insert_resource(RoundStartTimestamp::default())
+        .insert_resource(GameConditions::default())
         .insert_resource(GameStateLocal::default())
         .run();
 }

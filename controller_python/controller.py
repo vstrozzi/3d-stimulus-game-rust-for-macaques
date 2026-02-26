@@ -6,8 +6,6 @@ import os
 from pynput import keyboard
 from enum import Enum, auto
 
-from transitions import Machine
-
 try:
     import monkey_shared
 except ImportError:
@@ -49,7 +47,6 @@ def validate_data_on_schema(schema, data):
 
 # Load trials from the path as dictionary
 def load_trials(trials_path="trials.jsonl"):
-    """Load trials from JSONL file."""
     trials = []
     # Try relative to script directory first
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -74,21 +71,6 @@ def load_trials(trials_path="trials.jsonl"):
 
 class MonkeyGameController:
     def __init__(self):
-        # Game State FSM
-        self.states = ['init', 'playing', 'won']
-        self.machine = Machine(model=self, states=self.states, initial='init')
-
-        # Transitions
-        self.machine.add_transition('start_game', 'init', 'playing', conditions='', after='trigger_reset_config')
-
-        self.machine.add_transition('win_game', 'playing', 'won',)
-        self.machine.add_transition('start_anim', 'won', 'animating')
-        self.machine.add_transition('stop_rendering', '*', 'stop_rendering')
-        self.machine.add_transition('start_blank', 'animating', 'blank_screen')
-        self.machine.add_transition('reset_game', 'blank_screen', 'playing')
-        self.machine.add_transition('force_reset', '*', 'playing')
-        self.machine.add_transition('force_anim', 'playing', 'animating')
-
         self.pressed_keys = set()
         # Get the shared memory
         try:
@@ -126,46 +108,42 @@ class MonkeyGameController:
             on_release=self.on_key_release
         )
         self.listener.start()
-
-    def run(self):
-        while self._running:
-            self.loop()
-            time.sleep(POLLING_RATE_FSM / 1000.0)
-        self.listener.stop()
+        
 
     def loop(self):
-        # Read game state
-        state = self.shm_wrapper.read_game_state()
-        # Inputs are read with interruput
-        current_frame = state.get("frame_number", 0)
+        while self._running:
+            # Read game state
+            state = self.shm_wrapper.read_game_state()
+            # Inputs are read with interruput
+            current_frame = state.get("frame_number", 0)
 
-        # Check if the game has updated
-        if current_frame == self.current_frame:
-            # Reloop since no update by the game
-            return
+            # Check if the game has updated
+            if current_frame == self.current_frame:
+                # Reloop since no update by the game
+                time.sleep(0.001)
+                continue
 
-        print(state["win_elapsed_secs"])
-        self.current_frame = current_frame
-        # Process inputs that redefines the state
-        if self.triggers["reset"]:
-            # If won advance the state
-            if self.check_has_won(state):
-                self.current_trial_index = (self.current_trial_index + 1) % self.trials_length
+            self.current_frame = current_frame
+            # Process inputs that redefines the state
+            if self.triggers["reset"]:
+                # If won advance the state
+                if self.check_has_won(state):
+                    self.current_trial_index = (self.current_trial_index + 1) % self.trials_length
 
-            # Load the default game state and apply current config
-            state = self.shm_wrapper.read_default_game_state()
-            state = self.write_config_on_state(self.trials[self.current_trial_index], state)
+                # Load the default game state and apply current config
+                state = self.shm_wrapper.read_default_game_state()
+                state = self.write_config_on_state(self.trials[self.current_trial_index], state)
+            
+            # TODO: Handle inputs
+            #if self.inputs["check"]:
+            print(state)
+            # Write commands
+            self.write_game_state(state)
+            # Write game state
+            self.write_commands()
 
-        # TODO: Handle inputs
-        #if self.inputs["check"]:
-
-        print(self.inputs, self.triggers)
-        # Write commands
-        self.write_game_state(state)
-        # Write game state
-        self.write_commands()
-
-        #Clean commands
+            time.sleep(POLLING_RATE_FSM / 1000.0)
+        self.listener.stop()
 
     def reset_commands(self):
         self.inputs = {k: False for k in self.inputs}
@@ -173,6 +151,7 @@ class MonkeyGameController:
 
     def write_commands(self):
         # Write to SHM
+        print(f"Writing commands: inputs={self.inputs}, triggers={self.triggers}"   )
         self.shm_wrapper.write_commands(**self.inputs, **self.triggers)
 
         # Clear triggers
@@ -202,13 +181,14 @@ class MonkeyGameController:
         if hasattr(key, 'char'):
             if key.char == 'd': self.triggers["animation_door"] = False
             if key.char == 'r': self.triggers["reset"] = False
+            if key.char == 'b': self.triggers["blank_screen"] = False
+            if key.char == 'p': self.triggers["stop_rendering"] = False
 
     def on_key_press(self, key):
         if key == keyboard.Key.left: self.inputs["rotate_left"] = True
-        elif key == keyboard.Key.right: self.inputs["rotate_right"] = True
-
+        if key == keyboard.Key.right: self.inputs["rotate_right"] = True
         if key == keyboard.Key.up: self.inputs["zoom_in"] = True
-        elif key == keyboard.Key.down: self.inputs["zoom_out"] = True
+        if key == keyboard.Key.down: self.inputs["zoom_out"] = True
 
         if key == keyboard.Key.space:
             self.triggers["check"] = True
@@ -217,26 +197,19 @@ class MonkeyGameController:
             if key.char == 'd':
                 self.triggers["animation_door"] = True
             if key.char == 'r' and key not in self.pressed_keys:
-                print(self.pressed_keys)
-                print("Reset trigger toggled")
                 self.triggers["reset"] = True
             if key.char == 'b':
-                self.triggers["blank_screen"] = not self.triggers["blank_screen"]
+                self.triggers["blank_screen"] = True
             if key.char == 'p':
-                self.triggers["stop_rendering"] = not self.triggers["stop_rendering"]
+                self.triggers["stop_rendering"] = True
             if key.char == 'q':
                 self._running = False
 
         # Add pressed keys to current preset
         self.pressed_keys.add(key)
-
-    # Update a state to the default values not set by config
-    def state_update_to_default(self, state):
-
-        print(f"Transitioning from {event.transition.source} to {event.transition.dest} on event '{event.event.name}'")
-
+        
 if __name__ == "__main__":
     app = MonkeyGameController()
-    app.run()
+    app.loop()
 
 

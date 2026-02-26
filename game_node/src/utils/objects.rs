@@ -28,7 +28,23 @@ pub struct DecorationSet {
 }
 
 
-/// The current winning doors and animation state
+/// Resource for the current conditions the system across trials
+#[derive(Resource)]
+pub struct GameConditions{
+    pub stop_rendering: bool,
+    pub blank_screen: bool,
+}
+
+impl Default for GameConditions {
+    fn default() -> Self {
+        GameConditions {
+            stop_rendering: false,
+            blank_screen: false,
+        }
+    }
+}
+
+/// Resource current winning doors and animation state
 #[derive(Resource, Default)]
 pub struct DoorWinEntities {
     // Winning door entities (set once per round in setup_round)
@@ -50,6 +66,8 @@ impl Default for GameStateLocal {
         GameStateLocal(SharedGameState::default().to_not_atomic())
     }
 }
+
+///
 
 /// Pyramid component
 #[derive(Component)]

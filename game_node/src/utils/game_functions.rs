@@ -9,7 +9,7 @@ use crate::utils::utils::{despawn_ui};
 use crate::utils::ui::{spawn_score_bar};
 
 /// Applies pending check alignment
-pub fn apply_pending_check_alignment(
+pub fn handle_check_alignment(
     pending: Res<PendingCommands>,
     mut local_game_struct: ResMut<GameStateLocal>,
     camera_query: Query<&Transform, With<Camera3d>>,

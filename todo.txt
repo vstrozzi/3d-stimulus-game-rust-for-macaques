@@ -1,5 +1,13 @@
 
 # Log only relant information i.e. dump whole at the beginning then only things that changes
 
-# Web part
-# PErsonalize the game selections trials
+# Fix the elapsed time to retroceed and advance
+#   
+# Logging of changing information does not shown uodates aeside frames and elasped + frames sart RT 129
+
+# Editor of the level selection 
+
+# Is animatingsometins does not stop
+
+# Then we need to implment wasm version please
+# Use CLaude

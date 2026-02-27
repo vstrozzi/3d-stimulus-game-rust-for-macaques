@@ -224,10 +224,24 @@ class MonkeyGameController:
     def write_game_state(self, state):
         self.shm_wrapper.write_game_state(**state)
 
+    # Fields from the game state that change frame-to-frame and are worth logging
+    LOGGED_STATE_FIELDS = {
+        "frame_number",
+        "elapsed_secs",
+        "camera_radius",
+        "camera_position",
+        "nr_attempts",
+        "cosine_alignment",
+        "current_angle",
+        "is_animating",
+        "win_elapsed_secs",
+    }
+
     def log_frame(self, state_read, commands_sent):
         """Record one frame of data in the trial log."""
+        filtered_state = {k: v for k, v in state_read.items() if k in self.LOGGED_STATE_FIELDS}
         entry = {
-            "state_read": state_read,
+            "state_read": filtered_state,
             "commands_sent": commands_sent,
         }
         self.frame_log[str(self.current_frame)] = entry
@@ -306,6 +320,8 @@ class MonkeyGameController:
 
             time.sleep(POLLING_RATE_TIME_S / 1000.0)
             self.game_time_unresponsive = 0.0
+
+            print(state)
         self.listener.stop()
         print("[FSM] Controller stopped.")
 

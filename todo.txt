@@ -1,3 +1,5 @@
-# Add light check when no more trial to illuminate all doors at the same time with smaller light  (keep same timing)
-# Clean the bar after animating
+
 # Log only relant information i.e. dump whole at the beginning then only things that changes
+
+# Web part
+# PErsonalize the game selections trials

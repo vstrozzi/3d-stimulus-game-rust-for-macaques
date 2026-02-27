@@ -31,6 +31,7 @@ pub struct SharedCommands {
     pub blank_screen: AtomicBool,
     pub stop_rendering: AtomicBool,
     pub animation_door: AtomicBool,
+    pub animation_all_door: AtomicBool,
 }
 
 impl SharedCommands {
@@ -45,6 +46,7 @@ impl SharedCommands {
             blank_screen: AtomicBool::new(false),
             stop_rendering: AtomicBool::new(false),
             animation_door: AtomicBool::new(false),
+            animation_all_door: AtomicBool::new(false),
         }
     }
 }

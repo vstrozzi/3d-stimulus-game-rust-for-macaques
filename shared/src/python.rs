@@ -49,6 +49,7 @@ impl SharedMemoryWrapper {
         blank_screen: bool,
         stop_rendering: bool,
         animation_door: bool,
+        animation_all_door: bool,
     ) {
         let shm = self.inner.get();
         let cmd = &shm.commands;
@@ -62,6 +63,7 @@ impl SharedMemoryWrapper {
         cmd.blank_screen.store(blank_screen, Ordering::Relaxed);
         cmd.stop_rendering.store(stop_rendering, Ordering::Relaxed);
         cmd.animation_door.store(animation_door, Ordering::Relaxed);
+        cmd.animation_all_door.store(animation_all_door, Ordering::Relaxed);
         
     }
 

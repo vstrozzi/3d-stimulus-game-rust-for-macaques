@@ -123,6 +123,7 @@ class MonkeyGameController:
             "blank_screen": False,
             "stop_rendering": False,
             "animation_door": False,
+            "animation_all_door": False,    
         }
 
         # Trial configuration
@@ -214,7 +215,8 @@ class MonkeyGameController:
             "reset": False,
             "blank_screen": False,
             "stop_rendering": False,
-            "animation_door": False
+            "animation_door": False,
+            "animation_all_door": False,    
         }
         self.shm_wrapper.write_commands(**cmds)
         return cmds
@@ -333,7 +335,9 @@ class MonkeyGameController:
             "reset": True,
             "blank_screen": True,
             "stop_rendering": True,
-            "animation_door": False})
+            "animation_door": False,
+            "animation_all_door": False,    
+            })
 
         # Initialise per-trial tracking
         self.nr_attempts = 0
@@ -359,7 +363,9 @@ class MonkeyGameController:
                 "reset": False,
                 "blank_screen": True,
                 "stop_rendering": True,
-                "animation_door": False}
+                "animation_door": False,
+                "animation_all_door": False,    
+            }
             )
             self.fsm_state = ControllerState.PLAYING
             self.log_frame(state, cmds)
@@ -396,12 +402,10 @@ class MonkeyGameController:
                     "reset": False,
                     "blank_screen": False,
                     "stop_rendering": True,
-                    "animation_door": True}
+                    "animation_door": True,
+                    "animation_all_door": False}
                 )
 
-                self.nr_attempts += 1
-                self.fsm_state = ControllerState.WAITING_ANIMATION_START
-                print("[FSM] → WAITING_ANIMATION_START")
             else:
                 # Real check
                 print(f"[PLAY] Attempt {self.nr_attempts + 1} >= {suggestion_threshold} → check")
@@ -414,10 +418,13 @@ class MonkeyGameController:
                     "reset": False,
                     "blank_screen": False,
                     "stop_rendering": False,
-                    "animation_door": False}
+                    "animation_door": True,
+                    "animation_all_door": True}
                 )
-                self.nr_attempts += 1
 
+            self.nr_attempts += 1
+            self.fsm_state = ControllerState.WAITING_ANIMATION_START
+            print("[FSM] → WAITING_ANIMATION_START")
             self.write_commands(cmds)
             self.log_frame(state, cmds)
             return 
@@ -442,7 +449,8 @@ class MonkeyGameController:
             "reset": False,
             "blank_screen": False,
             "stop_rendering": False,
-            "animation_door": False}
+            "animation_door": False,
+            "animation_all_door": False}
         )
         self.write_game_state(state)
         self.log_frame(state, cmds)
@@ -464,7 +472,8 @@ class MonkeyGameController:
                 "reset": False,
                 "blank_screen": False,
                 "stop_rendering": True,
-                "animation_door": False}
+                "animation_door": False,
+                "animation_all_door": False}
             )
             self.write_game_state(state)
             self.log_frame(state, cmds)
@@ -482,7 +491,8 @@ class MonkeyGameController:
             "reset": False,
             "blank_screen": False,
             "stop_rendering": False,
-            "animation_door": False}
+            "animation_door": False,
+            "animation_all_door": False}
         )
         self.write_game_state(state)
         self.log_frame(state, cmds)

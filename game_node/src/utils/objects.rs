@@ -52,6 +52,10 @@ pub struct DoorWinEntities {
     pub winning_emissive: Option<Entity>,    
     // Animation timing
     pub animation_start_time: Option<Duration>,
+
+    // Animate all doors flag
+    pub animate_all: bool,
+    pub color: Color,
 }
 
 /// Resource to track the start time of the current trial

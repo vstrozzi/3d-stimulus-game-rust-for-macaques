@@ -1,87 +1,7 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
 
-use crate::shared_memory::shared_memory_reader::PendingCommands;
-use crate::utils::objects::{
-    BaseDoor, DoorWinEntities, HoleEmissive, HoleLight, ScoreBarFill, UIEntity, GameStateLocal
-};
-use crate::utils::utils::{despawn_ui};
-use crate::utils::ui::{spawn_score_bar};
-
-/// Applies pending check alignment
-pub fn handle_check_alignment(
-    pending: Res<PendingCommands>,
-    mut local_game_struct: ResMut<GameStateLocal>,
-    camera_query: Query<&Transform, With<Camera3d>>,
-    door_query: Query<(Entity, &BaseDoor, &Transform)>,
-    mut commands: Commands,
-    time: Res<Time>,
-    ui_query: Query<Entity, With<UIEntity>>,
-) {
-    // Only proceed check alignment was requested
-    if !pending.check_alignment {
-        return;
-    }
-
-    let gs_game= &mut local_game_struct.0;
-
-    // Increment attempt counter
-    gs_game.attempts += 1;
-
-    let Ok(camera_transform) = camera_query.single() else {
-        return;
-    };
-
-    // Get local camera direction
-    let camera_forward = camera_transform.forward();
-
-    // Project camera forward to XZ plane
-    let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize();
-
-    let mut best_alignment = -1.0;
-    let mut _best_door_index = 0;
-    let mut winning_door_alignment = -1.0;
-
-    // Determine target door from SHM
-    let target_door_idx = gs_game.target_door;
-
-    for (_, door, door_transform) in &door_query {
-        // Get door normal in world space
-        let door_normal_world = door_transform.rotation * door.normal;
-
-        // Project to XZ plane
-        let door_normal_xz = Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize();
-
-        // Calculate alignment (dot product)
-        let alignment = door_normal_xz.dot(camera_forward_xz);
-
-        // Most positive = door facing toward camera (from outside)
-        if alignment > best_alignment {
-            best_alignment = alignment;
-            _best_door_index = door.door_index;
-        }
-
-        // Save the alignment for the target door
-        if door.door_index as u32 == target_door_idx {
-            winning_door_alignment = alignment;
-        }
-    }
-
-    // Store alignment for score bar animation and shm
-    gs_game.current_alignment = winning_door_alignment.to_bits();
-
-    // Player wins
-    if winning_door_alignment > f32::from_bits(gs_game.cosine_alignment_threshold) {
-        // Player wins! Set win time in SHM to trigger win state
-        gs_game.win_time = time.elapsed().as_secs_f32().to_bits();
-    }
-
-    // Clean old UI and spawn new (Score Bar)
-    despawn_ui(&mut commands, &ui_query);
-    spawn_score_bar(&mut commands);
-}
-
-
+use crate::utils::objects::{DoorWinEntities, HoleEmissive, HoleLight, ScoreBarFill, GameStateLocal};
 
 /// Handles the light animation
 pub fn handle_door_animation(
@@ -96,7 +16,7 @@ pub fn handle_door_animation(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let gs_game = &mut local_game_struct.0;
-    if !gs_game.is_animating {   
+    if !gs_game.is_animating {
         return;
     }
 
@@ -108,23 +28,8 @@ pub fn handle_door_animation(
 
     // Config values from SHM
     let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out);
-    let stay_open_end =
-        fade_out_end + f32::from_bits(gs_game.door_anim_stay_open);
-    let fade_in_end =
-        stay_open_end + f32::from_bits(gs_game.door_anim_fade_in);
-
-    // Get light entity from door_win_entities (winning_light = SpotLight/HoleLight)
-    if door_win_entities.winning_light.is_none() {
-        return;
-    }
-    let Some(light_entity) = door_win_entities.winning_light else {
-        return;
-    };
-
-    // Get light visibility and component
-    let Ok((mut light_visibility, mut spotlight)) = light_query.get_mut(light_entity) else {
-        return;
-    };
+    let stay_open_end = fade_out_end + f32::from_bits(gs_game.door_anim_stay_open);
+    let fade_in_end = stay_open_end + f32::from_bits(gs_game.door_anim_fade_in);
 
     // Calculate animation intensity (0.0 to 1.0)
     let intensity_factor = if elapsed < fade_out_end {
@@ -141,57 +46,73 @@ pub fn handle_door_animation(
         0.0
     };
 
-    if intensity_factor > 0.0 {
-        
-        // Animation is in progress — update spotlight
-        *light_visibility = Visibility::Visible;
+    let is_active = intensity_factor > 0.0;
+    let target_visibility = if is_active { Visibility::Visible } else { Visibility::Hidden };
 
-        // Max intensity values 
+    // Determine target intensity
+    let target_intensity = if is_active {
         let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
-        let light_intensity = max_spotlight_intensity * intensity_factor;
-        spotlight.intensity = light_intensity;
-
-        // Also update emissive material
-        if let Some(emissive_entity) = door_win_entities.winning_emissive {
-            if let Ok((mut emissive_visibility, material_handle)) =
-                emissive_query.get_mut(emissive_entity)
-            {
-                *emissive_visibility = Visibility::Visible;
-
-                if let Some(material) = materials.get_mut(&material_handle.0) {
-                    let light_color = spotlight.color.to_linear();
-                    material.emissive = LinearRgba::new(
-                        light_color.red * light_intensity,
-                        light_color.green * light_intensity,
-                        light_color.blue * light_intensity,
-                        1.0,
-                    );
-                }
-            }
+        let base_intensity = max_spotlight_intensity * intensity_factor;
+        
+        if door_win_entities.animate_all {
+            base_intensity / 10.0
+        } else {
+            base_intensity
         }
     } else {
-        // Animation finished — hide spotlight
-        *light_visibility = Visibility::Hidden;
-        spotlight.intensity = 0.0;
+        0.0
+    };
 
-        // Hide emissive and clear state
-        if let Some(emissive_entity) = door_win_entities.winning_emissive {
-            if let Ok((mut emissive_visibility, material_handle)) =
-                emissive_query.get_mut(emissive_entity)
-            {
-                *emissive_visibility = Visibility::Hidden;
+    // Helper closures to prevent repeating the mutation logic
+    let update_light = |visibility: &mut Visibility, spotlight: &mut SpotLight, color: Color| {
+        *visibility = target_visibility;
+        spotlight.intensity = target_intensity;
+        spotlight.color = color;
+    };
 
-                if let Some(material) = materials.get_mut(&material_handle.0) {
-                    material.emissive = LinearRgba::new(0.0, 0.0, 0.0, 0.0);
+    let update_emissive = |
+        visibility: &mut Visibility,
+        material_handle: &MeshMaterial3d<StandardMaterial>,
+        materials: &mut Assets<StandardMaterial>,
+        color: Color
+    | {
+        *visibility = target_visibility;
+        if let Some(material) = materials.get_mut(&material_handle.0) {
+            material.emissive = color.to_linear();
+        }
+    };
+
+    // Color it in RED
+    if door_win_entities.animate_all {
+        for (mut vis, mut spotlight) in light_query.iter_mut() {
+            update_light(&mut vis, &mut spotlight, door_win_entities.color);
+        }
+        for (mut vis, mat_handle) in emissive_query.iter_mut() {
+            update_emissive(&mut vis, mat_handle, &mut materials, door_win_entities.color);
+        }
+    } else {
+        // Single entity branch
+        if let Some(light_entity) = door_win_entities.winning_light {
+            if let Ok((mut vis, mut spotlight)) = light_query.get_mut(light_entity) {
+                update_light(&mut vis, &mut spotlight, door_win_entities.color);
+
+                if let Some(emissive_entity) = door_win_entities.winning_emissive {
+                    if let Ok((mut evis, mat_handle)) = emissive_query.get_mut(emissive_entity) {
+                        // Inherit color from the spotlight in the single case
+                        update_emissive(&mut evis, mat_handle, &mut materials, door_win_entities.color);
+                    }
                 }
             }
         }
+    }
 
-        // Clear animation timing state (winning entities persist for the round)
+    // Unify state cleanup at the end
+    if !is_active {
         door_win_entities.animation_start_time = None;
         gs_game.is_animating = false;
     }
 }
+
 
 /// Updates the score bar fill and color during the door animation
 pub fn update_score_bar_animation(
@@ -200,6 +121,10 @@ pub fn update_score_bar_animation(
     time: Res<Time>,
     mut fill_query: Query<(&mut Node, &mut BackgroundColor), With<ScoreBarFill>>,
 ) {
+    // Don't animate bar if animate all door
+    if door_win_entities.animate_all {
+        return;
+    }
     let gs_game = &mut local_game_struct.0;
 
     let Ok((mut node, mut bg_color)) = fill_query.single_mut() else {
@@ -209,7 +134,6 @@ pub fn update_score_bar_animation(
     let alignment = f32::from_bits(gs_game.current_alignment);
     let alignment_normalized = ((alignment + 1.0) / 2.0).clamp(0.0, 1.0);
 
-    // Calculate the bar width — only show fill during animation, otherwise empty
     if gs_game.is_animating {
         let current_width = {
             // During animation: fill progressively based on animation progress

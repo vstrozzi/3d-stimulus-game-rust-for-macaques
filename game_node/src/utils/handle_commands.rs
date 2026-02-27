@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
 use crate::shared_memory::shared_memory_writer::FrameCounterResource;
-use crate::utils::objects::{DoorWinEntities, RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions, UIEntity, BlankScreen, GameEntity, GameStateLocal};
+use crate::utils::objects::{DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions, UIEntity, BlankScreen, GameEntity, GameStateLocal};
 use crate::utils::ui::{spawn_score_bar};
-use crate::utils::utils::{spawn_blank_screen, despawn_all_game_and_ui};
+use crate::utils::utils::{spawn_blank_screen, despawn_ui, despawn_all_game_and_ui};
 use crate::utils::setup::{setup_round};
 
 // TODO: add these variables to shared
@@ -79,10 +79,98 @@ pub fn handle_animation_door_command(
 
     // Start animation
     door_win_entities.animation_start_time = Some(time.elapsed());
-    
+    door_win_entities.animate_all = pending.animation_all_door;
     // Set animation flag
     local_game_struct.0.is_animating = true;
+    
 }
+
+/// Applies pending check alignment and change colors of doors
+pub fn handle_check_alignment(
+    pending: Res<PendingCommands>,
+    mut local_game_struct: ResMut<GameStateLocal>,
+    camera_query: Query<&Transform, With<Camera3d>>,
+    door_query: Query<(Entity, &BaseDoor, &Transform)>,
+    mut commands: Commands,
+    time: Res<Time>,
+    ui_query: Query<Entity, With<UIEntity>>,
+    mut door_win_entities: ResMut<DoorWinEntities>,
+) {
+    // Only proceed check alignment was requested
+    if !pending.check_alignment {
+        return;
+    }
+
+    let gs_game= &mut local_game_struct.0;
+
+    // Increment attempt counter
+    gs_game.attempts += 1;
+
+    let Ok(camera_transform) = camera_query.single() else {
+        return;
+    };
+
+    // Get local camera direction
+    let camera_forward = camera_transform.forward();
+
+    // Project camera forward to XZ plane
+    let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize();
+
+    let mut best_alignment = -1.0;
+    let mut _best_door_index = 0;
+    let mut winning_door_alignment = -1.0;
+
+    // Determine target door from SHM
+    let target_door_idx = gs_game.target_door;
+
+    for (_, door, door_transform) in &door_query {
+        // Get door normal in world space
+        let door_normal_world = door_transform.rotation * door.normal;
+
+        // Project to XZ plane
+        let door_normal_xz = Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize();
+
+        // Calculate alignment (dot product)
+        let alignment = door_normal_xz.dot(camera_forward_xz);
+
+        // Most positive = door facing toward camera (from outside)
+        if alignment > best_alignment {
+            best_alignment = alignment;
+            _best_door_index = door.door_index;
+        }
+
+        // Save the alignment for the target door
+        if door.door_index as u32 == target_door_idx {
+            winning_door_alignment = alignment;
+        }
+    }
+
+    // Store alignment for score bar animation and shm
+    gs_game.current_alignment = winning_door_alignment.to_bits();
+
+    // Player wins
+    if winning_door_alignment > f32::from_bits(gs_game.cosine_alignment_threshold) {
+        // Player wins! Set win time in SHM to trigger win state
+        gs_game.win_time = time.elapsed().as_secs_f32().to_bits();
+        // Set colors of door to green
+        door_win_entities.color = Color::srgba(0.0, 1.0, 0.0, 1.0);
+        door_win_entities.animate_all = false; // Animate only the winning door
+    }
+    // No win, all door colored of red
+    else if door_win_entities.animate_all {
+        door_win_entities.color = Color::srgba(1.0, 0.0, 0.0, 1.0);
+    } 
+    // No win, one door colored of light (hint)
+    else {
+        // Animate only the winning door with the same color based on alignment
+        door_win_entities.color = Color::srgba(1.0, 1.0, 1.0, 1.0);
+    }
+
+    // Clean old UI and spawn new (Score Bar)
+    despawn_ui(&mut commands, &ui_query);
+    spawn_score_bar(&mut commands);
+}
+
 
 /// Apply blank screen command
 pub fn handle_blank_screen(

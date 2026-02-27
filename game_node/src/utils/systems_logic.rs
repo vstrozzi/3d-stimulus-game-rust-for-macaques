@@ -6,11 +6,11 @@ use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state,
 use crate::utils::camera::{spawn_persistent_camera};
 use crate::utils::ui::{update_ui_scale};
 use crate::utils::game_functions::{
-    handle_check_alignment, handle_door_animation,
+    handle_door_animation,
     update_score_bar_animation,
 };
 use crate::utils::setup::setup_environment;
-use crate::utils::handle_commands::{ handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
+use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
 
 // Plugin for managing all the game systems.config
 pub struct SystemsLogicPlugin;
@@ -43,9 +43,11 @@ impl Plugin for SystemsLogicPlugin {
                     handle_stop_rendering,
                     handle_rotation,
                     handle_zoom,
-                    handle_check_alignment,
+                    handle_check_alignment.after(handle_animation_door_command),
                     ),
             )
+            // Commands that needs to chain
+
             // Animations
             .add_systems(
                 Update,

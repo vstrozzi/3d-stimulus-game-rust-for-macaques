@@ -30,7 +30,7 @@ CONTROLLER_META_FIELDS = {
 
 # Game-state schema (fields written to shared memory)
 state_schema = {
-    "decoration_seeds": [int],
+    "decorations_seeds": [int],
     "base_radius": float,
     "height": float,
     "start_orient": float,
@@ -38,6 +38,7 @@ state_schema = {
     "colors": [[int]],
     "decorations_count": [int],
     "decorations_size": [float],
+    "decorations_shape": [int], 
     "cosine_alignment_threshold": float,
     "door_anim_fade_out": int,
     "door_anim_stay_open": int,

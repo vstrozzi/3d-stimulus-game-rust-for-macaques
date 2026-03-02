@@ -1,13 +1,14 @@
 //! Logic for spawning the pyramid base with interactive doors.
 
 use crate::utils::objects::{
-    BaseDoor, BaseFrame, Decoration, DecorationSet, DecorationShape, GameEntity, HoleEmissive,
+    BaseDoor, BaseFrame, Decoration, DecorationSet, GameEntity, HoleEmissive,
     HoleLight, Pyramid, RotableComponent,
 };
 use bevy::prelude::*;
+use shared::DecorationShape;
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 
-use rand::{Rng, RngCore};
+use rand::{Rng};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
@@ -367,6 +368,7 @@ pub fn spawn_pyramid(
     p_colors: [Color; 3],
     decoration_counts: [u32; 3],
     decoration_sizes: [f32; 3],
+    decoration_shapes: [DecorationShape; 3],
     target_door: usize,
 ) -> (Option<Entity>, Option<Entity>) {
     let height_y = p_height;
@@ -462,6 +464,7 @@ pub fn spawn_pyramid(
             br,
             decoration_counts[i],
             decoration_sizes[i],
+            decoration_shapes[i]
         )));
 
         // Set B (Top-Right Triangle)
@@ -472,6 +475,7 @@ pub fn spawn_pyramid(
             tr,
             decoration_counts[i],
             decoration_sizes[i],
+            decoration_shapes[i]
         )));
     }
 
@@ -536,7 +540,7 @@ pub fn spawn_pyramid(
             ))
             .id();
 
-        // Apply Set A to the first virtual triangle (TL, BL, BR)
+        // Apply Set A to the first triangle (TL, BL, BR)
         if let Some(ref set_a) = dec_sets[i * 2] {
             spawn_decorations_from_set(
                 commands,
@@ -551,7 +555,7 @@ pub fn spawn_pyramid(
             );
         }
 
-        // Apply Set B to the second virtual triangle (TL, BR, TR)
+        // Apply Set B to the second triangle (TL, BR, TR)
         if let Some(ref set_b) = dec_sets[i * 2 + 1] {
             spawn_decorations_from_set(
                 commands,
@@ -582,7 +586,8 @@ fn generate_decoration_set(
     corner1: Vec3,
     corner2: Vec3,
     count: u32,
-    size: f32, // New Arg
+    size: f32,
+    decoration_shape: DecorationShape,
 ) -> DecorationSet {
     // Determine the number of decorations to generate.
     let decoration_count = count as usize;
@@ -600,13 +605,7 @@ fn generate_decoration_set(
     let mut successful_placements = 0;
     let mut total_attempts = 0;
 
-    // Choose a random shape type, which will be the same for all decorations on this face.
-    let shape = match rng.next_u64() % 4 {
-        0 => DecorationShape::Circle,
-        1 => DecorationShape::Square,
-        2 => DecorationShape::Star,
-        _ => DecorationShape::Triangle,
-    };
+    let shape = decoration_shape;
 
     // Choose a random vibrant color, which will be the same for all decorations on this face.
     let color = Color::srgb(

@@ -6,6 +6,7 @@ use bevy::asset::RenderAssetUsages;
 use bevy::mesh::Indices;
 use bevy::render::render_resource::PrimitiveTopology;
 
+use shared::{DecorationShape};
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 // TODO: Add these to the shared memory
@@ -102,7 +103,7 @@ pub fn setup_round(
     // Update all the game resoruces based on the new configuration
     let mut decoration_seeds = [0u64; 3];
     for i in 0..3 {
-        decoration_seeds[i] = gs_game.decoration_seeds[i];
+        decoration_seeds[i] = gs_game.decorations_seeds[i];
     }
 
     let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity);
@@ -147,8 +148,16 @@ pub fn setup_round(
     }
 
     let mut decoration_sizes = [0.0; 3];
+    let mut decoration_shapes = [DecorationShape::Circle; 3];
     for i in 0..3 {
         decoration_sizes[i] = f32::from_bits(gs_game.decorations_size[i]);
+        decoration_shapes[i] = match gs_game.decorations_shape[i] {
+            0 => DecorationShape::Circle,
+            1 => DecorationShape::Square,
+            2 => DecorationShape::Star,
+            3 => DecorationShape::Triangle,
+            _ => DecorationShape::Circle, // Default case
+        };
     }
 
     // Read target door from shared memory
@@ -166,6 +175,7 @@ pub fn setup_round(
         colors,
         decoration_counts,
         decoration_sizes,
+        decoration_shapes,
         target_door,
     );
 

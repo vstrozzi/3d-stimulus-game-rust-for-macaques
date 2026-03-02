@@ -1,16 +1,7 @@
 //! This file defines the various objects, resources, and components used in the game.
 use bevy::prelude::*;
 use std::time::Duration;
-use shared::{SharedGameState, SharedGameStateLocal};
-
-/// Shapes for decorations on the pyramid faces
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum DecorationShape {
-    Circle,
-    Square,
-    Star,
-    Triangle,
-}
+use shared::{SharedGameState, SharedGameStateLocal, DecorationShape};
 
 /// Single decoration on a pyramid face with barycentric coordinates relative to the triangle vertices (top, corner1, corner2)
 #[derive(Clone, Debug)]

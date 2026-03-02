@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trial Configuration Editor</title>
+<style>
+  :root {
+    --bg: #1e1e2e;
+    --surface: #2a2a3d;
+    --surface2: #33334a;
+    --border: #44446a;
+    --text: #e0e0f0;
+    --text-dim: #8888aa;
+    --accent: #7c6ff7;
+    --accent-dim: #5a50b0;
+    --danger: #e05555;
+    --success: #55cc88;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Toolbar ── */
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  #toolbar button, #toolbar label {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s;
+  }
+  #toolbar button:hover, #toolbar label:hover {
+    background: var(--accent-dim);
+  }
+  #toolbar .spacer { flex: 1; }
+  #toolbar .title { font-weight: 700; font-size: 15px; color: var(--accent); }
+  #fileInput { display: none; }
+
+  /* ── Main layout ── */
+  #main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── Left panel ── */
+  #leftPanel {
+    width: 260px;
+    min-width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #leftPanel .panel-header {
+    padding: 10px 12px;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  #trialList {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+  }
+  .trial-card {
+    background: var(--surface2);
+    border: 2px solid transparent;
+    border-radius: 8px;
+    padding: 8px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+    user-select: none;
+  }
+  .trial-card:hover { background: #3a3a55; }
+  .trial-card.selected { border-color: var(--accent); }
+  .trial-card.drag-over { border-color: var(--success); border-style: dashed; }
+  .trial-card.invalid { border-color: var(--danger); }
+  .trial-card .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .trial-card .card-label { font-size: 13px; font-weight: 600; }
+  .trial-card .card-buttons { display: flex; gap: 2px; }
+  .trial-card .card-buttons button {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    line-height: 1;
+  }
+  .trial-card .card-buttons button:hover { color: var(--text); background: var(--border); }
+  .trial-card .card-buttons button.btn-delete:hover { color: var(--danger); }
+  .color-bar {
+    display: flex;
+    height: 24px;
+    border-radius: 4px;
+    position: relative;
+  }
+  .color-bar .segment {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #fff;
+    text-shadow: 0 1px 2px rgba(0,0,0,.6);
+    overflow: hidden;
+  }
+  .color-bar .segment:first-child { border-radius: 4px 0 0 4px; }
+  .color-bar .segment:last-of-type { border-radius: 0 4px 4px 0; }
+  .orient-arrow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform-origin: center center;
+    width: 30px;
+    height: 30px;
+    margin-left: -15px;
+    margin-top: -15px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ── Center panel ── */
+  #centerPanel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #emptyState {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 16px;
+    color: var(--text-dim);
+    font-size: 16px;
+  }
+  #emptyState .hint { font-size: 13px; }
+
+  /* ── Preview ── */
+  #preview {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 8px;
+    padding: 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    min-height: 170px;
+  }
+  .face-block {
+    width: 130px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--border);
+    position: relative;
+    transition: border-color .2s;
+  }
+  .face-block.matched { border-color: var(--accent); border-style: dashed; }
+  .face-block .face-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0,0,0,.35);
+  }
+  .face-block .face-sublabel {
+    font-size: 10px;
+    color: rgba(255,255,255,.7);
+    text-shadow: 0 1px 2px rgba(0,0,0,.5);
+    margin-top: 4px;
+  }
+  .face-block .face-shape-icon {
+    font-size: 28px;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,.5);
+    margin-top: 6px;
+  }
+
+  /* ── Form ── */
+  #formContainer {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .form-section {
+    margin-bottom: 18px;
+  }
+  .form-section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .form-group label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .form-group input[type="number"],
+  .form-group input[type="text"] {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    padding: 5px 8px;
+    font-size: 13px;
+    width: 110px;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .form-group input:focus { border-color: var(--accent); }
+  .form-group input[type="color"] {
+    width: 36px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 1px;
+    cursor: pointer;
+    background: var(--surface);
+  }
+  .form-group input:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+
+  /* ── Preset radio ── */
+  .preset-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .preset-row label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: background .15s, border-color .15s;
+  }
+  .preset-row label:hover { background: var(--surface2); }
+  .preset-row input[type="radio"] { accent-color: var(--accent); }
+  .preset-row input[type="radio"]:checked + span { color: var(--accent); font-weight: 600; }
+
+  /* ── Global color picker ── */
+  .global-color-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    padding: 4px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .global-color-group .gc-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .global-color-group input[type="color"] {
+    width: 32px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px;
+    cursor: pointer;
+    background: var(--surface2);
+  }
+  .global-color-group input[type="number"] {
+    width: 50px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text);
+    padding: 3px 5px;
+    font-size: 12px;
+    outline: none;
+  }
+  .global-color-group input[type="number"]:focus { border-color: var(--accent); }
+  .global-color-group .gc-channel-label {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .gc-swatch {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  /* ── Face columns ── */
+  .face-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+  .face-column {
+    background: var(--surface);
+    border-radius: 8px;
+    padding: 10px;
+    border: 1px solid var(--border);
+  }
+  .face-column-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .color-input-row {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .color-input-row .form-group input[type="number"] { width: 58px; }
+
+  /* ── Orientation dial ── */
+  .orient-dial {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    position: relative;
+    cursor: pointer;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .orient-dial .dial-arrow {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2px;
+    height: 24px;
+    background: var(--accent);
+    transform-origin: bottom center;
+    margin-left: -1px;
+    margin-top: -24px;
+    border-radius: 1px;
+    pointer-events: none;
+  }
+  .orient-dial .dial-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-left: -3px;
+    margin-top: -3px;
+    pointer-events: none;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 8px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+  /* ── Validation errors ── */
+  .validation-error {
+    color: var(--danger);
+    font-size: 12px;
+    padding: 8px 12px;
+    background: rgba(224,85,85,.1);
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Toolbar -->
+<div id="toolbar">
+  <span class="title">Trial Editor</span>
+  <div class="spacer"></div>
+  <button id="btnOpen">📂 Open .jsonl</button>
+  <input type="file" id="fileInput" accept=".jsonl,.json,.txt" style="display:none">
+  <button id="btnNewTrial">＋ New Trial</button>
+  <button id="btnDownload">💾 Save .jsonl</button>
+</div>
+
+<!-- Main -->
+<div id="main">
+  <!-- Left panel -->
+  <div id="leftPanel">
+    <div class="panel-header">Trials</div>
+    <div id="trialList"></div>
+  </div>
+
+  <!-- Center panel -->
+  <div id="centerPanel">
+    <div id="emptyState">
+      <div>No trials loaded</div>
+      <div class="hint">Upload a .jsonl file or click "New Trial" to begin</div>
+    </div>
+
+    <!-- Preview (hidden until trial selected) -->
+    <div id="preview" style="display:none">
+      <div class="face-block" id="faceBlock1">
+        <span class="face-label">Face 1</span>
+        <span class="face-sublabel">Left</span>
+        <span class="face-shape-icon"></span>
+      </div>
+      <div class="face-block" id="faceBlock0">
+        <span class="face-label">Face 0</span>
+        <span class="face-sublabel">Center</span>
+        <span class="face-shape-icon"></span>
+      </div>
+      <div class="face-block" id="faceBlock2">
+        <span class="face-label">Face 2</span>
+        <span class="face-sublabel">Right</span>
+        <span class="face-shape-icon"></span>
+      </div>
+    </div>
+
+    <!-- Form (hidden until trial selected) -->
+    <div id="formContainer" style="display:none">
+      <div id="validationErrors"></div>
+
+      <!-- Preset selector -->
+      <div class="form-section">
+        <div class="form-section-title">Preset</div>
+        <div class="preset-row">
+          <label><input type="radio" name="preset" value="type1"><span>Type 1</span></label>
+          <label><input type="radio" name="preset" value="type2"><span>Type 2</span></label>
+          <label><input type="radio" name="preset" value="custom" checked><span>Custom</span></label>
+          <button type="button" id="btnRandomize" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;transition:background .15s" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--surface2)'">🎲 Randomize</button>
+          <div class="global-color-group">
+            <span class="gc-label">Winning Face Color</span>
+            <div class="gc-swatch" id="gcSwatch"></div>
+            <input type="color" id="gcColorPicker" title="Pick winning face color">
+            <span class="gc-channel-label">R</span><input type="number" id="gcR" step="0.01" min="0" max="1">
+            <span class="gc-channel-label">G</span><input type="number" id="gcG" step="0.01" min="0" max="1">
+            <span class="gc-channel-label">B</span><input type="number" id="gcB" step="0.01" min="0" max="1">
+            <span class="gc-channel-label">A</span><input type="number" id="gcA" step="0.01" min="0" max="1">
+            <button type="button" id="btnApplyDefaultColor" style="padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;white-space:nowrap;transition:background .15s" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--surface2)'">Apply Default</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-face fields -->
+      <div class="form-section">
+        <div class="form-section-title">Per-Face Parameters</div>
+        <div class="face-columns" id="faceColumns"></div>
+      </div>
+
+      <!-- Geometry -->
+      <div class="form-section">
+        <div class="form-section-title">Geometry</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>base_radius</label>
+            <input type="number" id="f_base_radius" step="0.1" min="0.1">
+          </div>
+          <div class="form-group">
+            <label>height</label>
+            <input type="number" id="f_height" step="0.1" min="0.1">
+          </div>
+          <div class="form-group">
+            <label>start_orient (rad)</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="number" id="f_start_orient" step="0.01" min="0" max="6.2832">
+              <div class="orient-dial" id="orientDial">
+                <div class="dial-arrow" id="dialArrow"></div>
+                <div class="dial-dot"></div>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>target_door (0–5)</label>
+            <input type="number" id="f_target_door" step="1" min="0" max="5">
+          </div>
+        </div>
+      </div>
+
+      <!-- Alignment & Animation -->
+      <div class="form-section">
+        <div class="form-section-title">Alignment & Animation</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>cosine_alignment_threshold</label>
+            <input type="number" id="f_cosine_alignment_threshold" step="0.01" min="-1" max="1">
+          </div>
+          <div class="form-group">
+            <label>door_anim_fade_out</label>
+            <input type="number" id="f_door_anim_fade_out" step="0.1" min="0">
+          </div>
+          <div class="form-group">
+            <label>door_anim_stay_open</label>
+            <input type="number" id="f_door_anim_stay_open" step="0.1" min="0">
+          </div>
+          <div class="form-group">
+            <label>door_anim_fade_in</label>
+            <input type="number" id="f_door_anim_fade_in" step="0.1" min="0">
+          </div>
+        </div>
+      </div>
+
+      <!-- Lighting -->
+      <div class="form-section">
+        <div class="form-section-title">Lighting</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>main_spotlight_intensity</label>
+            <input type="number" id="f_main_spotlight_intensity" step="100000">
+          </div>
+          <div class="form-group">
+            <label>ambient_brightness</label>
+            <input type="number" id="f_ambient_brightness" step="10">
+          </div>
+          <div class="form-group">
+            <label>max_spotlight_intensity</label>
+            <input type="number" id="f_max_spotlight_intensity" step="100000">
+          </div>
+        </div>
+      </div>
+
+      <!-- Controller -->
+      <div class="form-section">
+        <div class="form-section-title">Controller</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>nr_attempts_to_win</label>
+            <input type="number" id="f_nr_attempts_to_win" step="1" min="1">
+          </div>
+          <div class="form-group">
+            <label>nr_attempts_suggestion</label>
+            <input type="number" id="f_nr_attempts_suggestion" step="1" min="0">
+          </div>
+          <div class="form-group">
+            <label>nr_attempts_to_retroceed</label>
+            <input type="number" id="f_nr_attempts_to_retroceed" step="1" min="1">
+          </div>
+          <div class="form-group">
+            <label>elapsed_time_to_win (s)</label>
+            <input type="number" id="f_elapsed_time_to_win" step="1" min="0">
+          </div>
+          <div class="form-group">
+            <label>elapsed_time_to_retroceed (s)</label>
+            <input type="number" id="f_elapsed_time_to_retroceed" step="1" min="0">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// State
+// ════════════════════════════════════════════════════════════════
+let trials = [];
+let selectedIndex = -1;
+let fileName = 'trials.jsonl';
+let fileHandle = null; // File System Access API handle (for overwriting)
+let currentPreset = 'custom'; // 'type1', 'type2', 'custom'
+
+// Global winning face color — propagated to colors[0] of all trials
+// (face 0 is the winning face for both type 1 and type 2)
+let winningFaceColor = [1.0, 0.0, 0.0, 1.0];
+
+const SHAPE_NAMES = ['Circle', 'Square', 'Star', 'Triangle'];
+const SHAPE_ICONS = ['●', '■', '★', '▲'];
+
+const DEFAULTS = {
+  decorations_seeds: [69, 70, 71],
+  base_radius: 2.5,
+  height: 4.0,
+  start_orient: 0.0,
+  target_door: 0,
+  colors: [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]],
+  decorations_count: [50, 20, 10],
+  decorations_size: [0.1, 0.2, 0.3],
+  decorations_shape: [0, 1, 2],
+  cosine_alignment_threshold: 0.95,
+  door_anim_fade_out: 0.5,
+  door_anim_stay_open: 0.5,
+  door_anim_fade_in: 0.5,
+  main_spotlight_intensity: 5000000.0,
+  ambient_brightness: 300.0,
+  max_spotlight_intensity: 5000000.0,
+  nr_attempts_to_win: 5,
+  nr_attempts_suggestion: 3,
+  nr_attempts_to_retroceed: 10,
+  elapsed_time_to_win: 4.0,
+  elapsed_time_to_retroceed: 10.0,
+};
+
+const TYPE2_DEFAULTS = {
+  decorations_seeds: [69, 70, 70],
+  target_door: 5,
+  colors: [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0]],
+  decorations_count: [50, 20, 20],
+  decorations_size: [0.1, 0.2, 0.2],
+  decorations_shape: [0, 1, 1],
+};
+
+const REQUIRED_KEYS = [
+  'decorations_seeds', 'base_radius', 'height', 'start_orient', 'target_door',
+  'colors', 'decorations_count', 'decorations_size', 'decorations_shape',
+  'cosine_alignment_threshold',
+  'door_anim_fade_out', 'door_anim_stay_open', 'door_anim_fade_in',
+  'main_spotlight_intensity', 'ambient_brightness', 'max_spotlight_intensity',
+  'nr_attempts_to_win', 'nr_attempts_suggestion', 'nr_attempts_to_retroceed',
+  'elapsed_time_to_win', 'elapsed_time_to_retroceed',
+];
+
+// ════════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════════
+function deepClone(obj) { return JSON.parse(JSON.stringify(obj)); }
+
+function makeTrial(overrides = {}) {
+  const t = Object.assign(deepClone(DEFAULTS), deepClone(overrides));
+  // New trials get the global winning face color on face 0
+  t.colors[0] = [...winningFaceColor];
+  return t;
+}
+
+function randFloat(min, max) { return Math.round((min + Math.random() * (max - min)) * 100) / 100; }
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function randColor() { return [randFloat(0.1, 1.0), randFloat(0.1, 1.0), randFloat(0.1, 1.0), 1.0]; }
+
+/**
+ * Randomize a trial in-place based on a preset type.
+ * - type1 & type2: randomize non-winning face colors and decoration sizes
+ * - custom: also randomize base_radius and height
+ * - type2: face 1 == face 2 constraint is enforced (shared color/seeds/sizes)
+ * - face 0 always keeps winningFaceColor
+ */
+function randomizeTrial(trial, preset) {
+  // Face 0 = winning color (always)
+  trial.colors[0] = [...winningFaceColor];
+  if (preset === 'type2') {
+    // Type 2: face 1 and face 2 share the same random color
+    const sharedColor = randColor();
+    trial.colors[1] = sharedColor;
+    trial.colors[2] = [...sharedColor];
+  } else {
+    // Type 1 / custom: all non-winning faces are independently random
+    trial.colors[1] = randColor();
+    trial.colors[2] = randColor();
+  }
+
+  // Random decoration sizes (0.05 – 0.5)
+  trial.decorations_size[0] = randFloat(0.05, 0.5);
+  if (preset === 'type2') {
+    const sharedSize = randFloat(0.05, 0.5);
+    trial.decorations_size[1] = sharedSize;
+    trial.decorations_size[2] = sharedSize;
+  } else {
+    trial.decorations_size[1] = randFloat(0.05, 0.5);
+    trial.decorations_size[2] = randFloat(0.05, 0.5);
+  }
+
+  // Random decoration seeds
+  trial.decorations_seeds[0] = randInt(1, 9999);
+  if (preset === 'type2') {
+    const sharedSeed = randInt(1, 9999);
+    trial.decorations_seeds[1] = sharedSeed;
+    trial.decorations_seeds[2] = sharedSeed;
+  } else {
+    trial.decorations_seeds[1] = randInt(1, 9999);
+    trial.decorations_seeds[2] = randInt(1, 9999);
+  }
+
+  // Random decoration counts
+  trial.decorations_count[0] = randInt(10, 80);
+  if (preset === 'type2') {
+    const sharedCount = randInt(10, 80);
+    trial.decorations_count[1] = sharedCount;
+    trial.decorations_count[2] = sharedCount;
+  } else {
+    trial.decorations_count[1] = randInt(10, 80);
+    trial.decorations_count[2] = randInt(10, 80);
+  }
+
+  // For custom: also randomize geometry
+  if (preset === 'custom') {
+    trial.base_radius = randFloat(1.5, 4.0);
+    trial.height = randFloat(2.5, 6.0);
+  }
+
+  // Random decoration shapes (0–3)
+  trial.decorations_shape[0] = randInt(0, 3);
+  if (preset === 'type2') {
+    const sharedShape = randInt(0, 3);
+    trial.decorations_shape[1] = sharedShape;
+    trial.decorations_shape[2] = sharedShape;
+  } else {
+    trial.decorations_shape[1] = randInt(0, 3);
+    trial.decorations_shape[2] = randInt(0, 3);
+  }
+
+  // Random start orientation
+  trial.start_orient = randFloat(0, 6.28);
+}
+
+function rgbaToCSS(c) {
+  return `rgba(${Math.round(c[0]*255)},${Math.round(c[1]*255)},${Math.round(c[2]*255)},${c[3]})`;
+}
+
+function rgbaToHex(c) {
+  const r = Math.round(c[0]*255).toString(16).padStart(2,'0');
+  const g = Math.round(c[1]*255).toString(16).padStart(2,'0');
+  const b = Math.round(c[2]*255).toString(16).padStart(2,'0');
+  return `#${r}${g}${b}`;
+}
+
+function hexToRGB(hex) {
+  const r = parseInt(hex.slice(1,3),16)/255;
+  const g = parseInt(hex.slice(3,5),16)/255;
+  const b = parseInt(hex.slice(5,7),16)/255;
+  return [Math.round(r*100)/100, Math.round(g*100)/100, Math.round(b*100)/100];
+}
+
+function arraysEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (Array.isArray(a[i])) {
+      if (!arraysEqual(a[i], b[i])) return false;
+    } else if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function detectPreset(trial) {
+  const s = trial.decorations_seeds;
+  const c = trial.colors;
+  const sz = trial.decorations_size;
+  const cnt = trial.decorations_count;
+  const sh = trial.decorations_shape || DEFAULTS.decorations_shape;
+  // Type 2: face 1 == face 2 (shared), face 0 is the winning face
+  const face1eq2 = s[1] === s[2] && arraysEqual(c[1], c[2]) && sz[1] === sz[2] && cnt[1] === cnt[2] && sh[1] === sh[2];
+  const allDiff = s[0] !== s[1] && s[1] !== s[2] && s[0] !== s[2];
+
+  if (face1eq2 && trial.target_door === 5) return 'type2';
+  if (allDiff && trial.target_door === 0) return 'type1';
+  return 'custom';
+}
+
+function validate(trial) {
+  const errors = [];
+  for (const k of REQUIRED_KEYS) {
+    if (trial[k] === undefined || trial[k] === null) {
+      errors.push(`Missing field: ${k}`);
+    }
+  }
+  if (trial.colors && trial.colors.length !== 3) errors.push('colors must have 3 entries');
+  if (trial.decorations_seeds && trial.decorations_seeds.length !== 3) errors.push('decorations_seeds must have 3 entries');
+  if (trial.decorations_count && trial.decorations_count.length !== 3) errors.push('decorations_count must have 3 entries');
+  if (trial.decorations_size && trial.decorations_size.length !== 3) errors.push('decorations_size must have 3 entries');
+  if (trial.decorations_shape && trial.decorations_shape.length !== 3) errors.push('decorations_shape must have 3 entries');
+  if (trial.decorations_shape) {
+    for (let i = 0; i < trial.decorations_shape.length; i++) {
+      const v = trial.decorations_shape[i];
+      if (v < 0 || v > 3 || !Number.isInteger(v)) { errors.push(`decorations_shape[${i}] must be 0–3 integer`); break; }
+    }
+  }
+  if (trial.target_door !== undefined && (trial.target_door < 0 || trial.target_door > 5)) errors.push('target_door must be 0–5');
+  return errors;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Rendering — Left panel
+// ════════════════════════════════════════════════════════════════
+function renderTrialList() {
+  const list = document.getElementById('trialList');
+  list.innerHTML = '';
+  trials.forEach((trial, idx) => {
+    const card = document.createElement('div');
+    card.className = 'trial-card' + (idx === selectedIndex ? ' selected' : '');
+    const errors = validate(trial);
+    if (errors.length > 0) card.classList.add('invalid');
+
+    card.draggable = true;
+    card.dataset.index = idx;
+
+    // Drag events
+    card.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', idx);
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+      const toIdx = idx;
+      if (fromIdx !== toIdx) {
+        const [item] = trials.splice(fromIdx, 1);
+        trials.splice(toIdx, 0, item);
+        if (selectedIndex === fromIdx) selectedIndex = toIdx;
+        else if (fromIdx < selectedIndex && toIdx >= selectedIndex) selectedIndex--;
+        else if (fromIdx > selectedIndex && toIdx <= selectedIndex) selectedIndex++;
+        renderAll();
+      }
+    });
+
+    card.addEventListener('click', () => { selectedIndex = idx; renderAll(); });
+
+    // Card top row
+    const top = document.createElement('div');
+    top.className = 'card-top';
+    const label = document.createElement('span');
+    label.className = 'card-label';
+    label.textContent = `Trial ${idx + 1}`;
+    top.appendChild(label);
+
+    const btns = document.createElement('div');
+    btns.className = 'card-buttons';
+
+    const btnUp = document.createElement('button');
+    btnUp.textContent = '▲';
+    btnUp.title = 'Move up';
+    btnUp.addEventListener('click', e => { e.stopPropagation(); moveTrialUp(idx); });
+
+    const btnDown = document.createElement('button');
+    btnDown.textContent = '▼';
+    btnDown.title = 'Move down';
+    btnDown.addEventListener('click', e => { e.stopPropagation(); moveTrialDown(idx); });
+
+    const btnDup = document.createElement('button');
+    btnDup.textContent = '⧉';
+    btnDup.title = 'Duplicate';
+    btnDup.addEventListener('click', e => { e.stopPropagation(); duplicateTrial(idx); });
+
+    const btnDel = document.createElement('button');
+    btnDel.className = 'btn-delete';
+    btnDel.textContent = '✕';
+    btnDel.title = 'Delete';
+    btnDel.addEventListener('click', e => { e.stopPropagation(); deleteTrial(idx); });
+
+    btns.append(btnUp, btnDown, btnDup, btnDel);
+    top.appendChild(btns);
+    card.appendChild(top);
+
+    // Color bar — ordered Face 1, Face 0, Face 2 (left, center, right) to match preview
+    const bar = document.createElement('div');
+    bar.className = 'color-bar';
+    const colors = trial.colors || DEFAULTS.colors;
+    const shapes = trial.decorations_shape || DEFAULTS.decorations_shape;
+    const barOrder = [1, 0, 2];
+    for (const fi of barOrder) {
+      const seg = document.createElement('div');
+      seg.className = 'segment';
+      seg.style.background = rgbaToCSS(colors[fi]);
+      seg.textContent = SHAPE_ICONS[shapes[fi]] || '';
+      bar.appendChild(seg);
+    }
+
+    // Orientation arrow SVG
+    const orient = trial.start_orient || 0;
+    const arrowSvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    arrowSvg.setAttribute('class','orient-arrow');
+    arrowSvg.setAttribute('viewBox','0 0 30 30');
+    arrowSvg.style.transform = `rotate(${orient}rad)`;
+    arrowSvg.innerHTML = `<line x1="15" y1="24" x2="15" y2="5" stroke="white" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="15,2 11,8 19,8" fill="white"/>`;
+    bar.appendChild(arrowSvg);
+
+    card.appendChild(bar);
+    list.appendChild(card);
+  });
+
+  // Show/hide empty state
+  document.getElementById('emptyState').style.display = trials.length === 0 ? 'flex' : 'none';
+  document.getElementById('preview').style.display = selectedIndex >= 0 ? 'flex' : 'none';
+  document.getElementById('formContainer').style.display = selectedIndex >= 0 ? 'block' : 'none';
+}
+
+// ════════════════════════════════════════════════════════════════
+// Rendering — Preview
+// ════════════════════════════════════════════════════════════════
+function renderPreview() {
+  if (selectedIndex < 0) return;
+  const trial = trials[selectedIndex];
+  const colors = trial.colors || DEFAULTS.colors;
+
+  // Order: Face 1 (left), Face 0 (center), Face 2 (right)
+  const faceOrder = [1, 0, 2];
+  const posLabels = ['Left', 'Center', 'Right'];
+  const blockIds = ['faceBlock1', 'faceBlock0', 'faceBlock2'];
+
+  // Check for matching faces (type 2 visual cue: face 1 == face 2)
+  const seeds = trial.decorations_seeds || DEFAULTS.decorations_seeds;
+  const sizes = trial.decorations_size || DEFAULTS.decorations_size;
+  const shapes = trial.decorations_shape || DEFAULTS.decorations_shape;
+  const face1eq2 = seeds[1] === seeds[2] && arraysEqual(colors[1], colors[2]) && sizes[1] === sizes[2] && shapes[1] === shapes[2];
+
+  for (let p = 0; p < 3; p++) {
+    const fi = faceOrder[p];
+    const block = document.getElementById(blockIds[p]);
+    block.style.background = rgbaToCSS(colors[fi]);
+    block.className = 'face-block' + ((face1eq2 && (fi === 1 || fi === 2)) ? ' matched' : '');
+
+    const isTarget = (fi === trial.target_door);
+    block.querySelector('.face-label').textContent = `Face ${fi}` + (isTarget ? ' ★' : '');
+    block.querySelector('.face-sublabel').textContent = posLabels[p];
+    block.querySelector('.face-shape-icon').textContent = SHAPE_ICONS[shapes[fi]] || '?';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// Rendering — Form
+// ════════════════════════════════════════════════════════════════
+function renderForm() {
+  if (selectedIndex < 0) return;
+  const trial = trials[selectedIndex];
+  currentPreset = detectPreset(trial);
+
+  // Preset radios
+  document.querySelectorAll('input[name="preset"]').forEach(r => {
+    r.checked = r.value === currentPreset;
+  });
+
+  // Scalar fields
+  const scalarFields = [
+    'base_radius', 'height', 'start_orient', 'target_door',
+    'cosine_alignment_threshold', 'door_anim_fade_out', 'door_anim_stay_open', 'door_anim_fade_in',
+    'main_spotlight_intensity', 'ambient_brightness', 'max_spotlight_intensity',
+    'nr_attempts_to_win', 'nr_attempts_suggestion', 'nr_attempts_to_retroceed',
+    'elapsed_time_to_win', 'elapsed_time_to_retroceed',
+  ];
+  for (const f of scalarFields) {
+    const el = document.getElementById(`f_${f}`);
+    if (el) {
+      el.value = trial[f] ?? DEFAULTS[f];
+      el.disabled = (f === 'target_door' && currentPreset !== 'custom');
+    }
+  }
+
+  // Update dial
+  updateDial();
+
+  // Per-face fields
+  renderFaceColumns(trial);
+
+  // Validation
+  const errors = validate(trial);
+  const errDiv = document.getElementById('validationErrors');
+  if (errors.length > 0) {
+    errDiv.innerHTML = `<div class="validation-error">${errors.join('<br>')}</div>`;
+  } else {
+    errDiv.innerHTML = '';
+  }
+}
+
+function renderFaceColumns(trial) {
+  const container = document.getElementById('faceColumns');
+  container.innerHTML = '';
+
+  for (let i = 0; i < 3; i++) {
+    const col = document.createElement('div');
+    col.className = 'face-column';
+
+    const title = document.createElement('div');
+    title.className = 'face-column-title';
+    title.textContent = `Face ${i}`;
+    col.appendChild(title);
+
+    const colors = trial.colors || deepClone(DEFAULTS.colors);
+    const seeds = trial.decorations_seeds || deepClone(DEFAULTS.decorations_seeds);
+    const counts = trial.decorations_count || deepClone(DEFAULTS.decorations_count);
+    const sizes = trial.decorations_size || deepClone(DEFAULTS.decorations_size);
+
+    // Color picker + RGBA
+    const colorRow = document.createElement('div');
+    colorRow.className = 'color-input-row';
+
+    const cpGroup = document.createElement('div');
+    cpGroup.className = 'form-group';
+    const cpLabel = document.createElement('label');
+    cpLabel.textContent = 'Color';
+    cpGroup.appendChild(cpLabel);
+    const cp = document.createElement('input');
+    cp.type = 'color';
+    cp.value = rgbaToHex(colors[i]);
+    cp.dataset.face = i;
+    cp.addEventListener('input', onColorPickerChange);
+    cpGroup.appendChild(cp);
+    colorRow.appendChild(cpGroup);
+
+    const channels = ['R', 'G', 'B', 'A'];
+    for (let ch = 0; ch < 4; ch++) {
+      const g = document.createElement('div');
+      g.className = 'form-group';
+      const lbl = document.createElement('label');
+      lbl.textContent = channels[ch];
+      g.appendChild(lbl);
+      const inp = document.createElement('input');
+      inp.type = 'number';
+      inp.step = '0.01';
+      inp.min = '0';
+      inp.max = '1';
+      inp.value = colors[i][ch];
+      inp.dataset.face = i;
+      inp.dataset.channel = ch;
+      inp.className = 'face-color-input';
+      inp.addEventListener('input', onColorChannelChange);
+      g.appendChild(inp);
+      colorRow.appendChild(g);
+    }
+    col.appendChild(colorRow);
+
+    // Seed
+    const seedGroup = createFaceInput('Seed', seeds[i], i, 'seed', '1', '0');
+    col.appendChild(seedGroup);
+
+    // Count
+    const countGroup = createFaceInput('Count', counts[i], i, 'count', '1', '0');
+    col.appendChild(countGroup);
+
+    // Size
+    const sizeGroup = createFaceInput('Size', sizes[i], i, 'size', '0.01', '0');
+    col.appendChild(sizeGroup);
+
+    // Shape
+    const shapes = trial.decorations_shape || deepClone(DEFAULTS.decorations_shape);
+    const shapeGroup = document.createElement('div');
+    shapeGroup.className = 'form-group';
+    shapeGroup.style.marginTop = '6px';
+    const shapeLabel = document.createElement('label');
+    shapeLabel.textContent = 'Shape';
+    shapeGroup.appendChild(shapeLabel);
+    const sel = document.createElement('select');
+    sel.dataset.face = i;
+    sel.style.width = '100%';
+    sel.style.padding = '4px';
+    sel.style.borderRadius = '4px';
+    sel.style.border = '1px solid var(--border)';
+    sel.style.background = 'var(--surface)';
+    sel.style.color = 'var(--text)';
+    for (let sv = 0; sv < SHAPE_NAMES.length; sv++) {
+      const opt = document.createElement('option');
+      opt.value = sv;
+      opt.textContent = `${SHAPE_ICONS[sv]} ${SHAPE_NAMES[sv]} (${sv})`;
+      if (sv === shapes[i]) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    sel.addEventListener('change', onShapeChange);
+    shapeGroup.appendChild(sel);
+    col.appendChild(shapeGroup);
+
+    container.appendChild(col);
+  }
+}
+
+function createFaceInput(label, value, faceIdx, field, step, min) {
+  const g = document.createElement('div');
+  g.className = 'form-group';
+  g.style.marginTop = '6px';
+  const lbl = document.createElement('label');
+  lbl.textContent = label;
+  g.appendChild(lbl);
+  const inp = document.createElement('input');
+  inp.type = 'number';
+  inp.step = step;
+  inp.min = min;
+  inp.value = value;
+  inp.dataset.face = faceIdx;
+  inp.dataset.field = field;
+  inp.style.width = '100%';
+  inp.addEventListener('input', onFaceFieldChange);
+  g.appendChild(inp);
+  return g;
+}
+
+// ════════════════════════════════════════════════════════════════
+// Orientation Dial
+// ════════════════════════════════════════════════════════════════
+function updateDial() {
+  const orient = trials[selectedIndex]?.start_orient ?? 0;
+  const arrow = document.getElementById('dialArrow');
+  // In our coordinate, 0 rad = up, increases clockwise
+  arrow.style.transform = `rotate(${orient}rad)`;
+}
+
+function setupDial() {
+  const dial = document.getElementById('orientDial');
+  let dragging = false;
+
+  function updateFromMouse(e) {
+    const rect = dial.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    let angle = Math.atan2(e.clientX - cx, -(e.clientY - cy));
+    if (angle < 0) angle += Math.PI * 2;
+    angle = Math.round(angle * 100) / 100;
+    if (selectedIndex >= 0) {
+      trials[selectedIndex].start_orient = angle;
+      document.getElementById('f_start_orient').value = angle;
+      updateDial();
+      renderTrialList();
+    }
+  }
+
+  dial.addEventListener('mousedown', e => { dragging = true; updateFromMouse(e); e.preventDefault(); });
+  window.addEventListener('mousemove', e => { if (dragging) updateFromMouse(e); });
+  window.addEventListener('mouseup', () => { dragging = false; });
+}
+
+// ════════════════════════════════════════════════════════════════
+// Event handlers
+// ════════════════════════════════════════════════════════════════
+function onColorPickerChange(e) {
+  if (selectedIndex < 0) return;
+  const fi = parseInt(e.target.dataset.face);
+  const rgb = hexToRGB(e.target.value);
+  const trial = trials[selectedIndex];
+  if (!trial.colors) trial.colors = deepClone(DEFAULTS.colors);
+  trial.colors[fi][0] = rgb[0];
+  trial.colors[fi][1] = rgb[1];
+  trial.colors[fi][2] = rgb[2];
+  syncType2Face(fi);
+  renderAll();
+}
+
+function onColorChannelChange(e) {
+  if (selectedIndex < 0) return;
+  const fi = parseInt(e.target.dataset.face);
+  const ch = parseInt(e.target.dataset.channel);
+  const val = parseFloat(e.target.value);
+  if (isNaN(val)) return;
+  const trial = trials[selectedIndex];
+  if (!trial.colors) trial.colors = deepClone(DEFAULTS.colors);
+  trial.colors[fi][ch] = Math.max(0, Math.min(1, val));
+  syncType2Face(fi);
+  renderAll();
+}
+
+function onFaceFieldChange(e) {
+  if (selectedIndex < 0) return;
+  const fi = parseInt(e.target.dataset.face);
+  const field = e.target.dataset.field;
+  const val = parseFloat(e.target.value);
+  if (isNaN(val)) return;
+  const trial = trials[selectedIndex];
+
+  const fieldMap = {
+    seed: 'decorations_seeds',
+    count: 'decorations_count',
+    size: 'decorations_size',
+  };
+  const key = fieldMap[field];
+  if (!trial[key]) trial[key] = deepClone(DEFAULTS[key]);
+
+  if (field === 'seed') {
+    trial[key][fi] = Math.round(val);
+  } else if (field === 'count') {
+    trial[key][fi] = Math.max(0, Math.round(val));
+  } else {
+    trial[key][fi] = Math.max(0, val);
+  }
+  syncType2Face(fi);
+  renderAll();
+}
+
+function onShapeChange(e) {
+  if (selectedIndex < 0) return;
+  const fi = parseInt(e.target.dataset.face);
+  const val = parseInt(e.target.value);
+  const trial = trials[selectedIndex];
+  if (!trial.decorations_shape) trial.decorations_shape = deepClone(DEFAULTS.decorations_shape);
+  trial.decorations_shape[fi] = val;
+  syncType2Face(fi);
+  renderAll();
+}
+
+function syncType2Face(changedFace) {
+  if (currentPreset !== 'type2') return;
+  const trial = trials[selectedIndex];
+  // In type2, face 1 and face 2 are synced (face 0 is the winning face, independent)
+  if (changedFace === 1 || changedFace === 2) {
+    const other = changedFace === 1 ? 2 : 1;
+    trial.colors[other] = [...trial.colors[changedFace]];
+    trial.decorations_seeds[other] = trial.decorations_seeds[changedFace];
+    trial.decorations_count[other] = trial.decorations_count[changedFace];
+    trial.decorations_size[other] = trial.decorations_size[changedFace];
+    if (trial.decorations_shape) trial.decorations_shape[other] = trial.decorations_shape[changedFace];
+  }
+}
+
+function onScalarFieldChange(e) {
+  if (selectedIndex < 0) return;
+  const field = e.target.id.replace('f_', '');
+  let val = parseFloat(e.target.value);
+  if (isNaN(val)) return;
+
+  const intFields = ['target_door', 'nr_attempts_to_win', 'nr_attempts_suggestion', 'nr_attempts_to_retroceed'];
+  if (intFields.includes(field)) val = Math.round(val);
+
+  trials[selectedIndex][field] = val;
+
+  if (field === 'start_orient') updateDial();
+  renderTrialList();
+  renderPreview();
+}
+
+function onPresetChange(e) {
+  if (selectedIndex < 0) return;
+  const preset = e.target.value;
+  currentPreset = preset;
+  const trial = trials[selectedIndex];
+
+  if (preset === 'type1') {
+    trial.target_door = 0;
+    trial.decorations_seeds = deepClone(DEFAULTS.decorations_seeds);
+    trial.colors = deepClone(DEFAULTS.colors);
+    trial.colors[0] = [...winningFaceColor];
+    trial.decorations_count = deepClone(DEFAULTS.decorations_count);
+    trial.decorations_size = deepClone(DEFAULTS.decorations_size);
+    trial.decorations_shape = deepClone(DEFAULTS.decorations_shape);
+  } else if (preset === 'type2') {
+    trial.target_door = 5;
+    trial.decorations_seeds = deepClone(TYPE2_DEFAULTS.decorations_seeds);
+    trial.colors = deepClone(TYPE2_DEFAULTS.colors);
+    trial.colors[0] = [...winningFaceColor];
+    trial.decorations_count = deepClone(TYPE2_DEFAULTS.decorations_count);
+    trial.decorations_size = deepClone(TYPE2_DEFAULTS.decorations_size);
+    trial.decorations_shape = deepClone(TYPE2_DEFAULTS.decorations_shape);
+  }
+  // 'custom' — leave everything as-is
+
+  renderAll();
+}
+
+// Trial list actions
+function moveTrialUp(idx) {
+  if (idx <= 0) return;
+  [trials[idx - 1], trials[idx]] = [trials[idx], trials[idx - 1]];
+  if (selectedIndex === idx) selectedIndex--;
+  else if (selectedIndex === idx - 1) selectedIndex++;
+  renderAll();
+}
+
+function moveTrialDown(idx) {
+  if (idx >= trials.length - 1) return;
+  [trials[idx], trials[idx + 1]] = [trials[idx + 1], trials[idx]];
+  if (selectedIndex === idx) selectedIndex++;
+  else if (selectedIndex === idx + 1) selectedIndex--;
+  renderAll();
+}
+
+function duplicateTrial(idx) {
+  trials.splice(idx + 1, 0, deepClone(trials[idx]));
+  selectedIndex = idx + 1;
+  renderAll();
+}
+
+function deleteTrial(idx) {
+  if (!confirm(`Delete Trial ${idx + 1}?`)) return;
+  trials.splice(idx, 1);
+  if (trials.length === 0) selectedIndex = -1;
+  else if (selectedIndex >= trials.length) selectedIndex = trials.length - 1;
+  else if (selectedIndex > idx) selectedIndex--;
+  renderAll();
+}
+
+function addNewTrial() {
+  const t = makeTrial();
+  randomizeTrial(t, currentPreset !== 'custom' ? currentPreset : 'type1');
+  trials.push(t);
+  selectedIndex = trials.length - 1;
+  renderAll();
+}
+
+function onRandomize() {
+  if (selectedIndex < 0) return;
+  const trial = trials[selectedIndex];
+  const preset = detectPreset(trial);
+  randomizeTrial(trial, preset);
+  renderAll();
+}
+
+// ════════════════════════════════════════════════════════════════
+// File I/O
+// ════════════════════════════════════════════════════════════════
+function loadTrialsFromText(text) {
+  trials = [];
+  const lines = text.trim().split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      const parsed = JSON.parse(trimmed);
+      const obj = Object.assign(deepClone(DEFAULTS), parsed);
+      trials.push(obj);
+    } catch (err) {
+      console.warn('Skipping invalid JSON line:', trimmed, err);
+    }
+  }
+  selectedIndex = trials.length > 0 ? 0 : -1;
+  if (trials.length > 0 && trials[0].colors && trials[0].colors[0]) {
+    winningFaceColor = [...trials[0].colors[0]];
+  }
+  renderAll();
+}
+
+// Legacy <input type="file"> fallback
+function uploadFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  fileName = file.name;
+  fileHandle = null; // legacy path has no writable handle
+  file.text().then(loadTrialsFromText);
+  e.target.value = '';
+}
+
+// File System Access API — opens a file picker and stores the handle for overwriting
+async function openFileWithPicker() {
+  if ('showOpenFilePicker' in window) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: 'JSONL files', accept: { 'application/jsonl': ['.jsonl', '.json', '.txt'] } }],
+      });
+      fileHandle = handle;
+      const file = await handle.getFile();
+      fileName = file.name;
+      loadTrialsFromText(await file.text());
+    } catch (err) {
+      if (err.name !== 'AbortError') console.error(err);
+    }
+  } else {
+    // Browser doesn't support File System Access API — fall back to <input>
+    document.getElementById('fileInput').click();
+  }
+}
+
+async function downloadFile() {
+  // Validate all
+  for (let i = 0; i < trials.length; i++) {
+    const errors = validate(trials[i]);
+    if (errors.length > 0) {
+      alert(`Trial ${i + 1} has errors:\n${errors.join('\n')}`);
+      selectedIndex = i;
+      renderAll();
+      return;
+    }
+  }
+  if (trials.length === 0) {
+    alert('No trials to save.');
+    return;
+  }
+
+  const content = trials.map(t => JSON.stringify(t)).join('\n') + '\n';
+
+  // If we have a file handle from the File System Access API, overwrite in place
+  if (fileHandle) {
+    try {
+      const writable = await fileHandle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      console.log(`Saved to ${fileName} in place.`);
+      return;
+    } catch (err) {
+      console.warn('Could not save in place, falling back to download:', err);
+    }
+  }
+
+  // Fallback: normal download
+  const blob = new Blob([content], { type: 'application/jsonl' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ════════════════════════════════════════════════════════════════
+// Master render
+// ════════════════════════════════════════════════════════════════
+function renderAll() {
+  renderTrialList();
+  renderPreview();
+  renderForm();
+  renderGlobalColor();
+}
+
+function renderGlobalColor() {
+  const cp = document.getElementById('gcColorPicker');
+  cp.value = rgbaToHex(winningFaceColor);
+  document.getElementById('gcR').value = winningFaceColor[0];
+  document.getElementById('gcG').value = winningFaceColor[1];
+  document.getElementById('gcB').value = winningFaceColor[2];
+  document.getElementById('gcA').value = winningFaceColor[3];
+  document.getElementById('gcSwatch').style.background = rgbaToCSS(winningFaceColor);
+}
+
+function propagateWinningColor() {
+  // Apply winning face color to colors[0] of every trial.
+  // Face 0 is the winning face for both type 1 and type 2.
+  for (const trial of trials) {
+    if (!trial.colors) trial.colors = deepClone(DEFAULTS.colors);
+    trial.colors[0] = [...winningFaceColor];
+  }
+}
+
+function onGlobalColorPickerChange(e) {
+  const rgb = hexToRGB(e.target.value);
+  winningFaceColor[0] = rgb[0];
+  winningFaceColor[1] = rgb[1];
+  winningFaceColor[2] = rgb[2];
+  propagateWinningColor();
+  renderAll();
+}
+
+function onGlobalColorChannelChange() {
+  winningFaceColor[0] = Math.max(0, Math.min(1, parseFloat(document.getElementById('gcR').value) || 0));
+  winningFaceColor[1] = Math.max(0, Math.min(1, parseFloat(document.getElementById('gcG').value) || 0));
+  winningFaceColor[2] = Math.max(0, Math.min(1, parseFloat(document.getElementById('gcB').value) || 0));
+  winningFaceColor[3] = Math.max(0, Math.min(1, parseFloat(document.getElementById('gcA').value) || 0));
+  propagateWinningColor();
+  renderAll();
+}
+
+// ════════════════════════════════════════════════════════════════
+// Wire up events
+// ════════════════════════════════════════════════════════════════
+document.getElementById('fileInput').addEventListener('change', uploadFile);
+document.getElementById('btnOpen').addEventListener('click', openFileWithPicker);
+document.getElementById('btnNewTrial').addEventListener('click', addNewTrial);
+document.getElementById('btnRandomize').addEventListener('click', onRandomize);
+document.getElementById('btnDownload').addEventListener('click', downloadFile);
+
+// Ctrl+S / Cmd+S to save
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    downloadFile();
+  }
+});
+
+// Scalar field inputs
+const scalarIds = [
+  'f_base_radius', 'f_height', 'f_start_orient', 'f_target_door',
+  'f_cosine_alignment_threshold', 'f_door_anim_fade_out', 'f_door_anim_stay_open', 'f_door_anim_fade_in',
+  'f_main_spotlight_intensity', 'f_ambient_brightness', 'f_max_spotlight_intensity',
+  'f_nr_attempts_to_win', 'f_nr_attempts_suggestion', 'f_nr_attempts_to_retroceed',
+  'f_elapsed_time_to_win', 'f_elapsed_time_to_retroceed',
+];
+for (const id of scalarIds) {
+  document.getElementById(id).addEventListener('input', onScalarFieldChange);
+}
+
+// Preset radios
+document.querySelectorAll('input[name="preset"]').forEach(r => {
+  r.addEventListener('change', onPresetChange);
+});
+
+// Global winning face color
+document.getElementById('gcColorPicker').addEventListener('input', onGlobalColorPickerChange);
+for (const ch of ['gcR', 'gcG', 'gcB', 'gcA']) {
+  document.getElementById(ch).addEventListener('input', onGlobalColorChannelChange);
+}
+document.getElementById('btnApplyDefaultColor').addEventListener('click', () => {
+  winningFaceColor = [...DEFAULTS.colors[0]];
+  propagateWinningColor();
+  renderAll();
+});
+
+// Dial
+setupDial();
+
+// Initial render
+renderAll();
+</script>
+</body>
+</html>

@@ -43,7 +43,7 @@ cargo run -p game_node
 # Build shared library with Python bindings
 cargo build --release -p shared --features python
 
-# Copy the module next to the controller (adjust extension for your OS if needed)
+# Copy the module next to the controller
 cp target/release/libshared.so controller_python/monkey_shared.so
 
 # Run the GUI controller

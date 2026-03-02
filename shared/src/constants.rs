@@ -11,7 +11,7 @@ pub mod game_constants {
 
     // Seeds for the random number generator, one per face.
     // If two faces share the same seed (and same count/size), they get identical decorations.
-    pub const DECORATION_SEEDS: [u64; 3] = [69, 70, 71];
+    pub const DECORATIONS_SEEDS: [u64; 3] = [69, 70, 71];
 
     // UI responsive design reference
     pub const UI_REFERENCE_HEIGHT: f32 = 1080.0; // 1080p as reference
@@ -50,6 +50,7 @@ pub mod object_constants {
 
 /// Pyramid object
 pub mod pyramid_constants {
+    use crate::DecorationShape;
 
     pub const PYRAMID_BASE_RADIUS: f32 = 2.5;
     pub const PYRAMID_HEIGHT: f32 = 4.0;
@@ -79,6 +80,13 @@ pub mod pyramid_constants {
         0.1,
         0.2,
         0.3,
+    ];
+
+    // Decorations Shape
+    pub const PYRAMID_DECORATIONS_SHAPE: [DecorationShape; 3] = [
+        DecorationShape::Circle,
+        DecorationShape::Square,
+        DecorationShape::Star,
     ];
 
     // Index of the target door of the pyramid

@@ -14,6 +14,8 @@
 //! 
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::atomic::Ordering;
+
+use crate::constants::pyramid_constants::PYRAMID_DECORATIONS_SHAPE;
 pub mod constants;
 
 
@@ -71,6 +73,15 @@ pub enum Phase {
     Won = 1,
 }
 
+/// Shapes for decorations on the pyramid faces
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DecorationShape {
+    Circle,
+    Square,
+    Star,
+    Triangle,
+}
+
 /// Shared atomic game structure for game state communication (1 for each Controller and Game, 2 in total, read-write respectively).
 /// It contains all the information realting the current game state (i.e. the game is a deterministic state).
 /// It is updated every Game tick by the game and whenever needed by the Controller.
@@ -89,7 +100,8 @@ macro_rules! shared_game_state {
             pub colors: [$U32; 12],
             pub decorations_count: [$U32; 3],
             pub decorations_size: [$U32; 3],
-            pub decoration_seeds: [$U64; 3],
+            pub decorations_seeds: [$U64; 3],
+            pub decorations_shape: [$U32; 3],
 
             pub cosine_alignment_threshold: $U32,
 
@@ -130,7 +142,7 @@ impl SharedGameState {
         // Constant initialization from constants.rs module file.
         use constants::{
             game_constants::{
-                DECORATION_SEEDS,
+                DECORATIONS_SEEDS,
                 COSINE_ALIGNMENT_TO_WIN},
             pyramid_constants::{
                 PYRAMID_BASE_RADIUS,
@@ -159,10 +171,10 @@ impl SharedGameState {
             
         Self {
             // Fixed trials vars
-            decoration_seeds: [
-                AtomicU64::new(DECORATION_SEEDS[0]),
-                AtomicU64::new(DECORATION_SEEDS[1]),
-                AtomicU64::new(DECORATION_SEEDS[2]),
+            decorations_seeds: [
+                AtomicU64::new(DECORATIONS_SEEDS[0]),
+                AtomicU64::new(DECORATIONS_SEEDS[1]),
+                AtomicU64::new(DECORATIONS_SEEDS[2]),
             ],
             base_radius: AtomicU32::new(PYRAMID_BASE_RADIUS.to_bits()),
             height: AtomicU32::new(PYRAMID_HEIGHT.to_bits()),
@@ -186,6 +198,11 @@ impl SharedGameState {
                 AtomicU32::new(PYRAMID_DECORATIONS_SIZE[2].to_bits()),
             ],
 
+            decorations_shape: [
+                AtomicU32::new(PYRAMID_DECORATIONS_SHAPE[0] as u32),
+                AtomicU32::new(PYRAMID_DECORATIONS_SHAPE[1] as u32),
+                AtomicU32::new(PYRAMID_DECORATIONS_SHAPE[2] as u32),
+            ],
             cosine_alignment_threshold: AtomicU32::new(COSINE_ALIGNMENT_TO_WIN.to_bits()), // 0.9 approx
             
             door_anim_fade_out: AtomicU32::new(DOOR_ANIM_FADE_OUT.to_bits()),
@@ -222,7 +239,8 @@ impl SharedGameState {
         for i in 0..3 {
             self.decorations_count[i].store(other.decorations_count[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_size[i].store(other.decorations_size[i].load(Ordering::Relaxed), Ordering::Relaxed);
-            self.decoration_seeds[i].store(other.decoration_seeds[i].load(Ordering::Relaxed), Ordering::Relaxed);
+            self.decorations_seeds[i].store(other.decorations_seeds[i].load(Ordering::Relaxed), Ordering::Relaxed);
+            self.decorations_shape[i].store(other.decorations_shape[i].load(Ordering::Relaxed), Ordering::Relaxed);
         }
         self.cosine_alignment_threshold.store(other.cosine_alignment_threshold.load(Ordering::Relaxed), Ordering::Relaxed);
         self.door_anim_fade_out.store(other.door_anim_fade_out.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -252,12 +270,19 @@ impl SharedGameState {
 
     pub fn to_not_atomic(&self) -> SharedGameStateLocal {
         SharedGameStateLocal {
-            decoration_seeds: {
+            decorations_seeds: {
                 let mut seeds = [0u64; 3];
                 for i in 0..3 {
-                    seeds[i] = self.decoration_seeds[i].load(Ordering::Relaxed);
+                    seeds[i] = self.decorations_seeds[i].load(Ordering::Relaxed);
                 }
                 seeds
+            },
+            decorations_shape: {
+                let mut shapes = [0u32; 3];
+                for i in 0..3 {
+                    shapes[i] = self.decorations_shape[i].load(Ordering::Relaxed);
+                }
+                shapes
             },
             base_radius: self.base_radius.load(Ordering::Relaxed),
             height: self.height.load(Ordering::Relaxed),
@@ -316,7 +341,8 @@ impl SharedGameState {
         for i in 0..3 {
             self.decorations_count[i].store(state.decorations_count[i], Ordering::Relaxed);
             self.decorations_size[i].store(state.decorations_size[i], Ordering::Relaxed);
-            self.decoration_seeds[i].store(state.decoration_seeds[i], Ordering::Relaxed);
+            self.decorations_seeds[i].store(state.decorations_seeds[i], Ordering::Relaxed);
+            self.decorations_shape[i].store(state.decorations_shape[i], Ordering::Relaxed);
         }
         self.cosine_alignment_threshold.store(state.cosine_alignment_threshold, Ordering::Relaxed);
         self.door_anim_fade_out.store(state.door_anim_fade_out, Ordering::Relaxed);

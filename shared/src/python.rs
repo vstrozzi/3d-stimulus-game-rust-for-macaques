@@ -70,7 +70,8 @@ impl SharedMemoryWrapper {
     /// Write game structure config fields to controller shared memory.
     fn write_game_state(
         &mut self,
-        decoration_seeds: [u64; 3],
+        decorations_seeds: [u64; 3],
+        decorations_shape: [u32; 3],
         base_radius: f32,
         height: f32,
         start_orient: f32,
@@ -107,7 +108,7 @@ impl SharedMemoryWrapper {
 
         // Fixed vars in trial
         for i in 0..3 {
-            gs.decoration_seeds[i].store(decoration_seeds[i], Ordering::Relaxed);
+            gs.decorations_seeds[i].store(decorations_seeds[i], Ordering::Relaxed);
         }
         gs.base_radius.store(base_radius.to_bits(), Ordering::Relaxed);
         gs.height.store(height.to_bits(), Ordering::Relaxed);
@@ -128,6 +129,7 @@ impl SharedMemoryWrapper {
         for i in 0..3 {
             gs.decorations_count[i].store(decorations_count[i], Ordering::Relaxed);
             gs.decorations_size[i].store(decorations_size[i].to_bits(), Ordering::Relaxed);
+            gs.decorations_shape[i].store(decorations_shape[i] as u32, Ordering::Relaxed);
         }
 
         // Dynamic vars in trial
@@ -159,10 +161,10 @@ fn read_game_state(gs: &SharedGameState) -> PyResult<Py<PyAny>>{
         let dict = pyo3::types::PyDict::new(py);
 
         // Fixed vars in trial
-        dict.set_item("decoration_seeds", [
-            gs.decoration_seeds[0].load(Ordering::Relaxed),
-            gs.decoration_seeds[1].load(Ordering::Relaxed),
-            gs.decoration_seeds[2].load(Ordering::Relaxed),
+        dict.set_item("decorations_seeds", [
+            gs.decorations_seeds[0].load(Ordering::Relaxed),
+            gs.decorations_seeds[1].load(Ordering::Relaxed),
+            gs.decorations_seeds[2].load(Ordering::Relaxed),
         ])?;
         dict.set_item("base_radius", f32::from_bits(gs.base_radius.load(Ordering::Relaxed)))?;
         dict.set_item("height", f32::from_bits(gs.height.load(Ordering::Relaxed)))?;
@@ -193,6 +195,12 @@ fn read_game_state(gs: &SharedGameState) -> PyResult<Py<PyAny>>{
             f32::from_bits(gs.decorations_size[2].load(Ordering::Relaxed))
         ])?;
 
+        dict.set_item("decorations_shape", [
+            gs.decorations_shape[0].load(Ordering::Relaxed),
+            gs.decorations_shape[1].load(Ordering::Relaxed),
+            gs.decorations_shape[2].load(Ordering::Relaxed)
+        ])?;
+        
         // Dynamic vars in trial
         dict.set_item("cosine_alignment_threshold", f32::from_bits(gs.cosine_alignment_threshold.load(Ordering::Relaxed)))?;
         dict.set_item("door_anim_fade_out", f32::from_bits(gs.door_anim_fade_out.load(Ordering::Relaxed)))?;
@@ -226,7 +234,7 @@ fn monkey_shared(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Export constants from constants.rs so Python can import them directly.
     use crate::constants::game_constants;
     m.add("REFRESH_RATE_HZ", game_constants::REFRESH_RATE_HZ)?;
-    m.add("DECORATION_SEEDS", game_constants::DECORATION_SEEDS.to_vec())?;
+    m.add("DECORATIONS_SEEDS", game_constants::DECORATIONS_SEEDS.to_vec())?;
     m.add("COSINE_ALIGNMENT_TO_WIN", game_constants::COSINE_ALIGNMENT_TO_WIN)?;
 
     // pyramid_constants
@@ -238,6 +246,7 @@ fn monkey_shared(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("PYRAMID_COLORS", pyramid_constants::PYRAMID_COLORS.iter().map(|f| f.to_vec()).collect::<Vec<Vec<f32>>>())?;
     m.add("PYRAMID_DECORATIONS_COUNT", pyramid_constants::PYRAMID_DECORATIONS_COUNT.to_vec())?;
     m.add("PYRAMID_DECORATIONS_SIZE", pyramid_constants::PYRAMID_DECORATIONS_SIZE.to_vec())?;
+    m.add("PYRAMID_DECORATIONS_SHAPE", pyramid_constants::PYRAMID_DECORATIONS_SHAPE.iter().map(|s| *s as u32).collect::<Vec<u32>>())?;
     m.add("DOOR_ANIM_FADE_OUT", pyramid_constants::DOOR_ANIM_FADE_OUT)?;
     m.add("DOOR_ANIM_STAY_OPEN", pyramid_constants::DOOR_ANIM_STAY_OPEN)?;
     m.add("DOOR_ANIM_FADE_IN", pyramid_constants::DOOR_ANIM_FADE_IN)?;

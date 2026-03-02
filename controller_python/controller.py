@@ -19,7 +19,7 @@ WIN_BLANK_DURATION_FRAMES = monkey_shared.WIN_BLANK_DURATION_FRAMES
 POLLING_RATE_TIME_S = 1  # time of polling in between of game controller 
 GAME_UNRESPONSIVENESS_THRESHOLD_S = 3.0  # time threshold to consider game unresponsive to restart trial
 
-# ── Controller-only metadata fields (not written to game shared memory) ──────
+# Controller-only metadata fields (not written to game shared memory)
 CONTROLLER_META_FIELDS = {
     "nr_attempts_to_win",
     "nr_attempts_suggestion",
@@ -28,7 +28,7 @@ CONTROLLER_META_FIELDS = {
     "elapsed_time_to_retroceed",
 }
 
-# ── Game-state schema (fields written to shared memory) ──────────────────────
+# Game-state schema (fields written to shared memory)
 state_schema = {
     "decoration_seeds": [int],
     "base_radius": float,
@@ -86,7 +86,6 @@ def load_trials(trials_path="trials.jsonl"):
     return trials
 
 
-# ── FSM states ───────────────────────────────────────────────────────────────
 class ControllerState(Enum):
     INIT = auto()
     WAITING_FOR_START = auto()
@@ -163,7 +162,6 @@ class MonkeyGameController:
         )
         self.listener.start()
 
-    # ── helpers ───────────────────────────────────────────────────────────
     @property
     def trial(self):
         """Current trial config dict."""
@@ -325,8 +323,6 @@ class MonkeyGameController:
         self.listener.stop()
         print("[FSM] Controller stopped.")
 
-    # ── state handlers ────────────────────────────────────────────────────
-
     def _handle_init(self):
         """Issue black screen + pause rendering, then wait for R."""
         print("[FSM] INIT → issuing blank_screen + stop_rendering")
@@ -376,7 +372,7 @@ class MonkeyGameController:
                 "zoom_in": False,
                 "zoom_out": False,
                 "check": False,
-                "reset": False,
+                "reset": True,
                 "blank_screen": True,
                 "stop_rendering": True,
                 "animation_door": False,
@@ -393,14 +389,13 @@ class MonkeyGameController:
 
     def _handle_playing(self, state):
         """Main gameplay: relay inputs, intercept check for hint logic, detect win."""
-        # ── Win detection ─────────────────────────────────────────────
+        # Win
         if self.check_has_won(state):
             self.log_frame(state, {**self.inputs, **self.triggers})
             self.fsm_state = ControllerState.TRIAL_COMPLETE
             print("[FSM] Win detected → TRIAL_COMPLETE")
             return
 
-        # ── Handle space (check / hint) ──────────────────────────────
         if self.triggers["check"]:
             trial_cfg = self.trial
             suggestion_threshold = trial_cfg.get("nr_attempts_suggestion", 0)
@@ -547,7 +542,6 @@ class MonkeyGameController:
         self.current_trial_index = next_index
 
         self._resync_with_game()
-    # ── keyboard handlers ─────────────────────────────────────────────────
 
     def _resync_with_game(self):
         self.current_frame = -1

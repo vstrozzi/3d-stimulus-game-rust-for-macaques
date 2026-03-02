@@ -22,6 +22,7 @@ pub struct PendingCommands {
     pub stop_rendering: bool,
     pub animation_door: bool,
     pub animation_all_door: bool,
+    pub animation_colored: bool,
 }
 pub struct SharedMemoryReaderPlugin;
 
@@ -60,6 +61,7 @@ pub fn clear_pending_commands(
     pending_commands.stop_rendering = false;
     pending_commands.animation_door = false;
     pending_commands.animation_all_door = false;
+    pending_commands.animation_colored = false;
 }
 
 pub fn read_shared_memory_commands(
@@ -90,6 +92,7 @@ pub fn read_shared_memory_commands(
     pending_commands.blank_screen = shm.commands.blank_screen.load(Ordering::Relaxed);
     pending_commands.reset = shm.commands.reset.load(Ordering::Relaxed);
     pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
+    pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
 }
 
 

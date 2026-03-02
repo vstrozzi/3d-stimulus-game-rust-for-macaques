@@ -98,6 +98,7 @@
   }
   .trial-card:hover { background: #3a3a55; }
   .trial-card.selected { border-color: var(--accent); }
+  .trial-card.multi-selected { border-color: var(--accent); background: #3a3a55; }
   .trial-card.drag-over { border-color: var(--success); border-style: dashed; }
   .trial-card.invalid { border-color: var(--danger); }
   .trial-card .card-top {
@@ -413,6 +414,16 @@
     margin-top: -3px;
     pointer-events: none;
   }
+  .orient-dial .dial-door-dot {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: white;
+    border: 2px solid black;
+    pointer-events: none;
+    z-index: 1;
+  }
 
   /* ── Scrollbar ── */
   ::-webkit-scrollbar { width: 8px; }
@@ -429,6 +440,115 @@
     border-radius: 6px;
     margin-bottom: 10px;
   }
+
+  /* ── Bulk Add Button ── */
+  #btnBulkAdd {
+    width: calc(100% - 12px);
+    margin: 6px;
+    padding: 8px;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s, color .15s;
+  }
+  #btnBulkAdd:hover {
+    background: var(--accent-dim);
+    color: var(--text);
+  }
+
+  /* ── Bulk Add Modal ── */
+  #bulkModal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .bulk-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  }
+  .bulk-panel h3 {
+    margin-bottom: 14px;
+    color: var(--accent);
+    font-size: 16px;
+  }
+  .bulk-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    margin: 12px 0 6px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid var(--border);
+  }
+  .bulk-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .bulk-group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .bulk-group label {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  .bulk-group input[type="number"],
+  .bulk-group input[type="text"] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text);
+    padding: 5px 8px;
+    font-size: 13px;
+    width: 120px;
+    outline: none;
+  }
+  .bulk-group input:focus { border-color: var(--accent); }
+  .bulk-group input.wide { width: 280px; }
+  .bulk-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: flex-end;
+  }
+  .bulk-actions button {
+    padding: 7px 18px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s;
+  }
+  .bulk-actions .btn-generate {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  .bulk-actions .btn-generate:hover { background: var(--accent-dim); }
+  .bulk-actions .btn-cancel {
+    background: var(--surface2);
+    color: var(--text);
+  }
+  .bulk-actions .btn-cancel:hover { background: var(--border); }
 </style>
 </head>
 <body>
@@ -449,6 +569,7 @@
   <div id="leftPanel">
     <div class="panel-header">Trials</div>
     <div id="trialList"></div>
+    <button id="btnBulkAdd">＋ Bulk Add Trials</button>
   </div>
 
   <!-- Center panel -->
@@ -497,7 +618,7 @@
             <span class="gc-channel-label">G</span><input type="number" id="gcG" step="0.01" min="0" max="1">
             <span class="gc-channel-label">B</span><input type="number" id="gcB" step="0.01" min="0" max="1">
             <span class="gc-channel-label">A</span><input type="number" id="gcA" step="0.01" min="0" max="1">
-            <button type="button" id="btnApplyDefaultColor" style="padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;white-space:nowrap;transition:background .15s" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--surface2)'">Apply Default</button>
+            <button type="button" id="btnApplyDefaultColor" style="padding:3px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:11px;white-space:nowrap;transition:background .15s" onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--surface2)'">Apply Default Face Color to All</button>
           </div>
         </div>
       </div>
@@ -506,6 +627,33 @@
       <div class="form-section">
         <div class="form-section-title">Per-Face Parameters</div>
         <div class="face-columns" id="faceColumns"></div>
+      </div>
+
+      <!-- Controller -->
+      <div class="form-section">
+        <div class="form-section-title">Controller</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>nr_attempts_to_win</label>
+            <input type="number" id="f_nr_attempts_to_win" step="1" min="1">
+          </div>
+          <div class="form-group">
+            <label>nr_attempts_suggestion</label>
+            <input type="number" id="f_nr_attempts_suggestion" step="1" min="0">
+          </div>
+          <div class="form-group">
+            <label>nr_attempts_to_retroceed</label>
+            <input type="number" id="f_nr_attempts_to_retroceed" step="1" min="1">
+          </div>
+          <div class="form-group">
+            <label>elapsed_time_to_win (s)</label>
+            <input type="number" id="f_elapsed_time_to_win" step="1" min="0">
+          </div>
+          <div class="form-group">
+            <label>elapsed_time_to_retroceed (s)</label>
+            <input type="number" id="f_elapsed_time_to_retroceed" step="1" min="0">
+          </div>
+        </div>
       </div>
 
       <!-- Geometry -->
@@ -527,6 +675,7 @@
               <div class="orient-dial" id="orientDial">
                 <div class="dial-arrow" id="dialArrow"></div>
                 <div class="dial-dot"></div>
+                <div class="dial-door-dot" id="dialDoorDot"></div>
               </div>
             </div>
           </div>
@@ -578,33 +727,106 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+</div>
 
-      <!-- Controller -->
-      <div class="form-section">
-        <div class="form-section-title">Controller</div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>nr_attempts_to_win</label>
-            <input type="number" id="f_nr_attempts_to_win" step="1" min="1">
-          </div>
-          <div class="form-group">
-            <label>nr_attempts_suggestion</label>
-            <input type="number" id="f_nr_attempts_suggestion" step="1" min="0">
-          </div>
-          <div class="form-group">
-            <label>nr_attempts_to_retroceed</label>
-            <input type="number" id="f_nr_attempts_to_retroceed" step="1" min="1">
-          </div>
-          <div class="form-group">
-            <label>elapsed_time_to_win (s)</label>
-            <input type="number" id="f_elapsed_time_to_win" step="1" min="0">
-          </div>
-          <div class="form-group">
-            <label>elapsed_time_to_retroceed (s)</label>
-            <input type="number" id="f_elapsed_time_to_retroceed" step="1" min="0">
-          </div>
-        </div>
+<!-- Bulk Add Modal -->
+<div id="bulkModal" style="display:none">
+  <div class="bulk-panel">
+    <h3>Bulk Add Trials</h3>
+
+    <div class="bulk-section-title">Trial Count &amp; Types</div>
+    <div class="bulk-row">
+      <div class="bulk-group">
+        <label>Number of trials</label>
+        <input type="number" id="bulk_num_trials" value="10" min="1" step="1">
       </div>
+      <div class="bulk-group">
+        <label>% Type 1</label>
+        <input type="number" id="bulk_pct_type1" value="50" min="0" max="100" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>% Type 2</label>
+        <input type="number" id="bulk_pct_type2" value="50" min="0" max="100" step="1">
+      </div>
+    </div>
+
+    <div class="bulk-section-title">Controller Parameters</div>
+    <div class="bulk-row">
+      <div class="bulk-group">
+        <label>nr_attempts_to_win</label>
+        <input type="number" id="bulk_nr_win" value="5" min="1" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>nr_attempts_suggestion</label>
+        <input type="number" id="bulk_nr_suggest" value="3" min="0" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>nr_attempts_to_retroceed</label>
+        <input type="number" id="bulk_nr_retro" value="10" min="1" step="1">
+      </div>
+    </div>
+    <div class="bulk-row">
+      <div class="bulk-group">
+        <label>elapsed_time_to_win (s)</label>
+        <input type="number" id="bulk_time_win" value="4" min="0" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>elapsed_time_to_retroceed (s)</label>
+        <input type="number" id="bulk_time_retro" value="10" min="0" step="1">
+      </div>
+    </div>
+
+    <div class="bulk-section-title">Start Orientation (values to sample from)</div>
+    <div class="bulk-row">
+      <div class="bulk-group">
+        <label>Comma-separated radians (0 – 6.28)</label>
+        <input type="text" id="bulk_orientations" class="wide" value="0, 1.57, 3.14, 4.71" placeholder="0, 1.57, 3.14, 4.71">
+      </div>
+    </div>
+
+    <div class="bulk-section-title">Randomization Ranges</div>
+    <div class="bulk-row">
+      <div class="bulk-group">
+        <label>Color min</label>
+        <input type="number" id="bulk_color_min" value="0.1" min="0" max="1" step="0.01">
+      </div>
+      <div class="bulk-group">
+        <label>Color max</label>
+        <input type="number" id="bulk_color_max" value="1.0" min="0" max="1" step="0.01">
+      </div>
+      <div class="bulk-group">
+        <label>Size min</label>
+        <input type="number" id="bulk_size_min" value="0.05" min="0" step="0.01">
+      </div>
+      <div class="bulk-group">
+        <label>Size max</label>
+        <input type="number" id="bulk_size_max" value="0.5" min="0" step="0.01">
+      </div>
+    </div>
+    <div class="bulk-row">
+      <div class="bulk-group">
+        <label>Count min</label>
+        <input type="number" id="bulk_count_min" value="10" min="0" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>Count max</label>
+        <input type="number" id="bulk_count_max" value="80" min="0" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>Seed min</label>
+        <input type="number" id="bulk_seed_min" value="1" min="0" step="1">
+      </div>
+      <div class="bulk-group">
+        <label>Seed max</label>
+        <input type="number" id="bulk_seed_max" value="9999" min="0" step="1">
+      </div>
+    </div>
+
+    <div class="bulk-actions">
+      <button class="btn-cancel" id="bulkCancel">Cancel</button>
+      <button class="btn-generate" id="bulkGenerate">Generate</button>
     </div>
   </div>
 </div>
@@ -615,9 +837,11 @@
 // ════════════════════════════════════════════════════════════════
 let trials = [];
 let selectedIndex = -1;
+let multiSelected = new Set(); // indices of multi-selected trials
 let fileName = 'trials.jsonl';
 let fileHandle = null; // File System Access API handle (for overwriting)
 let currentPreset = 'custom'; // 'type1', 'type2', 'custom'
+let presetOverride = null; // when user explicitly clicks a preset radio, this overrides detectPreset
 
 // Global winning face color — propagated to colors[0] of all trials
 // (face 0 is the winning face for both type 1 and type 2)
@@ -631,7 +855,7 @@ const DEFAULTS = {
   base_radius: 2.5,
   height: 4.0,
   start_orient: 0.0,
-  target_door: 0,
+  target_door: 2,
   colors: [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0]],
   decorations_count: [50, 20, 10],
   decorations_size: [0.1, 0.2, 0.3],
@@ -739,10 +963,13 @@ function randomizeTrial(trial, preset) {
     trial.decorations_count[2] = randInt(10, 80);
   }
 
-  // For custom: also randomize geometry
+  // Geometry: fixed for type1/type2, randomized only in custom
   if (preset === 'custom') {
     trial.base_radius = randFloat(1.5, 4.0);
     trial.height = randFloat(2.5, 6.0);
+  } else {
+    trial.base_radius = DEFAULTS.base_radius;
+    trial.height = DEFAULTS.height;
   }
 
   // Random decoration shapes (0–3)
@@ -758,6 +985,19 @@ function randomizeTrial(trial, preset) {
 
   // Random start orientation
   trial.start_orient = randFloat(0, 6.28);
+}
+
+/** Compute the screen angle (in our CW convention) for a given door and orient */
+function doorScreenAngle(doorIndex, orient) {
+  // Door 2 = bottom (0 rad). Doors are numbered CCW around the pyramid,
+  // so in our CW-positive screen convention: doorBaseAngle = (2 - d) * π/3
+  const base = ((2 - doorIndex) * Math.PI / 3 + Math.PI * 2) % (Math.PI * 2);
+  return base + orient;
+}
+
+/** Convert a CW-from-bottom angle to screen x,y offsets */
+function angleToXY(angle, radius) {
+  return { x: -radius * Math.sin(angle), y: radius * Math.cos(angle) };
 }
 
 function rgbaToCSS(c) {
@@ -799,7 +1039,7 @@ function detectPreset(trial) {
   const allDiff = s[0] !== s[1] && s[1] !== s[2] && s[0] !== s[2];
 
   if (face1eq2 && trial.target_door === 5) return 'type2';
-  if (allDiff && trial.target_door === 0) return 'type1';
+  if (allDiff && trial.target_door === 2) return 'type1';
   return 'custom';
 }
 
@@ -833,7 +1073,7 @@ function renderTrialList() {
   list.innerHTML = '';
   trials.forEach((trial, idx) => {
     const card = document.createElement('div');
-    card.className = 'trial-card' + (idx === selectedIndex ? ' selected' : '');
+    card.className = 'trial-card' + (idx === selectedIndex ? ' selected' : '') + (multiSelected.has(idx) ? ' multi-selected' : '');
     const errors = validate(trial);
     if (errors.length > 0) card.classList.add('invalid');
 
@@ -866,14 +1106,39 @@ function renderTrialList() {
       }
     });
 
-    card.addEventListener('click', () => { selectedIndex = idx; renderAll(); });
+    card.addEventListener('click', (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Toggle this index in multiSelected
+        if (multiSelected.has(idx)) {
+          multiSelected.delete(idx);
+        } else {
+          multiSelected.add(idx);
+        }
+        // Keep selectedIndex as the last ctrl-clicked item for editing
+        selectedIndex = idx;
+      } else if (e.shiftKey && selectedIndex >= 0) {
+        // Range select from selectedIndex to idx
+        const lo = Math.min(selectedIndex, idx);
+        const hi = Math.max(selectedIndex, idx);
+        multiSelected.clear();
+        for (let si = lo; si <= hi; si++) multiSelected.add(si);
+      } else {
+        // Normal click — single select, clear multi
+        multiSelected.clear();
+        selectedIndex = idx;
+        presetOverride = null; // reset override when switching trials
+      }
+      renderAll();
+    });
 
     // Card top row
     const top = document.createElement('div');
     top.className = 'card-top';
     const label = document.createElement('span');
     label.className = 'card-label';
-    label.textContent = `Trial ${idx + 1}`;
+    const trialType = detectPreset(trial);
+    const typeLabel = trialType === 'type1' ? 'T1' : trialType === 'type2' ? 'T2' : 'C';
+    label.textContent = `Trial ${idx + 1}: ${typeLabel}`;
     top.appendChild(label);
 
     const btns = document.createElement('div');
@@ -882,12 +1147,12 @@ function renderTrialList() {
     const btnUp = document.createElement('button');
     btnUp.textContent = '▲';
     btnUp.title = 'Move up';
-    btnUp.addEventListener('click', e => { e.stopPropagation(); moveTrialUp(idx); });
+    btnUp.addEventListener('click', e => { e.stopPropagation(); bulkMoveUp(idx); });
 
     const btnDown = document.createElement('button');
     btnDown.textContent = '▼';
     btnDown.title = 'Move down';
-    btnDown.addEventListener('click', e => { e.stopPropagation(); moveTrialDown(idx); });
+    btnDown.addEventListener('click', e => { e.stopPropagation(); bulkMoveDown(idx); });
 
     const btnDup = document.createElement('button');
     btnDup.textContent = '⧉';
@@ -923,10 +1188,21 @@ function renderTrialList() {
     const arrowSvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
     arrowSvg.setAttribute('class','orient-arrow');
     arrowSvg.setAttribute('viewBox','0 0 30 30');
-    arrowSvg.style.transform = `rotate(${orient}rad)`;
+    arrowSvg.style.transform = `rotate(${Math.PI + orient}rad)`;
     arrowSvg.innerHTML = `<line x1="15" y1="24" x2="15" y2="5" stroke="white" stroke-width="3" stroke-linecap="round"/>
       <polygon points="15,2 11,8 19,8" fill="white"/>`;
     bar.appendChild(arrowSvg);
+
+    // Door dot on the color bar
+    const targetDoor = trial.target_door ?? DEFAULTS.target_door;
+    const dAngle = doorScreenAngle(targetDoor, orient);
+    const dOff = angleToXY(dAngle, 13);
+    const dotSvg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    dotSvg.setAttribute('class','orient-arrow');
+    dotSvg.setAttribute('viewBox','0 0 30 30');
+    dotSvg.style.transform = 'none';
+    dotSvg.innerHTML = `<circle cx="${(15 + dOff.x).toFixed(1)}" cy="${(15 + dOff.y).toFixed(1)}" r="3" fill="white" stroke="black" stroke-width="1.5"/>`;
+    bar.appendChild(dotSvg);
 
     card.appendChild(bar);
     list.appendChild(card);
@@ -976,7 +1252,8 @@ function renderPreview() {
 function renderForm() {
   if (selectedIndex < 0) return;
   const trial = trials[selectedIndex];
-  currentPreset = detectPreset(trial);
+  // Use override if set, otherwise auto-detect
+  currentPreset = presetOverride !== null ? presetOverride : detectPreset(trial);
 
   // Preset radios
   document.querySelectorAll('input[name="preset"]').forEach(r => {
@@ -1141,8 +1418,19 @@ function createFaceInput(label, value, faceIdx, field, step, min) {
 function updateDial() {
   const orient = trials[selectedIndex]?.start_orient ?? 0;
   const arrow = document.getElementById('dialArrow');
-  // In our coordinate, 0 rad = up, increases clockwise
-  arrow.style.transform = `rotate(${orient}rad)`;
+  // Convention: 0 rad = down (toward camera in game), increases CW
+  // The CSS arrow element points up by default, so rotate by (π + orient) to
+  // map 0 → down, π/2 → left (CW visual).
+  arrow.style.transform = `rotate(${Math.PI + orient}rad)`;
+
+  // Position the door dot on the dial edge
+  const targetDoor = trials[selectedIndex]?.target_door ?? DEFAULTS.target_door;
+  const dAngle = doorScreenAngle(targetDoor, orient);
+  const r = 25; // radius from center of the 60x60 dial
+  const off = angleToXY(dAngle, r);
+  const doorDot = document.getElementById('dialDoorDot');
+  doorDot.style.left = (30 + off.x - 4) + 'px';  // -4 = half of 8px width
+  doorDot.style.top  = (30 + off.y - 4) + 'px';
 }
 
 function setupDial() {
@@ -1153,7 +1441,9 @@ function setupDial() {
     const rect = dial.getBoundingClientRect();
     const cx = rect.left + rect.width / 2;
     const cy = rect.top + rect.height / 2;
-    let angle = Math.atan2(e.clientX - cx, -(e.clientY - cy));
+    // Convention: 0 rad = down (toward camera), increases clockwise.
+    // atan2(-dx, dy) gives 0 when mouse is below center, +π/2 when left, π at top, etc.
+    let angle = Math.atan2(cx - e.clientX, e.clientY - cy);
     if (angle < 0) angle += Math.PI * 2;
     angle = Math.round(angle * 100) / 100;
     if (selectedIndex >= 0) {
@@ -1261,7 +1551,7 @@ function onScalarFieldChange(e) {
 
   trials[selectedIndex][field] = val;
 
-  if (field === 'start_orient') updateDial();
+  if (field === 'start_orient' || field === 'target_door') updateDial();
   renderTrialList();
   renderPreview();
 }
@@ -1269,11 +1559,14 @@ function onScalarFieldChange(e) {
 function onPresetChange(e) {
   if (selectedIndex < 0) return;
   const preset = e.target.value;
+  presetOverride = preset;
   currentPreset = preset;
   const trial = trials[selectedIndex];
 
   if (preset === 'type1') {
-    trial.target_door = 0;
+    trial.target_door = 2;
+    trial.base_radius = DEFAULTS.base_radius;
+    trial.height = DEFAULTS.height;
     trial.decorations_seeds = deepClone(DEFAULTS.decorations_seeds);
     trial.colors = deepClone(DEFAULTS.colors);
     trial.colors[0] = [...winningFaceColor];
@@ -1282,6 +1575,8 @@ function onPresetChange(e) {
     trial.decorations_shape = deepClone(DEFAULTS.decorations_shape);
   } else if (preset === 'type2') {
     trial.target_door = 5;
+    trial.base_radius = DEFAULTS.base_radius;
+    trial.height = DEFAULTS.height;
     trial.decorations_seeds = deepClone(TYPE2_DEFAULTS.decorations_seeds);
     trial.colors = deepClone(TYPE2_DEFAULTS.colors);
     trial.colors[0] = [...winningFaceColor];
@@ -1289,7 +1584,10 @@ function onPresetChange(e) {
     trial.decorations_size = deepClone(TYPE2_DEFAULTS.decorations_size);
     trial.decorations_shape = deepClone(TYPE2_DEFAULTS.decorations_shape);
   }
-  // 'custom' — leave everything as-is
+  // 'custom' — unlock all constraints so user can freely edit
+  if (preset === 'custom') {
+    // nothing to reset — just allow free editing
+  }
 
   renderAll();
 }
@@ -1311,6 +1609,40 @@ function moveTrialDown(idx) {
   renderAll();
 }
 
+function bulkMoveUp(idx) {
+  const indices = multiSelected.size > 0 ? [...multiSelected].sort((a, b) => a - b) : [idx];
+  // Can't move up if any is at the top
+  if (indices[0] <= 0) return;
+  for (const i of indices) {
+    [trials[i - 1], trials[i]] = [trials[i], trials[i - 1]];
+  }
+  // Adjust selectedIndex
+  if (multiSelected.has(selectedIndex)) selectedIndex--;
+  else if (!multiSelected.has(selectedIndex) && indices.includes(selectedIndex + 1)) selectedIndex++;
+  // Adjust multiSelected
+  const adjusted = new Set();
+  for (const si of multiSelected) adjusted.add(si - 1);
+  multiSelected = adjusted;
+  renderAll();
+}
+
+function bulkMoveDown(idx) {
+  const indices = multiSelected.size > 0 ? [...multiSelected].sort((a, b) => b - a) : [idx];
+  // Can't move down if any is at the bottom
+  if (indices[0] >= trials.length - 1) return;
+  for (const i of indices) {
+    [trials[i], trials[i + 1]] = [trials[i + 1], trials[i]];
+  }
+  // Adjust selectedIndex
+  if (multiSelected.has(selectedIndex)) selectedIndex++;
+  else if (!multiSelected.has(selectedIndex) && indices.includes(selectedIndex - 1)) selectedIndex--;
+  // Adjust multiSelected
+  const adjusted = new Set();
+  for (const si of multiSelected) adjusted.add(si + 1);
+  multiSelected = adjusted;
+  renderAll();
+}
+
 function duplicateTrial(idx) {
   trials.splice(idx + 1, 0, deepClone(trials[idx]));
   selectedIndex = idx + 1;
@@ -1319,7 +1651,15 @@ function duplicateTrial(idx) {
 
 function deleteTrial(idx) {
   if (!confirm(`Delete Trial ${idx + 1}?`)) return;
+  multiSelected.delete(idx);
   trials.splice(idx, 1);
+  // Adjust multiSelected indices after removal
+  const adjusted = new Set();
+  for (const si of multiSelected) {
+    if (si > idx) adjusted.add(si - 1);
+    else adjusted.add(si);
+  }
+  multiSelected = adjusted;
   if (trials.length === 0) selectedIndex = -1;
   else if (selectedIndex >= trials.length) selectedIndex = trials.length - 1;
   else if (selectedIndex > idx) selectedIndex--;
@@ -1438,6 +1778,136 @@ async function downloadFile() {
 }
 
 // ════════════════════════════════════════════════════════════════
+// Bulk Add Trials
+// ════════════════════════════════════════════════════════════════
+function openBulkModal() {
+  document.getElementById('bulkModal').style.display = 'flex';
+}
+
+function closeBulkModal() {
+  document.getElementById('bulkModal').style.display = 'none';
+}
+
+function generateBulkTrials() {
+  const count = parseInt(document.getElementById('bulk_num_trials').value) || 10;
+  const pctType1 = parseFloat(document.getElementById('bulk_pct_type1').value) || 0;
+  const pctType2 = parseFloat(document.getElementById('bulk_pct_type2').value) || 0;
+  const nrWin = parseInt(document.getElementById('bulk_nr_win').value) || 5;
+  let nrSuggest = parseInt(document.getElementById('bulk_nr_suggest').value);
+  if (isNaN(nrSuggest)) nrSuggest = 3;
+  const nrRetro = parseInt(document.getElementById('bulk_nr_retro').value) || 10;
+  const timeWin = parseFloat(document.getElementById('bulk_time_win').value) || 4;
+  const timeRetro = parseFloat(document.getElementById('bulk_time_retro').value) || 10;
+
+  const orientStr = document.getElementById('bulk_orientations').value || '0';
+  const orientations = orientStr.split(',').map(s => parseFloat(s.trim())).filter(v => !isNaN(v) && v >= 0 && v <= 6.2832);
+  if (orientations.length === 0) orientations.push(0);
+
+  const colorMin = parseFloat(document.getElementById('bulk_color_min').value);
+  const colorMax = parseFloat(document.getElementById('bulk_color_max').value);
+  const sizeMin  = parseFloat(document.getElementById('bulk_size_min').value);
+  const sizeMax  = parseFloat(document.getElementById('bulk_size_max').value);
+  const countMin = parseInt(document.getElementById('bulk_count_min').value);
+  const countMax = parseInt(document.getElementById('bulk_count_max').value);
+  const seedMin  = parseInt(document.getElementById('bulk_seed_min').value);
+  const seedMax  = parseInt(document.getElementById('bulk_seed_max').value);
+
+  const totalPct = pctType1 + pctType2;
+  const nType1 = totalPct > 0 ? Math.round(count * pctType1 / totalPct) : Math.round(count / 2);
+
+  // Build a shuffled list of preset assignments
+  const presetList = [];
+  for (let i = 0; i < count; i++) presetList.push(i < nType1 ? 'type1' : 'type2');
+  // Fisher-Yates shuffle
+  for (let i = presetList.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [presetList[i], presetList[j]] = [presetList[j], presetList[i]];
+  }
+
+  function bulkRandColor() {
+    return [randFloat(colorMin, colorMax), randFloat(colorMin, colorMax), randFloat(colorMin, colorMax), 1.0];
+  }
+
+  for (let i = 0; i < count; i++) {
+    const preset = presetList[i];
+    const t = makeTrial(preset === 'type2' ? TYPE2_DEFAULTS : {});
+
+    // Winning face color
+    t.colors[0] = [...winningFaceColor];
+
+    // Non-winning face colors
+    if (preset === 'type2') {
+      const shared = bulkRandColor();
+      t.colors[1] = shared;
+      t.colors[2] = [...shared];
+    } else {
+      t.colors[1] = bulkRandColor();
+      t.colors[2] = bulkRandColor();
+    }
+
+    // Seeds
+    t.decorations_seeds[0] = randInt(seedMin, seedMax);
+    if (preset === 'type2') {
+      const s = randInt(seedMin, seedMax);
+      t.decorations_seeds[1] = s; t.decorations_seeds[2] = s;
+    } else {
+      t.decorations_seeds[1] = randInt(seedMin, seedMax);
+      t.decorations_seeds[2] = randInt(seedMin, seedMax);
+    }
+
+    // Counts
+    t.decorations_count[0] = randInt(countMin, countMax);
+    if (preset === 'type2') {
+      const c = randInt(countMin, countMax);
+      t.decorations_count[1] = c; t.decorations_count[2] = c;
+    } else {
+      t.decorations_count[1] = randInt(countMin, countMax);
+      t.decorations_count[2] = randInt(countMin, countMax);
+    }
+
+    // Sizes
+    t.decorations_size[0] = randFloat(sizeMin, sizeMax);
+    if (preset === 'type2') {
+      const sz = randFloat(sizeMin, sizeMax);
+      t.decorations_size[1] = sz; t.decorations_size[2] = sz;
+    } else {
+      t.decorations_size[1] = randFloat(sizeMin, sizeMax);
+      t.decorations_size[2] = randFloat(sizeMin, sizeMax);
+    }
+
+    // Shapes
+    t.decorations_shape[0] = randInt(0, 3);
+    if (preset === 'type2') {
+      const sh = randInt(0, 3);
+      t.decorations_shape[1] = sh; t.decorations_shape[2] = sh;
+    } else {
+      t.decorations_shape[1] = randInt(0, 3);
+      t.decorations_shape[2] = randInt(0, 3);
+    }
+
+    // Controller params
+    t.nr_attempts_to_win = nrWin;
+    t.nr_attempts_suggestion = nrSuggest;
+    t.nr_attempts_to_retroceed = nrRetro;
+    t.elapsed_time_to_win = timeWin;
+    t.elapsed_time_to_retroceed = timeRetro;
+
+    // Start orientation — sample from provided values
+    t.start_orient = orientations[randInt(0, orientations.length - 1)];
+
+    // Fixed geometry
+    t.base_radius = DEFAULTS.base_radius;
+    t.height = DEFAULTS.height;
+
+    trials.push(t);
+  }
+
+  selectedIndex = trials.length > 0 ? trials.length - 1 : -1;
+  closeBulkModal();
+  renderAll();
+}
+
+// ════════════════════════════════════════════════════════════════
 // Master render
 // ════════════════════════════════════════════════════════════════
 function renderAll() {
@@ -1493,11 +1963,27 @@ document.getElementById('btnNewTrial').addEventListener('click', addNewTrial);
 document.getElementById('btnRandomize').addEventListener('click', onRandomize);
 document.getElementById('btnDownload').addEventListener('click', downloadFile);
 
-// Ctrl+S / Cmd+S to save
+// Ctrl+S / Cmd+S to save, Delete key to remove selected trials
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
     downloadFile();
+  }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    // Don't intercept if user is typing in an input/select
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    const toDelete = multiSelected.size > 0
+      ? [...multiSelected].sort((a, b) => b - a)
+      : (selectedIndex >= 0 ? [selectedIndex] : []);
+    if (toDelete.length === 0) return;
+    if (!confirm(`Delete ${toDelete.length} trial(s)?`)) return;
+    for (const idx of toDelete) {
+      trials.splice(idx, 1);
+    }
+    multiSelected.clear();
+    if (trials.length === 0) selectedIndex = -1;
+    else selectedIndex = Math.min(selectedIndex, trials.length - 1);
+    renderAll();
   }
 });
 
@@ -1527,6 +2013,14 @@ document.getElementById('btnApplyDefaultColor').addEventListener('click', () => 
   winningFaceColor = [...DEFAULTS.colors[0]];
   propagateWinningColor();
   renderAll();
+});
+
+// Bulk add
+document.getElementById('btnBulkAdd').addEventListener('click', openBulkModal);
+document.getElementById('bulkCancel').addEventListener('click', closeBulkModal);
+document.getElementById('bulkGenerate').addEventListener('click', generateBulkTrials);
+document.getElementById('bulkModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('bulkModal')) closeBulkModal();
 });
 
 // Dial

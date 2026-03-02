@@ -82,7 +82,7 @@ pub fn handle_door_animation(
         }
     };
 
-    // Color it in RED
+    // Color all lamp
     if door_win_entities.animate_all {
         for (mut vis, mut spotlight) in light_query.iter_mut() {
             update_light(&mut vis, &mut spotlight, door_win_entities.color);

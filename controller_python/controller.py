@@ -97,6 +97,11 @@ class ControllerState(Enum):
     TRIAL_COMPLETE = auto()
 
 
+class TrialProceeding(Enum):
+    ADVANCE = auto()
+    STAY = auto()
+    RETROCEED = auto()
+
 class MonkeyGameController:
     def __init__(self):
         self.pressed_keys = set()
@@ -123,7 +128,8 @@ class MonkeyGameController:
             "blank_screen": False,
             "stop_rendering": False,
             "animation_door": False,
-            "animation_all_door": False,    
+            "animation_all_door": False,  
+            "animation_colored": False, 
         }
 
         # Trial configuration
@@ -137,9 +143,12 @@ class MonkeyGameController:
 
         # FSM
         self.fsm_state = ControllerState.INIT
+        self.trial_proceeding = TrialProceeding.ADVANCE
 
-        # Special commands (START)
+        # Special commands
         self._start = False
+        self._time_win_expired = False
+        self._time_retroceed_expired = False
 
         # Per-trial tracking
         self.nr_attempts = 0
@@ -179,8 +188,15 @@ class MonkeyGameController:
                 state[key] = value
         return state
 
-    def check_has_won(self, state):
-        return state.get("win_elapsed_secs", 0.0) != 0.0
+    def check_has_finished(self, state):
+        nr_attempts = state.get("nr_attempts", 0)
+        nr_attempts_to_retroceed = self.trial.get("nr_attempts_to_retroceed", 0)
+        time_elapsed = state.get("elapsed_secs", 0.0)
+        elapsed_time_to_retroceed = self.trial.get("elapsed_time_to_retroceed", 0.0)
+
+        return state.get("win_elapsed_secs", 0.0) != 0.0 or \
+               nr_attempts >= nr_attempts_to_retroceed or \
+               time_elapsed >= elapsed_time_to_retroceed
 
     def reset_commands(self):
         self.inputs = {k: False for k in self.inputs}
@@ -215,7 +231,8 @@ class MonkeyGameController:
             "blank_screen": False,
             "stop_rendering": False,
             "animation_door": False,
-            "animation_all_door": False,    
+            "animation_all_door": False,   
+            "animation_colored": False,
         }
         self.shm_wrapper.write_commands(**cmds)
         return cmds
@@ -320,7 +337,6 @@ class MonkeyGameController:
             time.sleep(POLLING_RATE_TIME_S / 1000.0)
             self.game_time_unresponsive = 0.0
 
-            print(state)
         self.listener.stop()
         print("[FSM] Controller stopped.")
 
@@ -335,10 +351,16 @@ class MonkeyGameController:
         # Build fresh default state and overlay trial config
         default_state = self.shm_wrapper.read_default_game_state()
         trial_state = self.write_config_on_state(trial_cfg, default_state)
+
+        # Read previous state of game machine to get state of it
+        state_old = self.shm_wrapper.read_game_state()
+
         self.write_game_state(trial_state)
         self.trial_start_state = trial_state
 
         # Write commands to setup beginning of trial
+
+        print(f"state old {state_old.get('is_blank', False)} and stop {state_old.get('is_rendering_stopped', False)}")
         self.write_commands(
             {"rotate_left": False,
             "rotate_right": False,
@@ -346,10 +368,11 @@ class MonkeyGameController:
             "zoom_out": False,
             "check": False,
             "reset": True,
-            "blank_screen": True,
-            "stop_rendering": True,
+            "blank_screen": not state_old.get("is_blank", False),
+            "stop_rendering": not state_old.get("is_rendering_stopped", False),
             "animation_door": False,
-            "animation_all_door": False,    
+            "animation_all_door": False,  
+            "animation_colored": False, 
             })
 
         # Initialise per-trial tracking
@@ -357,9 +380,11 @@ class MonkeyGameController:
         self.trial_start_time = time.time()
         self.frame_log = {}
         self.trial_run_counter += 1
-
+        self._time_win_expired = False
+        self._time_retroceed_expired = False
 
         self.fsm_state = ControllerState.WAITING_FOR_START
+
         self.reset_commands()
         print("[FSM] → WAITING_FOR_START  (press 'r' to begin)")
 
@@ -377,7 +402,8 @@ class MonkeyGameController:
                 "blank_screen": True,
                 "stop_rendering": True,
                 "animation_door": False,
-                "animation_all_door": False,    
+                "animation_all_door": False,   
+                "animation_colored": False,
             }
             )
             self.fsm_state = ControllerState.PLAYING
@@ -388,22 +414,113 @@ class MonkeyGameController:
         # If not dont write any new command
         cmds = self.write_no_commands()
 
+
     def _handle_playing(self, state):
         """Main gameplay: relay inputs, intercept check for hint logic, detect win."""
-        # Win
-        if self.check_has_won(state):
+
+
+        time_elapsed = state.get("elapsed_secs", 0.0)
+
+        is_win = time_elapsed < self.trial.get("elapsed_time_to_win", 0.0) and self.nr_attempts < self.trial.get("nr_attempts_to_win", 0)
+        is_stay = not is_win and time_elapsed < self.trial.get("elapsed_time_to_retroceed", 0.0) and \
+                  self.nr_attempts < self.trial.get("nr_attempts_to_retroceed", 0)
+        
+        # Set state of advancement of trial
+        if is_win:
+            self.trial_proceeding = TrialProceeding.ADVANCE
+        elif is_stay:
+            self.trial_proceeding = TrialProceeding.STAY
+        else:
+            self.trial_proceeding = TrialProceeding.RETROCEED
+
+        # One time set when Time for winning exceeded but not to retroceed, blink all the light on white
+        if time_elapsed > self.trial.get("elapsed_time_to_win", 0.0) and not self._time_win_expired:
+            print(f"[TIME] Time to win exceeded ({time_elapsed:.1f}s > {self.trial.get('elapsed_time_to_win', 0.0)}s), triggering animation")
+            self._time_win_expired = True
+            cmds = self.write_commands(
+                    {"rotate_left": False,
+                    "rotate_right": False,
+                    "zoom_in": False,
+                    "zoom_out": False,
+                    "check": True,
+                    "reset": False,
+                    "blank_screen": False,
+                    "stop_rendering": True,
+                    "animation_door": True,
+                    "animation_all_door": True,
+                    "animation_colored": False}
+                )
+
+            self.fsm_state = ControllerState.WAITING_ANIMATION_START
+            print("[FSM] → WAITING_ANIMATION_START")
+            self.write_commands(cmds)
+            self.log_frame(state, cmds)
+            return
+            
+        # Time for retroceed triggered, animate all lights in red and terminate
+        elif (time_elapsed > self.trial.get("elapsed_time_to_retroceed", 0.0) and not self._time_retroceed_expired):
+            print(f"[TIME] Time to retroceed exceeded ({time_elapsed:.1f}s > {self.trial.get('elapsed_time_to_retroceed', 0.0)}s), triggering animation")
+            self._time_retroceed_expired = True
+            cmds = self.write_commands(
+                    {"rotate_left": False,
+                    "rotate_right": False,
+                    "zoom_in": False,
+                    "zoom_out": False,
+                    "check": True,
+                    "reset": False,
+                    "blank_screen": False,
+                    "stop_rendering": True,
+                    "animation_door": True,
+                    "animation_all_door": True,
+                    "animation_colored": True}
+                )
+
+            self.fsm_state = ControllerState.WAITING_ANIMATION_START
+            print("[FSM] → WAITING_ANIMATION_START")
+            self.write_commands(cmds)
+            self.log_frame(state, cmds)
+            return
+        
+        # Terminate everything if won or attempts overexceeded or time to retroceed exceeded
+        if self.check_has_finished(state):
+            print(f"[FSM] Check finished with outcome {self.trial_proceeding.name} → TRIAL_COMPLETE")
             self.log_frame(state, {**self.inputs, **self.triggers})
             self.fsm_state = ControllerState.TRIAL_COMPLETE
             print("[FSM] Win detected → TRIAL_COMPLETE")
             return
 
+        # Check triggered
         if self.triggers["check"]:
             trial_cfg = self.trial
             suggestion_threshold = trial_cfg.get("nr_attempts_suggestion", 0)
+            retroceeds_threshold = trial_cfg.get("nr_attempts_to_retroceed", 0)
+            # Flag to detect a win
+            cosine_current_alignment = state.get("cosine_alignment", 0.0)
+            cosine_alingment_treshold = trial_cfg.get("cosine_alignment_threshold", 0.0)
 
-            if self.nr_attempts < suggestion_threshold:
-                # Hint mode: show door animation while paused
-                print(f"[PLAY] Attempt {self.nr_attempts + 1} < {suggestion_threshold} → hint (animation_door + pause)")
+            # Current attempt is the last and fail
+            if (self.nr_attempts + 1) == retroceeds_threshold and cosine_current_alignment < cosine_alingment_treshold:
+                print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")
+                cmds = self.write_commands(
+                    {"rotate_left": False,
+                    "rotate_right": False,
+                    "zoom_in": False,
+                    "zoom_out": False,
+                    "check": True,
+                    "reset": False,
+                    "blank_screen": False,
+                    "stop_rendering": True,
+                    "animation_door": True,
+                    "animation_all_door": True,
+                    "animation_colored": True}
+                )
+                self.fsm_state = ControllerState.WAITING_ANIMATION_START
+                self.log_frame(state, cmds)
+                return
+            # Single light not colored: either suggest in or winning with staying in current level
+            elif (self.nr_attempts < suggestion_threshold and cosine_current_alignment < cosine_alingment_treshold) or \
+                (self.trial_proceeding == TrialProceeding.STAY and cosine_current_alignment > cosine_alingment_treshold):
+                print(f"[PLAY] Attempt {self.nr_attempts + 1} < {suggestion_threshold} and cosine_alignment={cosine_current_alignment:.2f} < {cosine_alingment_treshold:.2f} → hint (animation_door + pause)")  
                 # Don't sent any new commands
                 cmds = self.write_commands(
                     {"rotate_left": False,
@@ -415,12 +532,13 @@ class MonkeyGameController:
                     "blank_screen": False,
                     "stop_rendering": True,
                     "animation_door": True,
-                    "animation_all_door": False}
+                    "animation_all_door": False,
+                    "animation_colored": False,
+                    }
                 )
-
-            else:
-                # Real check
-                print(f"[PLAY] Attempt {self.nr_attempts + 1} >= {suggestion_threshold} → check")
+            # Color single light: winning and proceeding to next level
+            elif is_win and cosine_current_alignment > cosine_alingment_treshold and self.nr_attempts < suggestion_threshold :
+                print(f"[PLAY] Attempt {self.nr_attempts + 1} < {suggestion_threshold} and cosine_alignment={cosine_current_alignment:.2f} < {cosine_alingment_treshold:.2f} → win with hint (animation_door + pause)")
                 cmds = self.write_commands(
                     {"rotate_left": False,
                     "rotate_right": False,
@@ -429,9 +547,28 @@ class MonkeyGameController:
                     "check": True,
                     "reset": False,
                     "blank_screen": False,
-                    "stop_rendering": False,
+                    "stop_rendering": True,
                     "animation_door": True,
-                    "animation_all_door": True}
+                    "animation_all_door": False,
+                    "animation_colored": True,
+                    }
+                )
+            # All lights colored:
+            else:
+                # Real check
+                print(f"[PLAY] Attempt {self.nr_attempts + 1} < {suggestion_threshold} and cosine_alignment={cosine_current_alignment:.2f} > {cosine_alingment_treshold:.2f} → check without hint")
+                cmds = self.write_commands(
+                    {"rotate_left": False,
+                    "rotate_right": False,
+                    "zoom_in": False,
+                    "zoom_out": False,
+                    "check": True,
+                    "reset": False,
+                    "blank_screen": False,
+                    "stop_rendering": True,
+                    "animation_door": True,
+                    "animation_all_door": True,
+                    "animation_colored": False}
                 )
 
             self.nr_attempts += 1
@@ -440,10 +577,12 @@ class MonkeyGameController:
             self.write_commands(cmds)
             self.log_frame(state, cmds)
             return 
-        
-        # Any other case the game is playing
+
+        # Normal playing
         cmds = self.write_commands()
         self.log_frame(state, cmds)
+
+        return
 
     def _handle_waiting_animation_start(self, state):
         """Wait for the game to acknowledge the animation (is_animating → True)."""
@@ -462,8 +601,10 @@ class MonkeyGameController:
             "blank_screen": False,
             "stop_rendering": False,
             "animation_door": False,
-            "animation_all_door": False}
+            "animation_all_door": False,
+            "animation_colored": False}
         )
+
         self.write_game_state(state)
         self.log_frame(state, cmds)
 
@@ -485,7 +626,8 @@ class MonkeyGameController:
                 "blank_screen": False,
                 "stop_rendering": True,
                 "animation_door": False,
-                "animation_all_door": False}
+                "animation_all_door": False,
+                "animation_colored": False}
             )
             self.write_game_state(state)
             self.log_frame(state, cmds)
@@ -504,30 +646,30 @@ class MonkeyGameController:
             "blank_screen": False,
             "stop_rendering": False,
             "animation_door": False,
-            "animation_all_door": False}
+            "animation_all_door": False,
+            "animation_colored": False}
         )
         self.write_game_state(state)
         self.log_frame(state, cmds)
 
     def _handle_trial_complete(self, state):
         """Evaluate performance and decide advance / stay / retroceed."""
-        elapsed = time.time() - self.trial_start_time
-        trial_cfg = self.trial
+        elapsed = self.trial.get("elapsed_secs", 0.0)
 
-        nr_to_win = trial_cfg.get("nr_attempts_to_win", 999)
-        nr_to_retro = trial_cfg.get("nr_attempts_to_retroceed", 999)
-        time_to_win = trial_cfg.get("elapsed_time_to_win", 9999.0)
-        time_to_retro = trial_cfg.get("elapsed_time_to_retroceed", 9999.0)
+        nr_to_win = self.trial.get("nr_attempts_to_win", 999)
+        nr_to_retro = self.trial.get("nr_attempts_to_retroceed", 999)
+        time_to_win = self.trial.get("elapsed_time_to_win", 9999.0)
+        time_to_retro = self.trial.get("elapsed_time_to_retroceed", 9999.0)
 
         print(f"[EVAL] attempts={self.nr_attempts} elapsed={elapsed:.1f}s | "
               f"win<={nr_to_win}/{time_to_win}s  retro>={nr_to_retro}/{time_to_retro}s")
 
         # Decide outcome
-        if self.nr_attempts <= nr_to_win and elapsed <= time_to_win:
+        if self.trial_proceeding == TrialProceeding.ADVANCE:
             outcome = "advance"
             next_index = (self.current_trial_index + 1) % self.trials_length
             print(f"[EVAL] ADVANCE → trial {next_index}")
-        elif self.nr_attempts >= nr_to_retro or elapsed >= time_to_retro:
+        elif self.trial_proceeding == TrialProceeding.RETROCEED:
             outcome = "retroceed"
             next_index = min((self.current_trial_index - 1) % self.trials_length, 0)
             print(f"[EVAL] RETROCEED → trial {next_index}")

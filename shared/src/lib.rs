@@ -34,6 +34,7 @@ pub struct SharedCommands {
     pub stop_rendering: AtomicBool,
     pub animation_door: AtomicBool,
     pub animation_all_door: AtomicBool,
+    pub animation_colored: AtomicBool,
 }
 
 impl SharedCommands {
@@ -49,6 +50,7 @@ impl SharedCommands {
             stop_rendering: AtomicBool::new(false),
             animation_door: AtomicBool::new(false),
             animation_all_door: AtomicBool::new(false),
+            animation_colored: AtomicBool::new(false),
         }
     }
 }
@@ -126,6 +128,8 @@ macro_rules! shared_game_state {
             pub current_alignment: $U32,
             pub current_angle: $U32,
             pub is_animating: $B,
+            pub is_blank: $B,
+            pub is_rendering_stopped: $B,
             pub win_time: $U32,
         }
     };
@@ -224,6 +228,8 @@ impl SharedGameState {
             current_alignment: AtomicU32::new(f32::to_bits(0.0)),
             current_angle: AtomicU32::new(0),
             is_animating: AtomicBool::new(false),
+            is_blank: AtomicBool::new(false),
+            is_rendering_stopped: AtomicBool::new(false),
             win_time: AtomicU32::new(0),
         }
     }
@@ -261,6 +267,8 @@ impl SharedGameState {
         self.current_alignment.store(other.current_alignment.load(Ordering::Relaxed), Ordering::Relaxed);
         self.current_angle.store(other.current_angle.load(Ordering::Relaxed), Ordering::Relaxed);
         self.is_animating.store(other.is_animating.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.is_blank.store(other.is_blank.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.is_rendering_stopped.store(other.is_rendering_stopped.load(Ordering::Relaxed), Ordering::Relaxed);
         self.win_time.store(other.win_time.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
@@ -315,6 +323,8 @@ impl SharedGameState {
             door_anim_fade_in: self.door_anim_fade_in.load(Ordering::Relaxed),
             main_spotlight_intensity: self.main_spotlight_intensity.load(Ordering::Relaxed),
             ambient_brightness: self.ambient_brightness.load(Ordering::Relaxed),
+            is_blank: self.is_blank.load(Ordering::Relaxed),
+            is_rendering_stopped: self.is_rendering_stopped.load(Ordering::Relaxed),
             max_spotlight_intensity: self.max_spotlight_intensity.load(Ordering::Relaxed),
             frame_number: self.frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
@@ -361,6 +371,9 @@ impl SharedGameState {
         self.current_alignment.store(state.current_alignment, Ordering::Relaxed);
         self.current_angle.store(state.current_angle, Ordering::Relaxed);
         self.is_animating.store(state.is_animating, Ordering::Relaxed);
+        self.is_blank.store(state.is_blank, Ordering::Relaxed);
+        self.is_rendering_stopped.store(state.is_rendering_stopped, Ordering::Relaxed);
+
         self.win_time.store(state.win_time, Ordering::Relaxed);
     }
 

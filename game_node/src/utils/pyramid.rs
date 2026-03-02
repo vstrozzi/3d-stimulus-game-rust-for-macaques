@@ -74,7 +74,7 @@ pub fn spawn_pyramid_base(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    p_start_orientation_rad: f32, // Replaced GameState
+    p_start_orientation_rad: f32, 
     target_door: usize,           // Target door index for winning door entities
 ) -> (Option<Entity>, Option<Entity>) {
     let base_radius = BASE_RADIUS;
@@ -85,7 +85,7 @@ pub fn spawn_pyramid_base(
 
     for i in 0..BASE_NR_SIDES {
         let angle1 =
-            i as f32 * angle_increment + p_start_orientation_rad + std::f32::consts::PI / 2.0;
+            i as f32 * angle_increment + p_start_orientation_rad + std::f32::consts::PI / 2.0 ;
         let angle2 =
             (i + 1) as f32 * angle_increment + p_start_orientation_rad + std::f32::consts::PI / 2.0;
 
@@ -379,9 +379,9 @@ pub fn spawn_pyramid(
     let mut top_corners: [Vec3; 3] = [Vec3::ZERO; 3];
 
     let mut prev_xz = Vec2::new(
-        p_radius * p_orientation_rad.cos(),
-        p_radius * p_orientation_rad.sin(),
-    );
+    p_radius * (p_orientation_rad).cos(),
+    p_radius * (p_orientation_rad).sin(),
+);
 
     // Set first corners
     base_corners[0] = Vec3::new(prev_xz.x, GROUND_Y + BASE_HEIGHT, prev_xz.y);

@@ -50,6 +50,7 @@ impl SharedMemoryWrapper {
         stop_rendering: bool,
         animation_door: bool,
         animation_all_door: bool,
+        animation_colored: bool,
     ) {
         let shm = self.inner.get();
         let cmd = &shm.commands;
@@ -64,6 +65,7 @@ impl SharedMemoryWrapper {
         cmd.stop_rendering.store(stop_rendering, Ordering::Relaxed);
         cmd.animation_door.store(animation_door, Ordering::Relaxed);
         cmd.animation_all_door.store(animation_all_door, Ordering::Relaxed);
+        cmd.animation_colored.store(animation_colored, Ordering::Relaxed);
         
     }
 
@@ -94,6 +96,8 @@ impl SharedMemoryWrapper {
         cosine_alignment: f32,
         current_angle: f32,
         is_animating: bool,
+        is_blank: bool,
+        is_rendering_stopped: bool,
         win_elapsed_secs: f32,
     ) -> PyResult<()> {
         if colors.len() != 3 || colors.iter().any(|face| face.len() != 4) {
@@ -147,6 +151,8 @@ impl SharedMemoryWrapper {
         gs.current_alignment.store(cosine_alignment.to_bits(), Ordering::Relaxed);
         gs.current_angle.store(current_angle.to_bits(), Ordering::Relaxed);
         gs.is_animating.store(is_animating, Ordering::Relaxed);
+        gs.is_blank.store(is_blank, Ordering::Relaxed);
+        gs.is_rendering_stopped.store(is_rendering_stopped, Ordering::Relaxed);
         gs.win_time.store(win_elapsed_secs.to_bits(), Ordering::Relaxed);
 
         Ok(())
@@ -200,7 +206,8 @@ fn read_game_state(gs: &SharedGameState) -> PyResult<Py<PyAny>>{
             gs.decorations_shape[1].load(Ordering::Relaxed),
             gs.decorations_shape[2].load(Ordering::Relaxed)
         ])?;
-        
+        dict.set_item("is_blank", gs.is_blank.load(Ordering::Relaxed))?;
+        dict.set_item("is_rendering_stopped", gs.is_rendering_stopped.load(Ordering::Relaxed))?;
         // Dynamic vars in trial
         dict.set_item("cosine_alignment_threshold", f32::from_bits(gs.cosine_alignment_threshold.load(Ordering::Relaxed)))?;
         dict.set_item("door_anim_fade_out", f32::from_bits(gs.door_anim_fade_out.load(Ordering::Relaxed)))?;

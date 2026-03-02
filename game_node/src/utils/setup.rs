@@ -96,6 +96,7 @@ pub fn setup_round(
 
     // Read control values from sh
     let gs_ctrl = &shm.game_structure_control;
+    
     // Reset all fields of local game structure
     let gs_game = &mut local_game_struct.0;
     *gs_game = gs_ctrl.to_not_atomic();
@@ -171,7 +172,7 @@ pub fn setup_round(
         decoration_seeds,
         radius,
         height,
-        orient,
+        orient + std::f32::consts::FRAC_PI_6, // Correct alignment
         colors,
         decoration_counts,
         decoration_sizes,

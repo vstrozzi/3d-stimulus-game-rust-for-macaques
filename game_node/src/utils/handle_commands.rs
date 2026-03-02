@@ -73,13 +73,29 @@ pub fn handle_animation_door_command(
     mut local_game_struct: ResMut<GameStateLocal>,
     time: Res<Time>,
 ) {
-    if !pending.animation_door {
+    if !pending.animation_door{
         return;
     }
 
     // Start animation
     door_win_entities.animation_start_time = Some(time.elapsed());
     door_win_entities.animate_all = pending.animation_all_door;
+
+    door_win_entities.color = if pending.animation_colored{
+        if pending.animation_door && !pending.animation_all_door {
+        // Single door with requested animation of color, then green
+        Color::srgba(0.0, 1.0, 0.0, 1.0)
+        }
+        else {
+        // All door with requested animation of color, then red
+        Color::srgba(1.0, 0.0, 0.0, 1.0)
+        }
+    }   
+    else {
+        // No color change if animation colored is not requested, then white
+        Color::srgba(1.0, 1.0, 1.0, 1.0)
+    };
+
     // Set animation flag
     local_game_struct.0.is_animating = true;
     
@@ -152,18 +168,7 @@ pub fn handle_check_alignment(
     if winning_door_alignment > f32::from_bits(gs_game.cosine_alignment_threshold) {
         // Player wins! Set win time in SHM to trigger win state
         gs_game.win_time = time.elapsed().as_secs_f32().to_bits();
-        // Set colors of door to green
-        door_win_entities.color = Color::srgba(0.0, 1.0, 0.0, 1.0);
         door_win_entities.animate_all = false; // Animate only the winning door
-    }
-    // No win, all door colored of red
-    else if door_win_entities.animate_all {
-        door_win_entities.color = Color::srgba(1.0, 0.0, 0.0, 1.0);
-    } 
-    // No win, one door colored of light (hint)
-    else {
-        // Animate only the winning door with the same color based on alignment
-        door_win_entities.color = Color::srgba(1.0, 1.0, 1.0, 1.0);
     }
 
     // Clean old UI and spawn new (Score Bar)

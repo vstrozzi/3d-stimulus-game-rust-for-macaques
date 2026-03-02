@@ -44,7 +44,12 @@ pub fn update_shared_memory_local(
     round_start: Res<RoundStartTimestamp>,
     camera_query: Query<&Transform, With<Camera3d>>,
     door_query: Query<(&BaseDoor, &Transform)>,
+    game_conditions: ResMut<GameConditions>,
 ) {
+
+    game_state_local.0.is_blank = game_conditions.blank_screen;
+    game_state_local.0.is_rendering_stopped = game_conditions.stop_rendering;
+
     game_state_local.0.frame_number = frame_counter.0;
     game_state_local.0.elapsed_secs = if let Some(start) = round_start.0 {
         start.as_secs_f32().to_bits()

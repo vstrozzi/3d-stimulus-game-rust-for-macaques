@@ -108,7 +108,7 @@ let allTrialLogs = [];
 // Pressed keys tracking (to detect one-shot key presses)
 let pressedKeys = new Set();
 
-// ── Touch state (preserved from old controller) ────────────────────────────
+// ── Touch state (OrbitControls-inspired: velocity from touchmove events + inertia) ──
 let touchState = {
   singleTouch: {
     active: false,
@@ -116,6 +116,9 @@ let touchState = {
     startY: 0,
     currentX: 0,
     currentY: 0,
+    lastMoveX: 0,        // X at previous touchmove (for velocity)
+    lastMoveY: 0,        // Y at previous touchmove
+    lastMoveTime: 0,     // performance.now() at previous touchmove
     startTime: 0,
     identifier: null,
   },
@@ -123,16 +126,36 @@ let touchState = {
     active: false,
     initialDistance: 0,
     currentDistance: 0,
+    lastMoveDistance: 0, // distance at previous touchmove
+    lastMoveTime: 0,     // performance.now() at previous touchmove
   },
+  // Output booleans fed to the existing command pipeline
   rotateLeft: false,
   rotateRight: false,
   zoomIn: false,
   zoomOut: false,
-  deadZone: 15,
-  zoomDeadZone: 20,
+  // Velocity tracking (px/s, decayed by inertia after release)
+  rotationVelocity: 0,  // positive = right, negative = left
+  zoomVelocity: 0,      // positive = zoom in (fingers apart), negative = zoom out
+  // Pinch-tap suppression
+  wasPinching: false,
+  pinchEndTime: 0,
+  // Tuning
   tapMaxMove: 10,
   tapMaxTime: 300,
+  pinchTapCooldown: 250, // ms: suppress tap detection after pinch gesture
+  // Velocity → send-rate mapping
+  maxRotationVelocity: 800, // px/s: finger speed at which rotate fires every frame
+  maxZoomVelocity: 600,     // px/s: pinch speed at which zoom fires every frame
+  // Inertia (Three.js OrbitControls uses dampingFactor ≈ 0.05)
+  friction: 0.04,            // vel *= (1 - friction) per frame → longer coast
+  velocityStopThreshold: 8,  // px/s: below this, snap to zero
+  // EMA smoothing for velocity during active drag
+  velocitySmoothing: 0.45,   // alpha: higher = more responsive, lower = smoother
 };
+
+// Time tracking for consistent inertia regardless of tick rate
+let lastTickTime = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITY: float ↔ u32 bit conversion
@@ -744,8 +767,13 @@ function handlePlaying(state) {
   }
 
   // ── Normal playing: relay combined keyboard + touch inputs ──
-  updateRotationFromTouch();
-  updateZoomFromTouch();
+  // Compute time delta for consistent inertia
+  const now = performance.now();
+  const dt = lastTickTime > 0 ? Math.min((now - lastTickTime) / 1000, 0.1) : 1 / 60;
+  lastTickTime = now;
+
+  // Drive touch: decay inertia when fingers are up, dispatch booleans
+  processTouchInput(dt);
 
   const cmds = {
     rotate_left: inputs.rotate_left || touchState.rotateLeft,
@@ -893,7 +921,7 @@ function controllerLoop() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// TOUCH HANDLERS (preserved from old controller_main.js)
+// TOUCH HANDLERS (velocity-based with inertia & proportional control)
 // ═══════════════════════════════════════════════════════════════════════════
 
 function getTouchDistance(t1, t2) {
@@ -902,62 +930,118 @@ function getTouchDistance(t1, t2) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-/** Derive rotateLeft / rotateRight from single-finger horizontal drag. */
-function updateRotationFromTouch() {
-  if (touchState.singleTouch.active) {
-    const dx = touchState.singleTouch.currentX - touchState.singleTouch.startX;
-    if (dx < -touchState.deadZone) {
-      touchState.rotateLeft = true;
-      touchState.rotateRight = false;
-    } else if (dx > touchState.deadZone) {
-      touchState.rotateLeft = false;
-      touchState.rotateRight = true;
+// ═══════════════════════════════════════════════════════════════════════════
+// TOUCH → VELOCITY → BOOLEAN COMMAND PIPELINE
+//
+// Velocity is computed from touchmove events (not per-tick position deltas).
+// processTouchInput() is called once per game frame from handlePlaying():
+//   - when finger is down: velocity was already set by touchmove handler
+//   - when finger is up: decay velocity via inertia (OrbitControls-style)
+//   - always: dispatch velocity to rotate/zoom booleans via accumulator
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Single entry point called once per game frame from handlePlaying().
+ * Decays velocities when fingers are lifted, then dispatches boolean commands.
+ * @param {number} dt - seconds since last game frame
+ */
+function processTouchInput(dt) {
+  const decay = Math.pow(1 - touchState.friction, dt * 60);
+
+  // Decay rotation velocity when finger is NOT touching
+  if (!touchState.singleTouch.active) {
+    touchState.rotationVelocity *= decay;
+  }
+  // Decay zoom velocity when fingers are NOT pinching
+  if (!touchState.twoFingerTouch.active) {
+    touchState.zoomVelocity *= decay;
+  }
+
+  // Dispatch velocities → boolean commands (exactly once per frame)
+  applyRotationFromVelocity();
+  applyZoomFromVelocity();
+}
+
+/**
+ * Convert rotationVelocity into rotateLeft/rotateRight booleans.
+ * Accumulator ensures smooth frame-skipping for sub-max speeds.
+ * Resets on direction change to avoid phantom commands.
+ */
+let rotationAccumulator = 0;
+let lastRotationSign = 0;
+function applyRotationFromVelocity() {
+  const vel = touchState.rotationVelocity;
+  const absVel = Math.abs(vel);
+  const sign = Math.sign(vel);
+
+  if (absVel < touchState.velocityStopThreshold) {
+    touchState.rotateLeft = false;
+    touchState.rotateRight = false;
+    touchState.rotationVelocity = 0;
+    rotationAccumulator = 0;
+    lastRotationSign = 0;
+  } else {
+    // Reset accumulator when direction reverses
+    if (sign !== lastRotationSign) {
+      rotationAccumulator = 0;
+      lastRotationSign = sign;
+    }
+    const sendRate = Math.min(absVel / touchState.maxRotationVelocity, 1);
+    rotationAccumulator += sendRate;
+    if (rotationAccumulator >= 1) {
+      rotationAccumulator -= 1;
+      touchState.rotateLeft = vel < 0;
+      touchState.rotateRight = vel > 0;
     } else {
       touchState.rotateLeft = false;
       touchState.rotateRight = false;
     }
-  } else {
-    touchState.rotateLeft = false;
-    touchState.rotateRight = false;
   }
   setKeyUI("left", inputs.rotate_left || touchState.rotateLeft);
   setKeyUI("right", inputs.rotate_right || touchState.rotateRight);
 }
 
-/** Derive zoomIn / zoomOut from two-finger pinch distance. */
-function updateZoomFromTouch() {
-  if (touchState.twoFingerTouch.active) {
-    const delta = touchState.twoFingerTouch.currentDistance - touchState.twoFingerTouch.initialDistance;
-    if (delta > touchState.zoomDeadZone) {
-      touchState.zoomIn = true;
-      touchState.zoomOut = false;
-    } else if (delta < -touchState.zoomDeadZone) {
-      touchState.zoomIn = false;
-      touchState.zoomOut = true;
+/**
+ * Convert zoomVelocity into zoomIn/zoomOut booleans via accumulator.
+ * Same pattern as rotation: direction-change reset, frame-skipping.
+ */
+let zoomAccumulator = 0;
+let lastZoomSign = 0;
+function applyZoomFromVelocity() {
+  const vel = touchState.zoomVelocity;
+  const absVel = Math.abs(vel);
+  const sign = Math.sign(vel);
+
+  if (absVel < touchState.velocityStopThreshold) {
+    touchState.zoomIn = false;
+    touchState.zoomOut = false;
+    touchState.zoomVelocity = 0;
+    zoomAccumulator = 0;
+    lastZoomSign = 0;
+  } else {
+    if (sign !== lastZoomSign) {
+      zoomAccumulator = 0;
+      lastZoomSign = sign;
+    }
+    const sendRate = Math.min(absVel / touchState.maxZoomVelocity, 1);
+    zoomAccumulator += sendRate;
+    if (zoomAccumulator >= 1) {
+      zoomAccumulator -= 1;
+      touchState.zoomIn = vel > 0;
+      touchState.zoomOut = vel < 0;
     } else {
       touchState.zoomIn = false;
       touchState.zoomOut = false;
     }
-  } else {
-    touchState.zoomIn = false;
-    touchState.zoomOut = false;
   }
   setKeyUI("up", inputs.zoom_in || touchState.zoomIn);
   setKeyUI("down", inputs.zoom_out || touchState.zoomOut);
 }
 
-/** Reset all touch state flags. */
+/** Reset touch tracking state. Velocities are preserved for inertia coast-down. */
 function clearAllTouchState() {
   touchState.singleTouch.active = false;
   touchState.twoFingerTouch.active = false;
-  touchState.rotateLeft = false;
-  touchState.rotateRight = false;
-  touchState.zoomIn = false;
-  touchState.zoomOut = false;
-  setKeyUI("left", inputs.rotate_left);
-  setKeyUI("right", inputs.rotate_right);
-  setKeyUI("up", inputs.zoom_in);
-  setKeyUI("down", inputs.zoom_out);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -994,55 +1078,99 @@ function setupInput() {
     if (e.touches.length >= 2) {
       touchState.singleTouch.active = false;
       touchState.twoFingerTouch.active = true;
-      touchState.twoFingerTouch.initialDistance = getTouchDistance(e.touches[0], e.touches[1]);
-      touchState.twoFingerTouch.currentDistance = touchState.twoFingerTouch.initialDistance;
-      updateRotationFromTouch();
-      updateZoomFromTouch();
+      touchState.wasPinching = true;
+      const dist = getTouchDistance(e.touches[0], e.touches[1]);
+      touchState.twoFingerTouch.initialDistance = dist;
+      touchState.twoFingerTouch.currentDistance = dist;
+      touchState.twoFingerTouch.lastMoveDistance = dist;
+      touchState.twoFingerTouch.lastMoveTime = performance.now();
     } else if (e.touches.length === 1) {
       const t = e.touches[0];
+      const now = performance.now();
       touchState.singleTouch.active = true;
       touchState.singleTouch.identifier = t.identifier;
       touchState.singleTouch.startX = t.clientX;
       touchState.singleTouch.startY = t.clientY;
       touchState.singleTouch.currentX = t.clientX;
       touchState.singleTouch.currentY = t.clientY;
+      touchState.singleTouch.lastMoveX = t.clientX;
+      touchState.singleTouch.lastMoveY = t.clientY;
+      touchState.singleTouch.lastMoveTime = now;
       touchState.singleTouch.startTime = Date.now();
       touchState.twoFingerTouch.active = false;
-      updateRotationFromTouch();
-      updateZoomFromTouch();
+      // Kill lingering inertia when starting a fresh touch
+      touchState.rotationVelocity = 0;
+      touchState.zoomVelocity = 0;
     }
   }, { passive: false });
 
   window.addEventListener("touchmove", (e) => {
     if (fsmState !== FSM.PLAYING) return;
     e.preventDefault();
+    const now = performance.now();
+
     if (e.touches.length >= 2 && touchState.twoFingerTouch.active) {
-      touchState.twoFingerTouch.currentDistance = getTouchDistance(e.touches[0], e.touches[1]);
-      updateZoomFromTouch();
+      const dist = getTouchDistance(e.touches[0], e.touches[1]);
+      touchState.twoFingerTouch.currentDistance = dist;
+      // Compute zoom velocity from consecutive touchmove events
+      const dt = (now - touchState.twoFingerTouch.lastMoveTime) / 1000;
+      if (dt > 0 && dt < 0.15) {
+        const instantVel = (dist - touchState.twoFingerTouch.lastMoveDistance) / dt;
+        const alpha = touchState.velocitySmoothing;
+        touchState.zoomVelocity = touchState.zoomVelocity * (1 - alpha) + instantVel * alpha;
+      }
+      touchState.twoFingerTouch.lastMoveDistance = dist;
+      touchState.twoFingerTouch.lastMoveTime = now;
+
     } else if (e.touches.length === 1 && touchState.singleTouch.active) {
       const t = e.touches[0];
       touchState.singleTouch.currentX = t.clientX;
       touchState.singleTouch.currentY = t.clientY;
-      updateRotationFromTouch();
+      // Compute rotation velocity from consecutive touchmove events
+      const dt = (now - touchState.singleTouch.lastMoveTime) / 1000;
+      if (dt > 0 && dt < 0.15) {
+        const dx = t.clientX - touchState.singleTouch.lastMoveX;
+        const instantVel = dx / dt; // px/s
+        const alpha = touchState.velocitySmoothing;
+        touchState.rotationVelocity = touchState.rotationVelocity * (1 - alpha) + instantVel * alpha;
+      }
+      touchState.singleTouch.lastMoveX = t.clientX;
+      touchState.singleTouch.lastMoveY = t.clientY;
+      touchState.singleTouch.lastMoveTime = now;
     }
   }, { passive: false });
 
   window.addEventListener("touchend", (e) => {
     e.preventDefault();
     if (e.touches.length === 0) {
-      // Check for tap → trigger check alignment
-      if (touchState.singleTouch.active && fsmState === FSM.PLAYING) {
-        const elapsed = Date.now() - touchState.singleTouch.startTime;
+      // ── Tap detection (with pinch-tap suppression) ──
+      // wasPinching is set when a two-finger gesture occurred in this touch
+      // sequence — reliably suppresses false taps after zoom gestures.
+      if (
+        touchState.singleTouch.active &&
+        fsmState === FSM.PLAYING &&
+        !touchState.wasPinching
+      ) {
+        const now = Date.now();
+        const elapsed = now - touchState.singleTouch.startTime;
         const dx = Math.abs(touchState.singleTouch.currentX - touchState.singleTouch.startX);
         const dy = Math.abs(touchState.singleTouch.currentY - touchState.singleTouch.startY);
-        if (elapsed < touchState.tapMaxTime && dx < touchState.tapMaxMove && dy < touchState.tapMaxMove) {
+        if (
+          elapsed < touchState.tapMaxTime &&
+          dx < touchState.tapMaxMove &&
+          dy < touchState.tapMaxMove
+        ) {
           triggers.check = true;
           console.log("Tap → check alignment");
         }
       }
+      // Velocities are preserved for inertia coast-down
       clearAllTouchState();
+      touchState.wasPinching = false;
     } else if (e.touches.length === 1) {
-      // 2→1 fingers: switch to rotation
+      // 2→1 fingers: record pinch end time, switch to single-finger tracking
+      touchState.pinchEndTime = Date.now();
+      const now = performance.now();
       const t = e.touches[0];
       touchState.twoFingerTouch.active = false;
       touchState.singleTouch.active = true;
@@ -1051,15 +1179,26 @@ function setupInput() {
       touchState.singleTouch.startY = t.clientY;
       touchState.singleTouch.currentX = t.clientX;
       touchState.singleTouch.currentY = t.clientY;
+      touchState.singleTouch.lastMoveX = t.clientX;
+      touchState.singleTouch.lastMoveY = t.clientY;
+      touchState.singleTouch.lastMoveTime = now;
       touchState.singleTouch.startTime = Date.now();
-      updateRotationFromTouch();
-      updateZoomFromTouch();
+      // Zero rotation velocity — clean start for the remaining finger
+      touchState.rotationVelocity = 0;
     }
   }, { passive: false });
 
-  window.addEventListener("touchcancel", () => clearAllTouchState());
+  window.addEventListener("touchcancel", () => {
+    clearAllTouchState();
+    // On cancel, also kill velocities (abnormal interruption)
+    touchState.rotationVelocity = 0;
+    touchState.zoomVelocity = 0;
+    touchState.wasPinching = false;
+  });
 
   // ── KEYBOARD ───────────────────────────────────────────────────────────
+  // Use capture phase so we intercept keys BEFORE Bevy's canvas handler
+  // can call preventDefault() and swallow them.
   window.addEventListener("keydown", (e) => {
     // 'q' exits from any state
     if (e.code === "KeyQ") {
@@ -1072,6 +1211,7 @@ function setupInput() {
     if (e.code === "Space" && fsmState === FSM.WAITING_FOR_START) {
       _start = true;
       e.preventDefault();
+      e.stopPropagation();
       return;
     }
 
@@ -1108,33 +1248,46 @@ function setupInput() {
         break;
     }
     pressedKeys.add(e.code);
-    if (handled) e.preventDefault();
-  });
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();  // prevent Bevy/winit from also handling it
+    }
+  }, true);  // ← capture phase
 
   window.addEventListener("keyup", (e) => {
+    let handled = false;
     pressedKeys.delete(e.code);
     switch (e.code) {
       case "ArrowLeft":
         inputs.rotate_left = false;
         setKeyUI("left", false);
+        handled = true;
         break;
       case "ArrowRight":
         inputs.rotate_right = false;
         setKeyUI("right", false);
+        handled = true;
         break;
       case "ArrowUp":
         inputs.zoom_in = false;
         setKeyUI("up", false);
+        handled = true;
         break;
       case "ArrowDown":
         inputs.zoom_out = false;
         setKeyUI("down", false);
+        handled = true;
         break;
       case "Space":
         triggers.check = false;
+        handled = true;
         break;
     }
-  });
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  }, true);  // ← capture phase
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

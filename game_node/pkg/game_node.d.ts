@@ -1,20 +1,35 @@
 /* tslint:disable */
 /* eslint-disable */
 
-/**
- * Helper wrapper for WASM side
- */
 export class WebSharedMemory {
     free(): void;
     [Symbol.dispose](): void;
     /**
-     * Get pointer to SharedCommands (for writing commands from JS)
+     * Byte offsets of every field inside SharedCommands (relative to its start).
+     */
+    get_commands_offsets(): any;
+    /**
+     * Pointer to SharedCommands (Controller → Game)
      */
     get_commands_ptr(): number;
     /**
-     * Get pointer to SharedGameStructure (for reading/writing game state from JS)
+     * Return default values of SharedGameState::new() as a JS object.
+     * Equivalent to Python's `read_default_game_state()`.
      */
-    get_game_structure_ptr(): number;
+    get_default_game_state(): any;
+    /**
+     * Byte offsets of every field inside SharedGameState (works for both
+     * game_structure_game and game_structure_control since they have identical layout).
+     */
+    get_game_state_offsets(): any;
+    /**
+     * Pointer to game_structure_control (Controller → Game: controller writes, game reads on reset)
+     */
+    get_game_structure_control_ptr(): number;
+    /**
+     * Pointer to game_structure_game (Game → Controller: game writes, controller reads)
+     */
+    get_game_structure_game_ptr(): number;
     /**
      * Get base pointer to SharedMemory
      */
@@ -29,7 +44,12 @@ export class WebSharedMemory {
 export function create_shared_memory_wasm(): number;
 
 /**
- * WASM entry point - call this manually from JS after create_shared_memory_wasm()
+ * Return the byte-size of SharedGameState so JS knows the extent of each region.
+ */
+export function shared_game_state_byte_size(): number;
+
+/**
+ * WASM entry point – call this manually from JS after create_shared_memory_wasm()
  */
 export function wasm_main(): void;
 
@@ -40,18 +60,23 @@ export interface InitOutput {
     readonly wasm_main: () => void;
     readonly websharedmemory_new: (a: number) => number;
     readonly websharedmemory_get_commands_ptr: (a: number) => number;
-    readonly websharedmemory_get_game_structure_ptr: (a: number) => number;
+    readonly websharedmemory_get_game_structure_game_ptr: (a: number) => number;
+    readonly websharedmemory_get_game_structure_control_ptr: (a: number) => number;
+    readonly websharedmemory_get_commands_offsets: (a: number) => any;
+    readonly websharedmemory_get_game_state_offsets: (a: number) => any;
+    readonly websharedmemory_get_default_game_state: (a: number) => any;
     readonly __wbg_websharedmemory_free: (a: number, b: number) => void;
+    readonly shared_game_state_byte_size: () => number;
     readonly create_shared_memory_wasm: () => number;
     readonly websharedmemory_get_ptr: (a: number) => number;
-    readonly wasm_bindgen__closure__destroy__h05de16b877b82b7a: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h02688f800ffa98c2: (a: number, b: number) => void;
     readonly wasm_bindgen__closure__destroy__hb69473973aca8f63: (a: number, b: number) => void;
-    readonly wasm_bindgen__closure__destroy__he4caea5b818e1e89: (a: number, b: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h104a3925f357f864: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h108b8b23f051e164: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h4ec3345578019de4: (a: number, b: number, c: number) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h9bc97ee707d2470f: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h644b49c99bfff8fa: (a: number, b: number) => void;
+    readonly wasm_bindgen__closure__destroy__h0a6b5c9295a7ff96: (a: number, b: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h576e55311a1ea04a: (a: number, b: number, c: any, d: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h20ee923051ec38af: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hf81ad7ef3630a9f7: (a: number, b: number, c: number) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hcdd381c35daa61ea: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h10999c306299fdd8: (a: number, b: number) => void;
     readonly wasm_bindgen__convert__closures_____invoke__h70b77d51203f2fd1: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

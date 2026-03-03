@@ -54,4 +54,6 @@ python controller_python/controller.py
 1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`)
 2. Launch
 
+## How to create levels
 
+Create Custom levels by using trials_editor.html

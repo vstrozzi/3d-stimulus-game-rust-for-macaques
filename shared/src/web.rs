@@ -1,6 +1,10 @@
-//! Web (WASM) shared memory implementation using SharedArrayBuffer.
+//! Web (WASM) shared memory implementation.
+//!
+//! Exposes SharedMemory to JavaScript through pointers and byte-offset maps
+//! so that the JS controller can read/write the same memory regions as the
+//! Bevy game running in the same WASM instance.
 
-use crate::SharedMemory;
+use crate::{SharedMemory, SharedGameState};
 use wasm_bindgen::prelude::*;
 use std::sync::OnceLock;
 
@@ -15,7 +19,16 @@ pub fn create_shared_memory_wasm() -> *mut SharedMemory {
     mem_ref as *const SharedMemory as *mut SharedMemory
 }
 
-/// Helper wrapper for WASM side
+/// Return the byte-size of SharedGameState so JS knows the extent of each region.
+#[wasm_bindgen]
+pub fn shared_game_state_byte_size() -> u32 {
+    std::mem::size_of::<SharedGameState>() as u32
+}
+
+// ---------------------------------------------------------------------------
+// Helper wrapper for WASM side
+// ---------------------------------------------------------------------------
+
 #[wasm_bindgen]
 pub struct WebSharedMemory {
     ptr: *mut SharedMemory,
@@ -33,72 +46,192 @@ impl WebSharedMemory {
         self.ptr as usize
     }
 
-    /// Get pointer to SharedCommands (for writing commands from JS)
+    // -----------------------------------------------------------------------
+    // Pointers to the three top-level regions
+    // -----------------------------------------------------------------------
+
+    /// Pointer to SharedCommands (Controller → Game)
     pub fn get_commands_ptr(&self) -> usize {
         unsafe { &(*self.ptr).commands as *const _ as usize }
     }
 
-    /// Get pointer to SharedGameStructure (for reading/writing game state from JS)
-    pub fn get_game_structure_ptr(&self) -> usize {
-        unsafe { &(*self.ptr).game_structure as *const _ as usize }
+    /// Pointer to game_structure_game (Game → Controller: game writes, controller reads)
+    pub fn get_game_structure_game_ptr(&self) -> usize {
+        unsafe { &(*self.ptr).game_structure_game as *const _ as usize }
     }
 
-    /// Get offsets of fields within SharedGameStructure
-    /// Returns a JS Object { "frame_number": offset, ... }
-    pub fn get_game_structure_offsets(&self) -> JsValue {
-        let base = unsafe { &(*self.ptr).game_structure as *const _ as usize };
-        let gs = unsafe { &(*self.ptr).game_structure };
+    /// Pointer to game_structure_control (Controller → Game: controller writes, game reads on reset)
+    pub fn get_game_structure_control_ptr(&self) -> usize {
+        unsafe { &(*self.ptr).game_structure_control as *const _ as usize }
+    }
 
-        let make_offset = |field_ptr: *const _| -> u32 {
-             (field_ptr as usize - base) as u32
+    // -----------------------------------------------------------------------
+    // Offset maps – returned as JS Objects { fieldName: byteOffset, … }
+    // -----------------------------------------------------------------------
+
+    /// Byte offsets of every field inside SharedCommands (relative to its start).
+    pub fn get_commands_offsets(&self) -> JsValue {
+        let base = unsafe { &(*self.ptr).commands as *const _ as usize };
+        let cmd  = unsafe { &(*self.ptr).commands };
+
+        macro_rules! off {
+            ($field:expr) => {
+                ((&$field as *const _ as *const u8 as usize) - base) as u32
+            };
+        }
+
+        let obj = js_sys::Object::new();
+        let set = |k: &str, v: u32| {
+            js_sys::Reflect::set(&obj, &JsValue::from_str(k), &JsValue::from_f64(v as f64)).unwrap();
         };
 
-        let offsets = js_sys::Object::new();
-        let set = |key: &str, val: u32| {
-            js_sys::Reflect::set(&offsets, &JsValue::from_str(key), &JsValue::from_f64(val as f64)).unwrap();
+        set("rotate_left",      off!(cmd.rotate_left));
+        set("rotate_right",     off!(cmd.rotate_right));
+        set("zoom_in",          off!(cmd.zoom_in));
+        set("zoom_out",         off!(cmd.zoom_out));
+        set("check_alignment",  off!(cmd.check_alignment));
+        set("reset",            off!(cmd.reset));
+        set("blank_screen",     off!(cmd.blank_screen));
+        set("stop_rendering",   off!(cmd.stop_rendering));
+        set("animation_door",   off!(cmd.animation_door));
+        set("animation_all_door", off!(cmd.animation_all_door));
+        set("animation_colored", off!(cmd.animation_colored));
+
+        obj.into()
+    }
+
+    /// Byte offsets of every field inside SharedGameState (works for both
+    /// game_structure_game and game_structure_control since they have identical layout).
+    pub fn get_game_state_offsets(&self) -> JsValue {
+        let base = unsafe { &(*self.ptr).game_structure_game as *const _ as usize };
+        let gs   = unsafe { &(*self.ptr).game_structure_game };
+
+        // Cast via *const u8 so generic pointer inference doesn't conflict across types
+        macro_rules! off {
+            ($field:expr) => {
+                ((&$field as *const _ as *const u8 as usize) - base) as u32
+            };
+        }
+
+        let obj = js_sys::Object::new();
+        let set = |k: &str, v: u32| {
+            js_sys::Reflect::set(&obj, &JsValue::from_str(k), &JsValue::from_f64(v as f64)).unwrap();
         };
 
-        set("decoration_seeds", make_offset(&gs.decoration_seeds as *const _));
-        set("base_radius", make_offset(&gs.base_radius as *const _));
-        set("height", make_offset(&gs.height as *const _));
-        set("start_orient", make_offset(&gs.start_orient as *const _));
-        set("target_door", make_offset(&gs.target_door as *const _));
-        set("colors", make_offset(&gs.colors as *const _));
+        // Fixed trial fields
+        set("base_radius",    off!(gs.base_radius));
+        set("height",         off!(gs.height));
+        set("start_orient",   off!(gs.start_orient));
+        set("target_door",    off!(gs.target_door));
+        set("colors",         off!(gs.colors));
+        set("decorations_count", off!(gs.decorations_count));
+        set("decorations_size",  off!(gs.decorations_size));
+        set("decorations_seeds", off!(gs.decorations_seeds));
+        set("decorations_shape", off!(gs.decorations_shape));
 
-        // Dynamic Constants
-        set("decoration_count_min", make_offset(&gs.decoration_count_min as *const _));
-        set("decoration_count_max", make_offset(&gs.decoration_count_max as *const _));
-        set("decoration_size_min", make_offset(&gs.decoration_size_min as *const _));
-        set("decoration_size_max", make_offset(&gs.decoration_size_max as *const _));
+        set("cosine_alignment_threshold", off!(gs.cosine_alignment_threshold));
 
-        set("cosine_alignment_threshold", make_offset(&gs.cosine_alignment_threshold as *const _));
+        // Animation durations
+        set("door_anim_fade_out",  off!(gs.door_anim_fade_out));
+        set("door_anim_stay_open", off!(gs.door_anim_stay_open));
+        set("door_anim_fade_in",   off!(gs.door_anim_fade_in));
 
-        set("door_anim_fade_out", make_offset(&gs.door_anim_fade_out as *const _));
-        set("door_anim_stay_open", make_offset(&gs.door_anim_stay_open as *const _));
-        set("door_anim_fade_in", make_offset(&gs.door_anim_fade_in as *const _));
+        // Lighting
+        set("main_spotlight_intensity", off!(gs.main_spotlight_intensity));
+        set("ambient_brightness",       off!(gs.ambient_brightness));
+        set("max_spotlight_intensity",  off!(gs.max_spotlight_intensity));
 
-        set("main_spotlight_intensity", make_offset(&gs.main_spotlight_intensity as *const _));
-        set("max_spotlight_intensity", make_offset(&gs.max_spotlight_intensity as *const _));
-        set("ambient_brightness", make_offset(&gs.ambient_brightness as *const _));
+        // Dynamic fields
+        set("frame_number",       off!(gs.frame_number));
+        set("elapsed_secs",       off!(gs.elapsed_secs));
+        set("camera_radius",      off!(gs.camera_radius));
+        set("camera_x",           off!(gs.camera_x));
+        set("camera_y",           off!(gs.camera_y));
+        set("camera_z",           off!(gs.camera_z));
+        set("attempts",           off!(gs.attempts));
+        set("current_alignment",  off!(gs.current_alignment));
+        set("current_angle",      off!(gs.current_angle));
+        set("is_animating",       off!(gs.is_animating));
+        set("is_blank",           off!(gs.is_blank));
+        set("is_rendering_stopped", off!(gs.is_rendering_stopped));
+        set("win_time",           off!(gs.win_time));
 
-        set("frame_number", make_offset(&gs.frame_number as *const _));
-        set("elapsed_secs", make_offset(&gs.elapsed_secs as *const _));
-        set("camera_radius", make_offset(&gs.camera_radius as *const _));
-        set("camera_x", make_offset(&gs.camera_x as *const _));
-        set("camera_y", make_offset(&gs.camera_y as *const _));
-        set("camera_z", make_offset(&gs.camera_z as *const _));
-        set("pyramid_yaw", make_offset(&gs.pyramid_yaw as *const _));
-        set("attempts", make_offset(&gs.attempts as *const _));
-        set("alignment", make_offset(&gs.alignment as *const _));
-        set("current_angle", make_offset(&gs.current_angle as *const _));
-        set("is_animating", make_offset(&gs.is_animating as *const _));
-        set("win_time", make_offset(&gs.win_time as *const _));
-        
-        offsets.into()
+        obj.into()
+    }
+
+    /// Return default values of SharedGameState::new() as a JS object.
+    /// Equivalent to Python's `read_default_game_state()`.
+    pub fn get_default_game_state(&self) -> JsValue {
+        let def = SharedGameState::new();
+        let obj = js_sys::Object::new();
+        let set_u32 = |k: &str, v: u32| {
+            js_sys::Reflect::set(&obj, &JsValue::from_str(k), &JsValue::from_f64(v as f64)).unwrap();
+        };
+        let set_f64 = |k: &str, v: f64| {
+            js_sys::Reflect::set(&obj, &JsValue::from_str(k), &JsValue::from_f64(v)).unwrap();
+        };
+        let set_bool = |k: &str, v: bool| {
+            js_sys::Reflect::set(&obj, &JsValue::from_str(k), &JsValue::from_bool(v)).unwrap();
+        };
+
+        use std::sync::atomic::Ordering::Relaxed;
+
+        set_u32("base_radius",    def.base_radius.load(Relaxed));
+        set_u32("height",         def.height.load(Relaxed));
+        set_u32("start_orient",   def.start_orient.load(Relaxed));
+        set_u32("target_door",    def.target_door.load(Relaxed));
+
+        // Colors as flat array of 12 u32
+        let colors = js_sys::Array::new();
+        for i in 0..12 { colors.push(&JsValue::from_f64(def.colors[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("colors"), &colors).unwrap();
+
+        let dec_count = js_sys::Array::new();
+        for i in 0..3 { dec_count.push(&JsValue::from_f64(def.decorations_count[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_count"), &dec_count).unwrap();
+
+        let dec_size = js_sys::Array::new();
+        for i in 0..3 { dec_size.push(&JsValue::from_f64(def.decorations_size[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_size"), &dec_size).unwrap();
+
+        let dec_seeds = js_sys::Array::new();
+        for i in 0..3 { dec_seeds.push(&JsValue::from_f64(def.decorations_seeds[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_seeds"), &dec_seeds).unwrap();
+
+        let dec_shape = js_sys::Array::new();
+        for i in 0..3 { dec_shape.push(&JsValue::from_f64(def.decorations_shape[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_shape"), &dec_shape).unwrap();
+
+        set_u32("cosine_alignment_threshold", def.cosine_alignment_threshold.load(Relaxed));
+        set_u32("door_anim_fade_out",  def.door_anim_fade_out.load(Relaxed));
+        set_u32("door_anim_stay_open", def.door_anim_stay_open.load(Relaxed));
+        set_u32("door_anim_fade_in",   def.door_anim_fade_in.load(Relaxed));
+        set_u32("main_spotlight_intensity", def.main_spotlight_intensity.load(Relaxed));
+        set_u32("ambient_brightness",       def.ambient_brightness.load(Relaxed));
+        set_u32("max_spotlight_intensity",  def.max_spotlight_intensity.load(Relaxed));
+
+        set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
+        set_u32("elapsed_secs", def.elapsed_secs.load(Relaxed));
+        set_u32("camera_radius", def.camera_radius.load(Relaxed));
+        set_u32("camera_x", def.camera_x.load(Relaxed));
+        set_u32("camera_y", def.camera_y.load(Relaxed));
+        set_u32("camera_z", def.camera_z.load(Relaxed));
+        set_u32("attempts", def.attempts.load(Relaxed));
+        set_u32("current_alignment", def.current_alignment.load(Relaxed));
+        set_u32("current_angle", def.current_angle.load(Relaxed));
+        set_bool("is_animating", def.is_animating.load(Relaxed));
+        set_bool("is_blank", def.is_blank.load(Relaxed));
+        set_bool("is_rendering_stopped", def.is_rendering_stopped.load(Relaxed));
+        set_u32("win_time", def.win_time.load(Relaxed));
+
+        obj.into()
     }
 }
 
-/// Handle to shared memory (wrapper for consistency with native API).
+// ---------------------------------------------------------------------------
+// SharedMemoryHandle – thin wrapper for consistency with the native API
+// ---------------------------------------------------------------------------
+
 #[derive(Clone, Copy)]
 pub struct SharedMemoryHandle(&'static SharedMemory);
 
@@ -111,7 +244,7 @@ impl SharedMemoryHandle {
 pub fn open_shared_memory(_name: &str) -> std::io::Result<SharedMemoryHandle> {
     let mem = SHARED_MEMORY.get().ok_or(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        "Shared memory not initialized in WASM"
+        "Shared memory not initialized in WASM",
     ))?;
     Ok(SharedMemoryHandle(mem))
 }

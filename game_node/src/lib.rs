@@ -3,15 +3,20 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-#[cfg(target_arch = "wasm32")]
 use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     window::*,
 };
 
+// Re-export shared memory functions so wasm-bindgen keeps them in the cdylib
+#[cfg(target_arch = "wasm32")]
+pub use shared::{create_shared_memory_wasm, WebSharedMemory};
+
+use shared::constants::game_constants::REFRESH_RATE_HZ;
+
 // Shared memory helpers
-pub mod shared_memory{
+pub mod shared_memory {
     pub mod shared_memory_reader;
     pub mod shared_memory_writer;
     pub mod shared_memory_web_extension;
@@ -29,4 +34,68 @@ pub mod utils {
     pub mod pyramid;
     pub mod setup;
     pub mod systems_logic;
+}
+
+use crate::{
+    shared_memory::{
+        shared_memory_reader::SharedMemoryReaderPlugin,
+        shared_memory_writer::StateEmitterPlugin,
+        shared_memory_web_extension::WebAdapterPlugin,
+    },
+    utils::{
+        debug_functions::DebugFunctionsPlugin,
+        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions},
+        systems_logic::SystemsLogicPlugin,
+    },
+};
+
+/// Build the Bevy App with all plugins and resources.
+/// Shared between native (`main()`) and WASM (`wasm_main()`).
+pub fn build_app() -> App {
+    let window = Some(Window {
+        title: "Monkey 3D Game".into(),
+        #[cfg(target_arch = "wasm32")]
+        canvas: Some("#game-canvas".into()),
+        fit_canvas_to_parent: true,
+        prevent_default_event_handling: true,
+        #[cfg(not(target_arch = "wasm32"))]
+        mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
+        present_mode: PresentMode::AutoVsync,
+        ..default()
+    });
+
+    let cursor = Some(CursorOptions {
+        grab_mode: CursorGrabMode::None,
+        visible: false,
+        ..default()
+    });
+
+    let mut app = App::new();
+    app.add_plugins((
+        DefaultPlugins.set(WindowPlugin {
+            primary_window: window,
+            primary_cursor_options: cursor,
+            ..default()
+        }),
+        LogDiagnosticsPlugin::default(),
+        FrameTimeDiagnosticsPlugin::default(),
+        SharedMemoryReaderPlugin,
+        SystemsLogicPlugin,
+        DebugFunctionsPlugin,
+        StateEmitterPlugin,
+        WebAdapterPlugin,
+    ))
+    .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
+    .insert_resource(DoorWinEntities::default())
+    .insert_resource(RoundStartTimestamp::default())
+    .insert_resource(GameConditions::default())
+    .insert_resource(GameStateLocal::default());
+    app
+}
+
+/// WASM entry point – call this manually from JS after create_shared_memory_wasm()
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn wasm_main() {
+    build_app().run();
 }

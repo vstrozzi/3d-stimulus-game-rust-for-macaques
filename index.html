@@ -1,212 +1,158 @@
 <!doctype html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Monkey 3D Game</title>
-        <style>
-            body {
-                margin: 0;
-                background: #1a1a1a;
-                color: #eee;
-                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                overflow: hidden;
-            }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Monkey 3D Game</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
 
-            #app-container {
-                position: relative;
-                width: 100%;
-                height: 100%;
-                text-align: center;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-            }
+      body {
+        background: #000;
+        color: #eee;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        touch-action: none;          /* prevent browser gestures */
+        -webkit-user-select: none;
+        user-select: none;
+      }
 
-            /* Screens */
-            .screen {
-                display: none;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-                height: 100%;
-            }
+      /* ── Game canvas (Bevy renders here) ───────────────────────────── */
+      #game-canvas {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        cursor: none;
+      }
 
-            .screen.active {
-                display: flex;
-            }
+      /* ── HUD overlay layer (controller UI) ─────────────────────────── */
+      #hud {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;   /* pass clicks through by default */
+        z-index: 20;
+      }
 
-            /* Menu */
-            #menu-screen {
-                max-width: 600px;
-                max-height: 400px;
-                background: #2a2a2a;
-                border: 2px solid #444;
-                border-radius: 8px;
-                box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-                padding: 40px;
-            }
+      /* ── Status bar (top center) ───────────────────────────────────── */
+      #status-bar {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(255,255,255,0.35);
+        font-size: 0.8em;
+        white-space: nowrap;
+      }
 
-            h1 {
-                font-size: 3em;
-                margin-bottom: 20px;
-                color: #4caf50;
-                letter-spacing: 2px;
-            }
+      /* ── Key indicators (bottom-left) ──────────────────────────────── */
+      #keys-container {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        display: flex;
+        gap: 10px;
+        opacity: 0.7;
+      }
 
-            p {
-                color: #aaa;
-                margin-bottom: 40px;
-            }
+      .key {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: 1px solid #555;
+        border-radius: 4px;
+        background: rgba(0,0,0,0.5);
+        color: #eee;
+        font-weight: bold;
+        font-size: 1.1em;
+      }
 
-            /* Game */
-            #game-screen {
-                position: fixed;
-                top: 0;
-                left: 0;
-                width: 100vw;
-                height: 100vh;
-                background: #000;
-                z-index: 10;
-            }
+      .key.active {
+        background: #4caf50;
+        border-color: #4caf50;
+        color: #fff;
+        box-shadow: 0 0 10px rgba(76,175,80,0.5);
+      }
 
-            canvas {
-                display: block;
-                width: 100% !important;
-                height: 100% !important;
-                cursor: none;
-            }
+      /* ── Download logs button (bottom-right) ───────────────────────── */
+      #btn-download-logs {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        pointer-events: auto;
+        padding: 8px 16px;
+        font-size: 0.85em;
+        background: rgba(255,255,255,0.12);
+        color: rgba(255,255,255,0.6);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.2s;
+      }
+      #btn-download-logs:hover {
+        background: rgba(255,255,255,0.25);
+        color: #fff;
+      }
 
-            /* Controls UI - Top Right Exit */
-            #exit-container {
-                position: absolute;
-                top: 20px;
-                right: 20px;
-                z-index: 20;
-            }
+      /* ── START TRIAL overlay ───────────────────────────────────────── */
+      #start-trial-overlay {
+        display: none;                /* shown by FSM when WAITING_FOR_START */
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 50;
+        background: #000;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        pointer-events: auto;
+        cursor: pointer;
+      }
 
-            /* Key Display - Bottom Left */
-            #keys-container {
-                position: absolute;
-                bottom: 20px;
-                left: 20px;
-                z-index: 20;
-                display: flex;
-                gap: 10px;
-                opacity: 0.7;
-            }
+      #start-trial-overlay .prompt {
+        font-size: 1.6em;
+        color: #fff;
+        letter-spacing: 1px;
+        text-align: center;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
 
-            /* Buttons */
-            .btn {
-                padding: 12px 30px;
-                font-size: 1.2em;
-                background: #4caf50;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-                transition:
-                    transform 0.1s,
-                    background 0.2s;
-                font-family: inherit;
-            }
+  <body>
+    <!-- Bevy renders into this canvas -->
+    <canvas id="game-canvas"></canvas>
 
-            .btn:hover {
-                background: #45a049;
-                transform: scale(1.05);
-            }
+    <!-- Controller HUD overlay -->
+    <div id="hud">
+      <div id="status-bar">Initializing...</div>
 
-            .btn:active {
-                transform: scale(0.95);
-            }
+      <div id="keys-container">
+        <div class="key" id="key-left">←</div>
+        <div class="key" id="key-down">↓</div>
+        <div class="key" id="key-up">↑</div>
+        <div class="key" id="key-right">→</div>
+      </div>
 
-            .btn-danger {
-                background: rgba(211, 47, 47, 0.8);
-                backdrop-filter: blur(5px);
-                border: 1px solid #ff5252;
-            }
+      <button id="btn-download-logs">⬇ Download Logs</button>
+    </div>
 
-            .btn-danger:hover {
-                background: #b71c1c;
-            }
+    <!-- Start-trial overlay (shown between trials) -->
+    <div id="start-trial-overlay">
+      <span class="prompt">Press the screen<br>or press space bar</span>
+    </div>
 
-            /* Key visuals */
-            .key {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 40px;
-                height: 40px;
-                border: 1px solid #555;
-                border-radius: 4px;
-                background: rgba(0, 0, 0, 0.5);
-                color: #eee;
-                font-weight: bold;
-            }
-
-            .key.active {
-                background: #4caf50;
-                border-color: #4caf50;
-                color: white;
-                box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
-            }
-
-            #status-bar {
-                position: fixed;
-                top: 10px;
-                left: 50%;
-                transform: translateX(-50%);
-                color: rgba(255, 255, 255, 0.3);
-                font-size: 0.8em;
-                z-index: 5;
-                pointer-events: none;
-            }
-        </style>
-    </head>
-
-    <body>
-        <div id="app-container">
-            <div id="status-bar">Initializing...</div>
-
-            <!-- Start Menu -->
-            <div
-                id="menu-screen"
-                class="screen active"
-                style="z-index: 100; position: relative"
-            >
-                <h1>MONKEY GAME</h1>
-                <p>Use Arrow Keys to Move • Space to Check</p>
-                <button id="btn-start" class="btn">START GAME</button>
-                <div style="margin-top: 20px; color: #666; font-size: 0.8em">
-                    Press ENTER to Start
-                </div>
-            </div>
-
-            <!-- Game Screen -->
-            <div id="game-screen" class="screen">
-                <canvas id="game-canvas"></canvas>
-
-                <div id="exit-container">
-                    <button id="btn-exit" class="btn btn-danger">
-                        EXIT (Q)
-                    </button>
-                </div>
-
-                <div id="keys-container">
-                    <div class="key" id="key-left">←</div>
-                    <div class="key" id="key-down">↓</div>
-                    <div class="key" id="key-up">↑</div>
-                    <div class="key" id="key-right">→</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Logic -->
-        <script type="module" src="./controller_main.js"></script>
-    </body>
+    <!-- Controller logic (ES module) -->
+    <script type="module" src="./controller_main.js"></script>
+  </body>
 </html>

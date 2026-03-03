@@ -62,8 +62,6 @@ impl Default for GameStateLocal {
     }
 }
 
-///
-
 /// Pyramid component
 #[derive(Component)]
 pub struct Pyramid;

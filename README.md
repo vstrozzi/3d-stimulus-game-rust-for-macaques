@@ -12,11 +12,6 @@ This architecture allows for extremely low-latency, lock-free communication betw
     *   **Python (`controller_python`)**: Tkinter + transitions GUI built on the `monkey_shared` PyO3 bindings for interactive control.
     *   **Web (`controller_web`)**: HTML/JS interface. Loads the WASM game and interacts via shared memory buffers.
 
-## Prerequisites
-
-1.  **Rust**: Stable toolchain installed (`rustup`).
-2.  **OS**: Linux/macOS (Windows support is experimental).
-
 ### For Web Build
 *   `wasm-pack`: `cargo install wasm-pack`
 

@@ -149,7 +149,7 @@ let touchState = {
   maxZoomVelocity: 600,     // px/s: pinch speed at which zoom fires every frame
   // Inertia (Three.js OrbitControls uses dampingFactor ≈ 0.05)
   friction: 0.04,            // vel *= (1 - friction) per frame → longer coast
-  velocityStopThreshold: 8,  // px/s: below this, snap to zero
+  velocityStopThreshold: 20,  // px/s: below this, snap to zero
   // EMA smoothing for velocity during active drag
   velocitySmoothing: 0.45,   // alpha: higher = more responsive, lower = smoother
 };

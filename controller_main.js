@@ -486,17 +486,6 @@ function buildTrialState(trialCfg) {
 // COMMAND HELPERS (mirrors Python's write_commands / reset_triggers)
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Write either explicit cmds or internal inputs+triggers to SharedCommands.
- *  Returns snapshot of what was written (for logging).
- *  Resets triggers after writing (like Python). */
-function sendCommands(cmdOverride) {
-  const cmds = cmdOverride ?? { ...inputs, ...triggers };
-  writeCommands(cmds);
-  const snapshot = { ...cmds };
-  resetTriggers();
-  return snapshot;
-}
-
 function resetTriggers() {
   for (const k of Object.keys(triggers)) triggers[k] = false;
 }
@@ -556,9 +545,12 @@ function checkHasFinished(state) {
   const trial = getTrial();
   const nrAttemptsToRetroceed = trial.nr_attempts_to_retroceed ?? 0;
   const elapsedTimeToRetroceed = trial.elapsed_time_to_retroceed ?? 0;
+  // Use the local nrAttempts counter (maintained by the controller) instead of
+  // state.nr_attempts (from game shared memory) to stay consistent with the
+  // isWin / isStay logic in handlePlaying which also uses nrAttempts.
   return (
     state.win_elapsed_secs !== 0.0 ||
-    state.nr_attempts >= nrAttemptsToRetroceed ||
+    nrAttempts >= nrAttemptsToRetroceed ||
     state.elapsed_secs >= elapsedTimeToRetroceed
   );
 }
@@ -805,7 +797,9 @@ function handleWaitingAnimationStart(state) {
 }
 
 function handleWaitingAnimationEnd(state) {
-  if (!state.is_animating) {
+  // Default to true (still animating) if field is missing, matching Python's
+  // state.get("is_animating", True) — avoids premature exit on undefined.
+  if (!(state.is_animating ?? true)) {
     // Animation done → resume rendering
     console.log("[FSM] Animation finished → issuing stop_rendering (resume)");
     resetAllCommands();
@@ -886,7 +880,15 @@ function controllerLoop() {
   // Wait for new frame
   if (frameNum === currentFrame) {
     gameTimeUnresponsive += POLLING_INTERVAL_MS / 1000;
-    if (gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0) {
+    // Only resync when in states where the game should be producing frames.
+    // In WAITING_FOR_START the game is paused (blank + stop_rendering) so it may
+    // legitimately not advance frame_number. Same for animation-wait states.
+    // Resyncing here would re-enter INIT and re-toggle blank/stop, causing the
+    // screen to get stuck black (toggle-undo loop).
+    const canResync = fsmState !== FSM.WAITING_FOR_START &&
+                      fsmState !== FSM.WAITING_ANIMATION_START &&
+                      fsmState !== FSM.WAITING_ANIMATION_END;
+    if (canResync && (gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0)) {
       console.log(`[FSM] Game unresponsive for ${gameTimeUnresponsive.toFixed(1)}s, resyncing...`);
       resyncWithGame();
     }

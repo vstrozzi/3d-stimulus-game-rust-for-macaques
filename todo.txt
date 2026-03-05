@@ -1,10 +1,17 @@
+# Definitions
+- Object: a full prism configuration (i.e. face colors, ..., decorations)
+- Trial: A set of parameters to define the chain-trial progression and the inter trial information such as nr_attempts retroceed, ..., set start_angles
+- Chain of Trials: A set of consecutive trials (linked-list)
+- Level: {Objects}* x {Chain of Trials}
 
-# Fix the elapsed time to retroceed and advance
+# Controller work as follow per Level:
+- Set of object = [T1, T2, ...] i.e. an array of object aestetic configurations (in general only T1, T2 with one shared face)
+- Set of object_config = [T1_config, T2_config, ...] i.e. inherent object configurations stuff
+- len(Set of object) x {Chain of Trials} i.e. one chain of trials metadata per object to track where the player is for each object. The trial chain is same per object
+- Rules per level such as: order of switching between objects chains (i.e. which trial to consider), as example:
+    - How to progress per object trial e.g. go to other object (round robin), continue on our chain
 
-# Editor of the level selection 
+- Level terminated when all chains are completed
 
-# Is animatingsometins does not stop
-
-# Then we need to implment wasm version please
-
-# Use CLaude
+# New dimension of personalization
+- roughness of the objects

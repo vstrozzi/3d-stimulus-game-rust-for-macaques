@@ -1,24 +1,24 @@
-# Monkey 3D Game - Twin Engine Architecture (Shared Memory)
+# Monkey 3D Game - Native and WASM Versions (Decoupled Game Instance and Controller)
 
-A 3D puzzle game built with Bevy demonstrating the **Twin-Engine Architecture**, where the Game Logic (Game Node) is decoupled from the Controller and communicates via **Atomic Shared Memory**.
+A simple environmental 3D game designed to analyze the learning of 3D world models across macaques, teenagers with autism, and ML models. The game consists of distinguishing and learning the shapes of two structures, Type 1 and Type 2, with one level per pair composed of many trials. No indications must be provided to the players. The game logic here (`game_node`) is decoupled from the controller (`controller_py` or `web/controller_main.js`, which use a simple FSM to handle the trials and define the learning phases across each level). Depending on whether it is running on WASM or natively, the two instances communicate via: (1) two processes using Linux shared memory natively (`/tmp`), or (2) the same memory region on the web. We use Bevy to provide the same instance across web and native environments, as we require specialized hardware for the monkeys and broad distribution for patient/tablet usage.
 
 This architecture allows for extremely low-latency, lock-free communication between the game and external controllers, supporting multiple languages and platforms.
 
 ## Architecture
 
-*   **Shared Library (`shared`)**: Defines the atomic data structures (`SharedCommands`, `SharedGameState`) and handles platform-specific shared memory creation (mmap on Native, SharedArrayBuffer on Web).
-*   **Game Node (`game_node`)**: The Bevy application. It reads commands from shared memory and writes game state to shared memory every frame.
-*   **Controllers**:
-    *   **Python (`controller_python`)**: Tkinter + transitions GUI built on the `monkey_shared` PyO3 bindings for interactive control.
-    *   **Web (`controller_web`)**: HTML/JS interface. Loads the WASM game and interacts via shared memory buffers.
+* **Shared Library (`shared`)**: Defines the atomic data structures (`SharedCommands`, `SharedGameState`) and handles platform-specific shared memory creation (mmap on Native, SharedArrayBuffer on Web).
+* **Game Node (`game_node`)**: The Bevy application. It reads commands from shared memory and writes the game state to shared memory every frame.
+* **Controllers**:
+    * **Python (`controller_python`)**: Tkinter + transitions GUI built on the `monkey_shared` PyO3 bindings for interactive control.
+    * **Web (`controller_web`)**: HTML/JS interface. Loads the WASM game and interacts via shared memory buffers.
 
 ### For Web Build
-*   `wasm-pack`: `cargo install wasm-pack`
+* `wasm-pack`: `cargo install wasm-pack`
 
 ### For Python Controller
-*   Python 3.10+
-*   `pip install transitions`
-*   (Linux) `sudo apt install python3-tk` if Tkinter is missing
+* Python 3.10+
+* `pip install transitions`
+* (Linux) `sudo apt install python3-tk` if Tkinter is missing
 
 ## How to Run
 

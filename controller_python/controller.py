@@ -1,3 +1,4 @@
+import math
 import sys
 import time
 import json
@@ -18,6 +19,7 @@ REFRESH_RATE_HZ = monkey_shared.REFRESH_RATE_HZ
 WIN_BLANK_DURATION_FRAMES = monkey_shared.WIN_BLANK_DURATION_FRAMES
 POLLING_RATE_TIME_S = 1  # time of polling in between of game controller 
 GAME_UNRESPONSIVENESS_THRESHOLD_S = 3.0  # time threshold to consider game unresponsive to restart trial
+COLOR_SUGGESTION_COS_SIM = math.cos(math.pi / 6)  # cosine threshold for suggesting a colored light hint
 
 # Controller-only metadata fields (not written to game shared memory)
 CONTROLLER_META_FIELDS = {
@@ -58,7 +60,7 @@ def validate_data_on_schema(schema, data):
     return True
 
 
-def load_trials(trials_path="trials.jsonl"):
+def load_trials(trials_path="trials_config/trials.jsonl"):
     """Load trials from JSONL.  Returns a list of dicts."""
     trials = []
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -498,7 +500,7 @@ class MonkeyGameController:
             cosine_current_alignment = state.get("cosine_alignment", 0.0)
             cosine_alingment_treshold = trial_cfg.get("cosine_alignment_threshold", 0.0)
 
-            # Current attempt is the last and fail
+            # No light: Current attempt is the last and fail
             if (self.nr_attempts + 1) == retroceeds_threshold and cosine_current_alignment < cosine_alingment_treshold:
                 print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")
                 cmds = self.write_commands(
@@ -517,11 +519,12 @@ class MonkeyGameController:
                 self.fsm_state = ControllerState.WAITING_ANIMATION_START
                 self.log_frame(state, cmds)
                 return
-            # Single light not colored: either suggest in or winning with staying in current level
+            # Single light not winning: either sugges in or winning with STAY in current level
             elif (self.nr_attempts < suggestion_threshold and cosine_current_alignment < cosine_alingment_treshold) or \
                 (self.trial_proceeding == TrialProceeding.STAY and cosine_current_alignment > cosine_alingment_treshold):
                 print(f"[PLAY] Attempt {self.nr_attempts + 1} < {suggestion_threshold} and cosine_alignment={cosine_current_alignment:.2f} < {cosine_alingment_treshold:.2f} → hint (animation_door + pause)")  
-                # Don't sent any new commands
+                # Color light if grater than COLOR_SUGGESTION_COS_SIM of alignment
+                colored_light = cosine_current_alignment > COLOR_SUGGESTION_COS_SIM
                 cmds = self.write_commands(
                     {"rotate_left": False,
                     "rotate_right": False,
@@ -533,7 +536,7 @@ class MonkeyGameController:
                     "stop_rendering": True,
                     "animation_door": True,
                     "animation_all_door": False,
-                    "animation_colored": False,
+                    "animation_colored": colored_light
                     }
                 )
             # Color single light: winning and proceeding to next level
@@ -553,9 +556,8 @@ class MonkeyGameController:
                     "animation_colored": True,
                     }
                 )
-            # All lights colored:
+            # All lights colored
             else:
-                # Real check
                 print(f"[PLAY] Attempt {self.nr_attempts + 1} < {suggestion_threshold} and cosine_alignment={cosine_current_alignment:.2f} > {cosine_alingment_treshold:.2f} → check without hint")
                 cmds = self.write_commands(
                     {"rotate_left": False,

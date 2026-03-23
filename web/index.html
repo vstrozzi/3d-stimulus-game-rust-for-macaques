@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>Monkey 3D Game</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        background: #000;
+        color: #eee;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        height: 100vh;
+        width: 100vw;
+        overflow: hidden;
+        touch-action: none;          /* prevent browser gestures */
+        -webkit-user-select: none;
+        user-select: none;
+      }
+
+      /* ── Game canvas (Bevy renders here) ───────────────────────────── */
+      #game-canvas {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        display: block;
+        cursor: none;
+      }
+
+      /* ── HUD overlay layer (controller UI) ─────────────────────────── */
+      #hud {
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        pointer-events: none;   /* pass clicks through by default */
+        z-index: 20;
+      }
+
+      /* ── Status bar (top center) ───────────────────────────────────── */
+      #status-bar {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: rgba(255,255,255,0.35);
+        font-size: 0.8em;
+        white-space: nowrap;
+      }
+
+      /* ── Key indicators (bottom-left) ──────────────────────────────── */
+/*       #keys-container {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        display: flex;
+        gap: 10px;
+        opacity: 0.7;
+      }
+
+      .key {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border: 1px solid #555;
+        border-radius: 4px;
+        background: rgba(0,0,0,0.5);
+        color: #eee;
+        font-weight: bold;
+        font-size: 1.1em;
+      }
+
+      .key.active {
+        background: #4caf50;
+        border-color: #4caf50;
+        color: #fff;
+        box-shadow: 0 0 10px rgba(76,175,80,0.5);
+      } */
+
+      /* ── Download logs button (bottom-right) ───────────────────────── */
+/*       #btn-download-logs {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        pointer-events: auto;
+        padding: 8px 16px;
+        font-size: 0.85em;
+        background: rgba(255,255,255,0.12);
+        color: rgba(255,255,255,0.6);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 4px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.2s;
+      }
+      #btn-download-logs:hover {
+        background: rgba(255,255,255,0.25);
+        color: #fff;
+      } */
+
+      /* ── START TRIAL overlay ───────────────────────────────────────── */
+      #start-trial-overlay {
+        display: none;                /* shown by FSM when WAITING_FOR_START */
+        position: fixed;
+        top: 0; left: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 50;
+        background: #000;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        pointer-events: auto;
+        cursor: pointer;
+      }
+
+      #start-trial-overlay .prompt {
+        font-size: 1.6em;
+        color: #fff;
+        letter-spacing: 1px;
+        text-align: center;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Bevy renders into this canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Controller HUD overlay -->
+    <div id="hud">
+      <div id="status-bar">Initializing...</div>
+
+<!--       <div id="keys-container">
+        <div class="key" id="key-left">←</div> 
+        <div class="key" id="key-down">↓</div>
+        <div class="key" id="key-up">↑</div>
+        <div class="key" id="key-right">→</div>
+      </div>
+
+      <button id="btn-download-logs">⬇ Download Logs</button> -->
+    </div>
+
+    <!-- Start-trial overlay (shown between trials) -->
+    <div id="start-trial-overlay">
+      <span class="prompt">Press the screen<br>or press space bar</span>
+    </div>
+
+    <!-- Controller logic (ES module) -->
+    <script type="module" src="./controller_main.js?v=2"></script>
+  </body>
+</html>

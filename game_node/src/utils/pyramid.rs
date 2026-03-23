@@ -74,8 +74,9 @@ pub fn spawn_pyramid_base(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    asset_server: &AssetServer,
     p_start_orientation_rad: f32, 
-    target_door: usize,           // Target door index for winning door entities
+    target_door: usize, 
 ) -> (Option<Entity>, Option<Entity>) {
     let base_radius = BASE_RADIUS;
     let angle_increment = std::f32::consts::TAU / BASE_NR_SIDES as f32;
@@ -131,13 +132,21 @@ pub fn spawn_pyramid_base(
         // Spawn the base frame and a light in front to have a nice effect
         let is_target = i == target_door;
 
+        // Load wood textures for the frame
+        let wood_color_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Color.png");
+        let wood_normal_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_NormalGL.png");
+        let wood_roughness_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Roughness.png");
+
         let frame_id = commands
             .spawn((
                 Mesh3d(meshes.add(frame_mesh)),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     base_color: Color::srgba( BASE_COLOR[0], BASE_COLOR[1], BASE_COLOR[2], BASE_COLOR[3]), 
+                    base_color_texture: Some(wood_color_texture),
+                    normal_map_texture: Some(wood_normal_texture),
+                    specular_texture: Some(wood_roughness_texture),
                     cull_mode: None,
-                    double_sided: true,
+                    double_sided: false,
                     ..default()
                 })),
                 Transform::default(), // Frame sits at (0,0,0) or world origin
@@ -205,10 +214,18 @@ pub fn spawn_pyramid_base(
     // Create a polygon mesh matching the base's shape
     let top_lid_mesh = create_top_lid_mesh(base_radius, BASE_NR_SIDES, p_start_orientation_rad);
 
+    // Load wood textures for the frame
+    let wood_color_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Color.png");
+    let wood_normal_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_NormalGL.png");
+    let wood_roughness_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Roughness.png");
+
     commands.spawn((
         Mesh3d(meshes.add(top_lid_mesh)),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color: Color::srgba( BASE_COLOR[0], BASE_COLOR[1], BASE_COLOR[2], BASE_COLOR[3]), 
+            base_color_texture: Some(wood_color_texture),
+            normal_map_texture: Some(wood_normal_texture),
+            specular_texture: Some(wood_roughness_texture),
             cull_mode: None,
             double_sided: false,
             ..default()
@@ -331,6 +348,24 @@ fn create_frame_with_hole(
         normals.push(normal.to_array());
     }
 
+    // Generate UV coordinates for texture mapping
+    let mut uvs = Vec::new();
+    
+    // Outer rectangle UVs (0-3)
+    uvs.push([0.0, 0.0]); // bottom_left
+    uvs.push([1.0, 0.0]); // bottom_right
+    uvs.push([1.0, 1.0]); // top_right
+    uvs.push([0.0, 1.0]); // top_left
+    
+    // Pentagon vertex UVs (4-8)
+    // Map pentagon vertices to UV space based on their position relative to center
+    for vertex in &pentagon_vertices {
+        let diff = vertex - center;
+        let u = 0.5 + (diff.dot(local_right) / width);
+        let v = 0.5 + (diff.dot(local_up) / height);
+        uvs.push([u, v]);
+    }
+
     // Create triangles connecting the outer rectangle to the inner pentagon
     let mut indices = Vec::new();
 
@@ -351,6 +386,7 @@ fn create_frame_with_hole(
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
     (mesh, normal, local_right, local_up, center, pentagon_radius)
@@ -361,6 +397,7 @@ pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
+    asset_server: &AssetServer,
     decoration_seeds: [u64; 3],
     p_radius: f32,
     p_height: f32,
@@ -572,7 +609,7 @@ pub fn spawn_pyramid(
     }
 
     // Spawn the base and capture winning door entities
-    let (winning_light, winning_emissive) = spawn_pyramid_base(commands, meshes, materials, p_orientation_rad, target_door);
+    let (winning_light, winning_emissive) = spawn_pyramid_base(commands, meshes, materials, asset_server, p_orientation_rad, target_door);
     // Max intensity not vital here or pass it in
 
     (winning_light, winning_emissive)

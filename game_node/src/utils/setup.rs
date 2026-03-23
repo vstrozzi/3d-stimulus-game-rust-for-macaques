@@ -3,8 +3,10 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
+use bevy::math::Affine2;
 use bevy::mesh::Indices;
 use bevy::render::render_resource::PrimitiveTopology;
+use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 
 use shared::{DecorationShape};
 use crate::utils::objects::*;
@@ -22,49 +24,104 @@ pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
+
 ) {
+    // Tile the plane background texture
+    let repeat_sampler = |settings: &mut ImageLoaderSettings| {
+    settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+        address_mode_u: ImageAddressMode::Repeat,
+        address_mode_v: ImageAddressMode::Repeat,
+        ..default()
+        });
+    };
+
+    let obsidian_color_texture = asset_server.load_with_settings(
+        "textures/Marble016_1K-JPG/Marble016_1K-JPG_Color.jpg",
+        repeat_sampler,
+    );
+    let obsidian_normal_texture = asset_server.load_with_settings(
+        "textures/Marble016_1K-JPG/Marble016_1K-JPG_NormalGL.jpg",
+        repeat_sampler,
+    );
+    let obsidian_roughness_texture = asset_server.load_with_settings(
+        "textures/Marble016_1K-JPG/Marble016_1K-JPG_Roughness.jpg",
+        repeat_sampler,
+    );
+    
+
     // Ground Plane
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::BLACK,
-            perceptual_roughness: 0.8,
+            base_color_texture: Some(obsidian_color_texture),
+            normal_map_texture: Some(obsidian_normal_texture),
+            specular_texture: Some(obsidian_roughness_texture),
+            uv_transform: Affine2::from_scale(Vec2::splat(10.0)),  // Repeat texture 10x10
+            metallic: 0.0,
+            perceptual_roughness: 0.0,
             ..default()
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
+    let background_color_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_Color.png");
+    let background_normal_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_NormalGL.png");
+
     // Curved Background
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgb(0.2, 0.2, 0.2),
-            perceptual_roughness: 0.2,
-            reflectance: 1.0,
-            ior: 3.5,
+            base_color_texture: Some(background_color_texture),
+            normal_map_texture: Some(background_normal_texture),
             cull_mode: None,
             ..default()
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
-    // Main Spotlight
+
+    commands.spawn((
+        SpotLight {
+            intensity: 100.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
+            shadows_enabled: true,
+            outer_angle: std::f32::consts::PI / 12.0,
+            range: 25.0,
+            radius: 0.0,
+            ..default()
+        },
+        Transform::from_xyz(0.0, 10.0, 20.0).looking_at(Vec3::ZERO, -Vec3::Y),
+    ));
+
     commands.spawn((
         SpotLight {
             intensity: SPOTLIGHT_LIGHT_INTENSITY, // Default start value
             shadows_enabled: true,
-            outer_angle: std::f32::consts::PI / 3.0,
-            range: 45.0,
+            outer_angle: std::f32::consts::PI / 12.0,
+            range: 25.0,
             radius: 0.0,
             ..default()
         },
-        Transform::from_xyz(0.0, 15.0, 0.0).looking_at(Vec3::ZERO, -Vec3::Y),
+        Transform::from_xyz(0.0, 2.0, 20.0).looking_at(Vec3::ZERO, -Vec3::Y),
     ));
+
+    commands.spawn((
+        SpotLight {
+            intensity: SPOTLIGHT_LIGHT_INTENSITY, // Default start value
+            shadows_enabled: true,
+            outer_angle: std::f32::consts::PI / 12.0,
+            range: 25.0,
+            radius: 0.0,
+            ..default()
+        },
+        Transform::from_xyz(0.0, 5.0, 20.0).looking_at(Vec3::ZERO, -Vec3::Y),
+    ));
+
 
     // Ambient Light
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
-        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY, // Default start value
+        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/10.0, // Default start value
         affects_lightmapped_meshes: true,
     });
 }
@@ -75,6 +132,7 @@ pub fn setup_round(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
     mut camera_query: Query<&mut Transform, With<PersistentCamera>>,
     mut spotlight_query: Query<&mut SpotLight, (Without<HoleLight>, Without<GameEntity>)>,
     ambient_light: Option<ResMut<GlobalAmbientLight>>,
@@ -96,10 +154,12 @@ pub fn setup_round(
 
     // Read control values from sh
     let gs_ctrl = &shm.game_structure_control;
-    
+
     // Reset all fields of local game structure
     let gs_game = &mut local_game_struct.0;
     *gs_game = gs_ctrl.to_not_atomic();
+
+    gs_game.win_time = 0;
     
     // Update all the game resoruces based on the new configuration
     let mut decoration_seeds = [0u64; 3];
@@ -127,8 +187,6 @@ pub fn setup_round(
         )
         .looking_at(Vec3::ZERO, Vec3::Y);
     }
-
-    gs_game.win_time = 0;
 
     let radius = f32::from_bits(gs_game.base_radius);
     let height = f32::from_bits(gs_game.height);
@@ -169,6 +227,7 @@ pub fn setup_round(
         &mut commands,
         &mut meshes,
         &mut materials,
+        &asset_server,
         decoration_seeds,
         radius,
         height,
@@ -185,8 +244,6 @@ pub fn setup_round(
     door_win_entities.winning_emissive = winning_emissive;
     door_win_entities.animation_start_time = None;
 }
-
-
 
 fn create_extended_semicircle_mesh(
     radius: f32,

@@ -1,6 +1,7 @@
 //! Setup logic for the monkey_3d_game, with main setup plugin and functions for initializing the game scene and state.
 use std::time::Duration;
 
+use bevy::picking::backend;
 use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::math::Affine2;
@@ -44,22 +45,22 @@ pub fn setup_environment(
         "textures/Marble016_1K-JPG/Marble016_1K-JPG_NormalGL.jpg",
         repeat_sampler,
     );
+
     let obsidian_roughness_texture = asset_server.load_with_settings(
         "textures/Marble016_1K-JPG/Marble016_1K-JPG_Roughness.jpg",
         repeat_sampler,
     );
-    
+
 
     // Ground Plane
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.5, 0.5, 0.5, 1.0),
             base_color_texture: Some(obsidian_color_texture),
+            specular_texture: Some(obsidian_roughness_texture), // Using roughness as specular for simplicity
             normal_map_texture: Some(obsidian_normal_texture),
-            specular_texture: Some(obsidian_roughness_texture),
             uv_transform: Affine2::from_scale(Vec2::splat(10.0)),  // Repeat texture 10x10
-            metallic: 0.0,
-            perceptual_roughness: 0.0,
             ..default()
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
@@ -67,13 +68,14 @@ pub fn setup_environment(
 
     let background_color_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_Color.png");
     let background_normal_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_NormalGL.png");
-
+    let background_roughness_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_Roughness.png");
     // Curved Background
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
         MeshMaterial3d(materials.add(StandardMaterial {
             base_color_texture: Some(background_color_texture),
             normal_map_texture: Some(background_normal_texture),
+            specular_texture: Some(background_roughness_texture),
             cull_mode: None,
             ..default()
         })),
@@ -85,7 +87,7 @@ pub fn setup_environment(
         SpotLight {
             intensity: 100.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
             shadows_enabled: true,
-            outer_angle: std::f32::consts::PI / 12.0,
+            outer_angle: std::f32::consts::PI / 8.0,
             range: 25.0,
             radius: 0.0,
             ..default()
@@ -121,7 +123,7 @@ pub fn setup_environment(
     // Ambient Light
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
-        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/10.0, // Default start value
+        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/4.0, // Default start value
         affects_lightmapped_meshes: true,
     });
 }
@@ -167,7 +169,7 @@ pub fn setup_round(
         decoration_seeds[i] = gs_game.decorations_seeds[i];
     }
 
-    let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity);
+/*     let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity);
     let ambient_intensity = f32::from_bits(gs_game.ambient_brightness);
     // Update Lights
     for mut spot in spotlight_query.iter_mut() {
@@ -177,7 +179,7 @@ pub fn setup_round(
     if let Some(mut ambient) = ambient_light {
         ambient.brightness = ambient_intensity;
     }
-
+ */
     // Reset the persistent camera position
     if let Ok(mut camera_transform) = camera_query.single_mut() {
         *camera_transform = Transform::from_xyz(

@@ -4,7 +4,7 @@ use crate::utils::objects::{
     BaseDoor, BaseFrame, Decoration, DecorationSet, GameEntity, HoleEmissive,
     HoleLight, Pyramid, RotableComponent,
 };
-use crate::utils::load_textures:: {load_texture_set, natural_material, tinted_material};
+use crate::utils::load_textures:: {load_texture_set, natural_material, tinted_material, tinted_material_tiled};
 use bevy::prelude::*;
 use bevy::prelude::ops::sqrt;
 use shared::DecorationShape;
@@ -670,6 +670,7 @@ fn generate_decoration_set(
         decorations.push(Decoration {
             barycentric: Vec3::new(w0, w2, w1),
             size,
+            thickness: 0.1,//TODO
         });
         decorations_world.push((world_position, size));
         successful_placements += 1;
@@ -702,7 +703,8 @@ fn spawn_decorations_from_set(
             + decoration.barycentric.y * corner1
             + decoration.barycentric.z * corner2;
 
-        let mesh = create_decoration_mesh(decoration_set.shape, decoration.size);
+        // TODO: Fixed size
+        let mesh = create_decoration_mesh(decoration_set.shape, decoration.size, 0.1);
 
         // Calculate the rotation to align the decoration with the face plane
         let base_rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
@@ -714,12 +716,16 @@ fn spawn_decorations_from_set(
 
         // Spawn the decoration as a child of the face
 
-        let metal = load_texture_set(&asset_server, "textures/Metal061B_1K-JPG/bevy_ready");
+        let metal = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
      
         commands.entity(parent_face).with_children(|parent| {
             parent.spawn((
                 Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(materials.add(tinted_material(&metal, decoration_set.color))),
+                MeshMaterial3d(materials.add(
+                    StandardMaterial{
+                    reflectance: 0.1,
+                    ..tinted_material_tiled(&metal, Color::linear_rgb(1.0, 0.0, 0.0), 0.05)})),
+                     // Todo: put it back decoration_set.color
                 Transform {
                     translation: offset_position,
                     rotation: -final_rotation,
@@ -800,7 +806,7 @@ fn point_to_line_segment_distance(point: Vec3, line_start: Vec3, line_end: Vec3)
 }
 
 /// Creates a mesh for a decoration shape
-fn create_decoration_mesh(shape: DecorationShape, size: f32) -> Mesh {
+fn create_decoration_mesh(shape: DecorationShape, size: f32, thickness: f32) -> Mesh {
     let mesh  = match shape {
         DecorationShape::Circle => Circle::new(size).mesh().resolution(16).build(),
         DecorationShape::Square => Rectangle::new(size * 2.0, size * 2.0).mesh().build(),
@@ -808,9 +814,100 @@ fn create_decoration_mesh(shape: DecorationShape, size: f32) -> Mesh {
         DecorationShape::Triangle => create_triangle_mesh(size),
     };
     
-    mesh
-
+    extrude_mesh(mesh, thickness)
 }
+
+
+fn extrude_mesh(flat_mesh: Mesh, thickness: f32) -> Mesh {
+    if thickness <= 0.0 {
+        return flat_mesh;
+    }
+
+    let positions: Vec<[f32; 3]> = match flat_mesh.attribute(Mesh::ATTRIBUTE_POSITION).unwrap() {
+        bevy_mesh::VertexAttributeValues::Float32x3(v) => v.clone(),
+        _ => panic!("extrude_mesh: expected Float32x3 positions"),
+    };
+
+    let orig_uvs: Vec<[f32; 2]> = match flat_mesh.attribute(Mesh::ATTRIBUTE_UV_0).unwrap() {
+        bevy_mesh::VertexAttributeValues::Float32x2(v) => v.clone(),
+        _ => panic!("extrude_mesh: expected Float32x2 UVs"),
+    };
+
+    let orig_indices: Vec<u32> = match flat_mesh.indices() {
+        Some(bevy_mesh::Indices::U32(v)) => v.clone(),
+        Some(bevy_mesh::Indices::U16(v)) => v.iter().map(|&i| i as u32).collect(),
+        None => (0..positions.len() as u32).collect(),
+    };
+
+    let n = positions.len();
+    let mut pos: Vec<[f32; 3]> = Vec::new();
+    let mut nrm: Vec<[f32; 3]> = Vec::new();
+    let mut uvs: Vec<[f32; 2]> = Vec::new();
+    let mut idx: Vec<u32>      = Vec::new();
+
+    // Front face (z = thickness, normal = +Z)
+    for i in 0..n {
+        let [x, y, _] = positions[i];
+        pos.push([x, y, thickness]);
+        nrm.push([0.0, 0.0, 1.0]);
+        uvs.push(orig_uvs[i]);
+    }
+    idx.extend_from_slice(&orig_indices);
+
+    // Back face (z = 0, normal = -Z, winding flipped)
+    let back_base = n as u32;
+    for i in 0..n {
+        let [x, y, _] = positions[i];
+        pos.push([x, y, 0.0]);
+        nrm.push([0.0, 0.0, -1.0]);
+        uvs.push(orig_uvs[i]);
+    }
+    for tri in orig_indices.chunks(3) {
+        idx.extend_from_slice(&[back_base + tri[0], back_base + tri[2], back_base + tri[1]]);
+    }
+
+    // Side walls: collect directed boundary edges (appear in exactly one triangle)
+    // Key is the canonical (min, max) pair; value is (is_boundary, directed_a, directed_b)
+    let mut edge_seen: std::collections::HashMap<(u32, u32), (bool, u32, u32)> =
+        std::collections::HashMap::new();
+
+    for tri in orig_indices.chunks(3) {
+        for &(a, b) in &[(tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0])] {
+            let key = if a < b { (a, b) } else { (b, a) };
+            edge_seen
+                .entry(key)
+                .and_modify(|e| e.0 = false) // seen twice → interior edge
+                .or_insert((true, a, b));     // first time → keep directed
+        }
+    }
+
+    for (_key, (is_boundary, e0, e1)) in &edge_seen {
+        if !is_boundary {
+            continue;
+        }
+
+        let [x0, y0, _] = positions[*e0 as usize];
+        let [x1, y1, _] = positions[*e1 as usize];
+        let edge = Vec2::new(x1 - x0, y1 - y0);
+        let side_n = Vec2::new(edge.y, -edge.x).normalize();
+        let base = pos.len() as u32;
+
+        for &(x, y, z) in &[(x0, y0, 0.0_f32), (x1, y1, 0.0), (x1, y1, thickness), (x0, y0, thickness)] {
+            pos.push([x, y, z]);
+            nrm.push([side_n.x, side_n.y, 0.0]);
+            uvs.push([z / thickness, 0.0]);
+        }
+        idx.extend_from_slice(&[base, base + 1, base + 2, base, base + 2, base + 3]);
+    }
+
+    let mut mesh = Mesh::new(bevy::mesh::PrimitiveTopology::TriangleList, Default::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, pos);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL,   nrm);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0,     uvs);
+    mesh.insert_indices(bevy_mesh::Indices::U32(idx));
+    mesh
+}
+
 
 /// Creates a star-shaped mesh
 fn create_star_mesh(size: f32, points: usize) -> Mesh {

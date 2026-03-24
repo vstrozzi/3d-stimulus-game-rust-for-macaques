@@ -2545,6 +2545,7 @@ name = "game_node"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_mesh",
  "console",
  "getrandom 0.3.4",
  "log",

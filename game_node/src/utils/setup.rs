@@ -9,7 +9,7 @@ use bevy::render::render_resource::PrimitiveTopology;
 use shared::{DecorationShape};
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
-use crate::utils::load_textures::{load_texture_set, natural_material_tiled, natural_material};
+use crate::utils::load_textures::{load_texture_set, natural_material_tiled};
 // TODO: Add these to the shared memory
 use shared::constants::{
     lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},
@@ -27,7 +27,7 @@ pub fn setup_environment(
 
 ) {
     // Load marble texture
-    let marble = load_texture_set(&asset_server, "textures/Marble016_1K-JPG/bevy_ready");
+    let marble = load_texture_set(&asset_server, "textures/Rock024_1K-JPG/bevy_ready");
 
     // Ground Plane
     commands.spawn((
@@ -39,31 +39,32 @@ pub fn setup_environment(
     ));
 
     // Load metal texture
-    let metal = load_texture_set(&asset_server, "textures/Metal061B_1K-JPG/bevy_ready");
+    let metal = load_texture_set(&asset_server, "textures/Tiles017_1K-JPG/bevy_ready");
     
     // Curved Background
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
-        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 10.0))),
+        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 5.0))),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
     commands.spawn((
         SpotLight {
-            intensity: 20.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
+            intensity: 10.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
             shadows_enabled: true,
             outer_angle: std::f32::consts::PI / 7.0,
-            range: 25.0,
+            inner_angle: std::f32::consts::PI / 18.0,
+            range: 35.0,
             radius: 0.0,
             ..default()
         },
-        Transform::from_xyz(0.0, 10.0, 15.0).looking_at(Vec3::ZERO, -Vec3 ::Y),
+        Transform::from_xyz(0.0, 15.0, 10.0).looking_at(Vec3::new(0.0, 2.0, 1.5), -Vec3 ::Y),
     ));
 
     // Ambient Light
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
-        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/4.0, // Default start value
+        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/3.0, // Default start value
         affects_lightmapped_meshes: true,
     });
 }

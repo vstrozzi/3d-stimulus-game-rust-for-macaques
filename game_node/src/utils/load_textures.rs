@@ -115,3 +115,11 @@ pub fn tinted_material(tex: &TextureSet, tint: Color) -> StandardMaterial {
         ..natural_material(tex)
     }
 }
+
+// Tint and tile a texture
+pub fn tinted_material_tiled(tex: &TextureSet, tint: Color, tile: f32) -> StandardMaterial {
+    StandardMaterial {
+        uv_transform: Affine2::from_scale(Vec2::splat(tile)),
+        ..tinted_material(tex, tint)
+    }
+}

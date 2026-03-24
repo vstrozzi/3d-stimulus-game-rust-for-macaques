@@ -8,6 +8,7 @@ use shared::{SharedGameState, SharedGameStateLocal, DecorationShape};
 pub struct Decoration {
     pub barycentric: Vec3,
     pub size: f32,
+    pub thickness: f32,
 }
 
 /// Set of decorations for a pyramid face, which all share same shape and color

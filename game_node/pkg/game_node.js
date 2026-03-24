@@ -1133,9 +1133,6 @@ function __wbg_get_imports() {
                 wasm.__wbindgen_free(deferred0_0, deferred0_1, 1);
             }
         }, arguments); },
-        __wbg_log_524eedafa26daa59: function() { return logError(function (arg0) {
-            console.log(arg0);
-        }, arguments); },
         __wbg_log_ce2c4456b290c5e7: function() { return logError(function (arg0, arg1) {
             let deferred0_0;
             let deferred0_1;

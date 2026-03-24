@@ -117,9 +117,9 @@ pub mod lighting_constants {
     #[cfg(not(target_arch = "wasm32"))]
     pub const SHADOWS_ENABLED: bool = true;
 
-    pub const SPOTLIGHT_LIGHT_INTENSITY: f32 = 5_000_000.0;
-    pub const GLOBAL_AMBIENT_LIGHT_INTENSITY: f32 = 200.0;
-    pub const MAX_SPOTLIGHT_INTENSITY: f32 = 1000000.0;
+    pub const SPOTLIGHT_LIGHT_INTENSITY: f32 = 50_000_000.0;
+    pub const GLOBAL_AMBIENT_LIGHT_INTENSITY: f32 = 100.0;
+    pub const MAX_SPOTLIGHT_INTENSITY: f32 = 50_000_000.0;
 }
 
 

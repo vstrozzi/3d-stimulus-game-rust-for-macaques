@@ -50,7 +50,7 @@ pub fn setup_environment(
 
     commands.spawn((
         SpotLight {
-            intensity: 10.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
+            intensity: SPOTLIGHT_LIGHT_INTENSITY, // Default start value
             shadows_enabled: true,
             outer_angle: std::f32::consts::PI / 7.0,
             inner_angle: std::f32::consts::PI / 18.0,
@@ -64,7 +64,7 @@ pub fn setup_environment(
     // Ambient Light
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
-        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/2.0, // Default start value
+        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY, // Default start value
         affects_lightmapped_meshes: true,
     });
 }
@@ -110,7 +110,7 @@ pub fn setup_round(
         decoration_seeds[i] = gs_game.decorations_seeds[i];
     }
 
-/*     let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity);
+    let main_intensity = f32::from_bits(gs_game.main_spotlight_intensity);
     let ambient_intensity = f32::from_bits(gs_game.ambient_brightness);
     // Update Lights
     for mut spot in spotlight_query.iter_mut() {
@@ -120,7 +120,7 @@ pub fn setup_round(
     if let Some(mut ambient) = ambient_light {
         ambient.brightness = ambient_intensity;
     }
- */
+
     // Reset the persistent camera position
     if let Ok(mut camera_transform) = camera_query.single_mut() {
         *camera_transform = Transform::from_xyz(

@@ -724,8 +724,7 @@ fn spawn_decorations_from_set(
                 MeshMaterial3d(materials.add(
                     StandardMaterial{
                     reflectance: 0.1,
-                    ..tinted_material_tiled(&metal, Color::linear_rgb(1.0, 0.0, 0.0), 0.05)})),
-                     // Todo: put it back decoration_set.color
+                    ..tinted_material_tiled(&metal, decoration_set.color, 0.05)})),
                 Transform {
                     translation: offset_position,
                     rotation: -final_rotation,

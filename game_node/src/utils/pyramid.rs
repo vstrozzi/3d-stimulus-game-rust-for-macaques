@@ -4,9 +4,12 @@ use crate::utils::objects::{
     BaseDoor, BaseFrame, Decoration, DecorationSet, GameEntity, HoleEmissive,
     HoleLight, Pyramid, RotableComponent,
 };
+use crate::utils::load_textures:: {load_texture_set, natural_material, tinted_material};
 use bevy::prelude::*;
+use bevy::prelude::ops::sqrt;
 use shared::DecorationShape;
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
+
 
 use rand::{Rng};
 use rand::SeedableRng;
@@ -57,7 +60,7 @@ fn create_pentagon_mesh(
     // Create triangles (fan from center)
     for i in 1..=pentagon_points {
         let next = if i == pentagon_points { 1 } else { i + 1 };
-        indices.extend_from_slice(&[0, i as u32, next as u32]);
+        indices.extend_from_slice(&[0, next as u32, i as u32]);
     }
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -133,22 +136,12 @@ pub fn spawn_pyramid_base(
         let is_target = i == target_door;
 
         // Load wood textures for the frame
-        let wood_color_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Color.png");
-        let wood_normal_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_NormalGL.png");
-        let wood_roughness_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Roughness.png");
+        let wood = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
 
         let frame_id = commands
             .spawn((
                 Mesh3d(meshes.add(frame_mesh)),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: Color::srgba( BASE_COLOR[0], BASE_COLOR[1], BASE_COLOR[2], BASE_COLOR[3]), 
-                    base_color_texture: Some(wood_color_texture),
-                    normal_map_texture: Some(wood_normal_texture),
-                    specular_texture: Some(wood_roughness_texture),
-                    cull_mode: None,
-                    double_sided: false,
-                    ..default()
-                })),
+                MeshMaterial3d(materials.add(natural_material(&wood))),
                 Transform::default(), // Frame sits at (0,0,0) or world origin
                 BaseFrame { door_index: i },
                 GameEntity,
@@ -215,21 +208,11 @@ pub fn spawn_pyramid_base(
     let top_lid_mesh = create_top_lid_mesh(base_radius, BASE_NR_SIDES, p_start_orientation_rad);
 
     // Load wood textures for the frame
-    let wood_color_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Color.png");
-    let wood_normal_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_NormalGL.png");
-    let wood_roughness_texture = asset_server.load("textures/WoodFloor057_1K-JPG/WoodFloor057_1K-JPG_Roughness.png");
+    let wood = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
 
     commands.spawn((
         Mesh3d(meshes.add(top_lid_mesh)),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba( BASE_COLOR[0], BASE_COLOR[1], BASE_COLOR[2], BASE_COLOR[3]), 
-            base_color_texture: Some(wood_color_texture),
-            normal_map_texture: Some(wood_normal_texture),
-            specular_texture: Some(wood_roughness_texture),
-            cull_mode: None,
-            double_sided: false,
-            ..default()
-        })),
+        MeshMaterial3d(materials.add(natural_material(&wood))),
         Transform::from_xyz(0.0, top_y, 0.0),
         RotableComponent,
         GameEntity,
@@ -270,7 +253,7 @@ fn create_top_lid_mesh(radius: f32, sides: usize, start_orientation: f32) -> Mes
     // Create triangles (fan triangulation from center)
     for i in 1..=sides {
         let next = if i == sides { 1 } else { i + 1 };
-        indices.extend_from_slice(&[0, i as u32, next as u32]);
+        indices.extend_from_slice(&[0, next as u32, i as u32]);
     }
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -369,20 +352,20 @@ fn create_frame_with_hole(
     // Create triangles connecting the outer rectangle to the inner pentagon
     let mut indices = Vec::new();
 
-    indices.extend_from_slice(&[1, 2, 5]);
-    indices.extend_from_slice(&[2, 6, 5]);
+    indices.extend_from_slice(&[1, 5, 2]);
+    indices.extend_from_slice(&[2, 5, 6]);
 
-    indices.extend_from_slice(&[2, 3, 6]);
-    indices.extend_from_slice(&[3, 7, 6]);
+    indices.extend_from_slice(&[2, 6, 3]);
+    indices.extend_from_slice(&[3, 6, 7]);
 
-    indices.extend_from_slice(&[3, 0, 8]); // TL -> BL -> PentBL
-    indices.extend_from_slice(&[3, 8, 7]); // TL -> PentBL -> PentTL
+    indices.extend_from_slice(&[3, 8, 0]); // TL -> BL -> PentBL
+    indices.extend_from_slice(&[3, 7, 8]); // TL -> PentBL -> PentTL
 
-    indices.extend_from_slice(&[0, 4, 8]);
+    indices.extend_from_slice(&[0, 8, 4]);
 
-    indices.extend_from_slice(&[0, 1, 4]);
+    indices.extend_from_slice(&[0, 4, 1]);
 
-    indices.extend_from_slice(&[1, 5, 4]);
+    indices.extend_from_slice(&[1, 4, 5]);
 
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
@@ -475,7 +458,6 @@ pub fn spawn_pyramid(
     ));
 
     // Generate Decoration Sets
-
     let mut dec_sets: Vec<Option<DecorationSet>> = Vec::new();
 
     // Indices for the loop below to generate sets for Face 0 and Face 1
@@ -540,12 +522,12 @@ pub fn spawn_pyramid(
         ];
 
         // Indices for two triangles: 0-1-2 and 0-2-3
-        let indices = vec![0, 1, 2, 0, 2, 3];
+        let indices = vec![0, 2, 1, 0, 3, 2];
 
         // Calculate Normal (same for the whole flat face)
         let v1 = bl - tl;
         let v2 = tr - tl;
-        let normal = v1.cross(v2).normalize();
+        let normal = -v1.cross(v2).normalize();
         let normals = vec![normal.to_array(); 4];
 
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
@@ -561,15 +543,13 @@ pub fn spawn_pyramid(
         );
         mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
+        let wood = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
         let face_entity = commands
             .spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: p_colors[i],
-                    cull_mode: None,
-                    double_sided: false,
-                    ..default()
-                })),
+                Mesh3d(meshes.add(mesh)),           
+                MeshMaterial3d(materials.add(
+                    StandardMaterial{
+                        ..tinted_material(&wood, p_colors[i])})),
                 Transform::default(),
                 Pyramid,
                 RotableComponent,
@@ -578,6 +558,7 @@ pub fn spawn_pyramid(
             .id();
 
         // Apply Set A to the first triangle (TL, BL, BR)
+
         if let Some(ref set_a) = dec_sets[i * 2] {
             spawn_decorations_from_set(
                 commands,
@@ -585,6 +566,7 @@ pub fn spawn_pyramid(
                 materials,
                 face_entity,
                 set_a,
+                &asset_server,
                 tl,
                 bl,
                 br,
@@ -600,6 +582,7 @@ pub fn spawn_pyramid(
                 materials,
                 face_entity,
                 set_b,
+                &asset_server,
                 tl,
                 br,
                 tr,
@@ -685,7 +668,7 @@ fn generate_decoration_set(
 
         // Store this decoration with barycentric coordinates
         decorations.push(Decoration {
-            barycentric: Vec3::new(w0, w1, w2),
+            barycentric: Vec3::new(w0, w2, w1),
             size,
         });
         decorations_world.push((world_position, size));
@@ -707,6 +690,7 @@ fn spawn_decorations_from_set(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     parent_face: Entity,
     decoration_set: &DecorationSet,
+    asset_server: &AssetServer,
     top: Vec3,
     corner1: Vec3,
     corner2: Vec3,
@@ -722,26 +706,25 @@ fn spawn_decorations_from_set(
 
         // Calculate the rotation to align the decoration with the face plane
         let base_rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
-        let normal_rotation = Quat::from_rotation_arc(Vec3::Y, face_normal);
+        let normal_rotation = Quat::from_rotation_arc(Vec3::Y, -face_normal);
         let final_rotation = normal_rotation * base_rotation;
 
         // Offset slightly away from face surface to prevent z-fighting
-        let offset_position = position - face_normal * 0.01;
+        let offset_position = position + face_normal * 0.001;
 
         // Spawn the decoration as a child of the face
+
+        let metal = load_texture_set(&asset_server, "textures/Metal061B_1K-JPG/bevy_ready");
+     
         commands.entity(parent_face).with_children(|parent| {
             parent.spawn((
                 Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(materials.add(StandardMaterial {
-                    base_color: decoration_set.color,
-                    reflectance: 0.0,
-                    ..default()
-                })),
+                MeshMaterial3d(materials.add(tinted_material(&metal, decoration_set.color))),
                 Transform {
                     translation: offset_position,
-                    rotation: final_rotation,
-                    scale: Vec3::ONE,
-                },
+                    rotation: -final_rotation,
+                    scale: Vec3::new(1.0, 1.0, 1.0),
+                    },
                 GameEntity,
             ));
         });
@@ -818,12 +801,15 @@ fn point_to_line_segment_distance(point: Vec3, line_start: Vec3, line_end: Vec3)
 
 /// Creates a mesh for a decoration shape
 fn create_decoration_mesh(shape: DecorationShape, size: f32) -> Mesh {
-    match shape {
+    let mesh  = match shape {
         DecorationShape::Circle => Circle::new(size).mesh().resolution(16).build(),
         DecorationShape::Square => Rectangle::new(size * 2.0, size * 2.0).mesh().build(),
         DecorationShape::Star => create_star_mesh(size, 5),
         DecorationShape::Triangle => create_triangle_mesh(size),
-    }
+    };
+    
+    mesh
+
 }
 
 /// Creates a star-shaped mesh
@@ -877,7 +863,7 @@ fn create_triangle_mesh(size: f32) -> Mesh {
         Default::default(),
     );
 
-    let height = size * 1.732; // sqrt(3)
+    let height = size * sqrt(3.0); // sqrt(3)
     let positions = vec![
         [0.0, height * 0.666, 0.0],
         [-size, -height * 0.333, 0.0],

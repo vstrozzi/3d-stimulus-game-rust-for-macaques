@@ -1,17 +1,15 @@
 //! Setup logic for the monkey_3d_game, with main setup plugin and functions for initializing the game scene and state.
 use std::time::Duration;
 
-use bevy::picking::backend;
 use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
-use bevy::math::Affine2;
 use bevy::mesh::Indices;
 use bevy::render::render_resource::PrimitiveTopology;
-use bevy::image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor};
 
 use shared::{DecorationShape};
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
+use crate::utils::load_textures::{load_texture_set, natural_material_tiled, natural_material};
 // TODO: Add these to the shared memory
 use shared::constants::{
     lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},
@@ -28,97 +26,39 @@ pub fn setup_environment(
     asset_server: Res<AssetServer>,
 
 ) {
-    // Tile the plane background texture
-    let repeat_sampler = |settings: &mut ImageLoaderSettings| {
-    settings.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-        address_mode_u: ImageAddressMode::Repeat,
-        address_mode_v: ImageAddressMode::Repeat,
-        ..default()
-        });
-    };
-
-    let obsidian_color_texture = asset_server.load_with_settings(
-        "textures/Marble016_1K-JPG/Marble016_1K-JPG_Color.jpg",
-        repeat_sampler,
-    );
-    let obsidian_normal_texture = asset_server.load_with_settings(
-        "textures/Marble016_1K-JPG/Marble016_1K-JPG_NormalGL.jpg",
-        repeat_sampler,
-    );
-
-    let obsidian_roughness_texture = asset_server.load_with_settings(
-        "textures/Marble016_1K-JPG/Marble016_1K-JPG_Roughness.jpg",
-        repeat_sampler,
-    );
-
+    // Load marble texture
+    let marble = load_texture_set(&asset_server, "textures/Marble016_1K-JPG/bevy_ready");
 
     // Ground Plane
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::srgba(0.5, 0.5, 0.5, 1.0),
-            base_color_texture: Some(obsidian_color_texture),
-            specular_texture: Some(obsidian_roughness_texture), // Using roughness as specular for simplicity
-            normal_map_texture: Some(obsidian_normal_texture),
-            uv_transform: Affine2::from_scale(Vec2::splat(10.0)),  // Repeat texture 10x10
-            ..default()
+            ..natural_material_tiled(&marble, 10.0)
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
-    let background_color_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_Color.png");
-    let background_normal_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_NormalGL.png");
-    let background_roughness_texture = asset_server.load("textures/Metal061B_1K-JPG/Metal061B_1K-JPG_Roughness.png");
+    // Load metal texture
+    let metal = load_texture_set(&asset_server, "textures/Metal061B_1K-JPG/bevy_ready");
+    
     // Curved Background
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            base_color_texture: Some(background_color_texture),
-            normal_map_texture: Some(background_normal_texture),
-            specular_texture: Some(background_roughness_texture),
-            cull_mode: None,
-            ..default()
-        })),
+        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 10.0))),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
-
     commands.spawn((
         SpotLight {
-            intensity: 100.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
+            intensity: 20.0*SPOTLIGHT_LIGHT_INTENSITY, // Default start value
             shadows_enabled: true,
-            outer_angle: std::f32::consts::PI / 8.0,
+            outer_angle: std::f32::consts::PI / 7.0,
             range: 25.0,
             radius: 0.0,
             ..default()
         },
-        Transform::from_xyz(0.0, 10.0, 20.0).looking_at(Vec3::ZERO, -Vec3::Y),
+        Transform::from_xyz(0.0, 10.0, 15.0).looking_at(Vec3::ZERO, -Vec3 ::Y),
     ));
-
-    commands.spawn((
-        SpotLight {
-            intensity: SPOTLIGHT_LIGHT_INTENSITY, // Default start value
-            shadows_enabled: true,
-            outer_angle: std::f32::consts::PI / 12.0,
-            range: 25.0,
-            radius: 0.0,
-            ..default()
-        },
-        Transform::from_xyz(0.0, 2.0, 20.0).looking_at(Vec3::ZERO, -Vec3::Y),
-    ));
-
-    commands.spawn((
-        SpotLight {
-            intensity: SPOTLIGHT_LIGHT_INTENSITY, // Default start value
-            shadows_enabled: true,
-            outer_angle: std::f32::consts::PI / 12.0,
-            range: 25.0,
-            radius: 0.0,
-            ..default()
-        },
-        Transform::from_xyz(0.0, 5.0, 20.0).looking_at(Vec3::ZERO, -Vec3::Y),
-    ));
-
 
     // Ambient Light
     commands.insert_resource(GlobalAmbientLight {
@@ -291,12 +231,12 @@ fn create_extended_semicircle_mesh(
     for i in 0..(total_columns - 1) {
         let base = i * 2;
         indices.push(base);
-        indices.push(base + 2);
         indices.push(base + 1);
+        indices.push(base + 2);
 
         indices.push(base + 1);
-        indices.push(base + 2);
         indices.push(base + 3);
+        indices.push(base + 2);
     }
 
     let mut mesh = Mesh::new(

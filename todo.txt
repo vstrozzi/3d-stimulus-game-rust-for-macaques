@@ -1,4 +1,8 @@
+### PRIOs
 
+Look for nice textures to use
+Add them to config files for trials.json
+Same for decorations 
 
 (ii) a bar on top (potentially extending over much of the width of the screen) that keeps track of the overall progress in the game: meaning the
  overall level, and the state within each level (if there are multiple object in a level: show the “sum” of the state across objects) . 

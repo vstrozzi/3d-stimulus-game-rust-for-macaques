@@ -1299,7 +1299,7 @@ function setupInput() {
 
 async function loadTrials() {
   try {
-    const resp = await fetch("../trials_config/trials.jsonl");
+    const resp = await fetch("./trials_config/trials.jsonl");
     const text = await resp.text();
     const lines = text.trim().split("\n").filter((l) => l.trim());
     trials = lines.map((line) => JSON.parse(line));

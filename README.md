@@ -46,7 +46,7 @@ python controller_python/controller.py
 ```
 
 #### Web Controller
-1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`)
+1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`) #add --dev for no optimizations
 2. Launch
 
 ## How to create levels

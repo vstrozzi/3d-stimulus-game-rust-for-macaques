@@ -26,43 +26,48 @@ pub fn load_texture_set(
     println!("Loading texture set from: {}", base.display());
 
     let linear = |name: &str| -> Option<Handle<Image>> {
-        let full = base.join(name);
-        if full.exists() {
-            Some(asset_server.load_with_settings(
-                format!("{}/{}", folder, name),
-                |s: &mut ImageLoaderSettings| {
-                    s.is_srgb = false;
-                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        ..default()
-                    });
-                },
-            ))
-        } else {
-            println!("  ✗ missing {}", name);
-            None
+        // Check path existence only native, assetserver handles web request
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let full = base.join(name);
+            if !full.exists() {
+                println!("  ✗ missing {}", name);
+                return None;
+            }
         }
+        Some(asset_server.load_with_settings(
+            format!("{}/{}", folder, name),
+            |s: &mut ImageLoaderSettings| {
+                s.is_srgb = false;
+                s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                    address_mode_u: ImageAddressMode::Repeat,
+                    address_mode_v: ImageAddressMode::Repeat,
+                    ..default()
+                });
+            },
+        ))
     };
 
     let color = |name: &str| -> Option<Handle<Image>> {
-        let full = base.join(name);
-        if full.exists() {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let full = base.join(name);
+            if !full.exists() {
+                println!("  ✗ missing {}", name);
+                return None;
+            }
             println!("  ✓ found {}", name);
-            Some(asset_server.load_with_settings(
-                format!("{}/{}", folder, name),
-                |s: &mut ImageLoaderSettings| {
-                    s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
-                        address_mode_u: ImageAddressMode::Repeat,
-                        address_mode_v: ImageAddressMode::Repeat,
-                        ..default()
-                    });
-                },
-            ))
-        } else {
-            println!("  ✗ missing {}", name);
-            None
         }
+        Some(asset_server.load_with_settings(
+            format!("{}/{}", folder, name),
+            |s: &mut ImageLoaderSettings| {
+                s.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor {
+                    address_mode_u: ImageAddressMode::Repeat,
+                    address_mode_v: ImageAddressMode::Repeat,
+                    ..default()
+                });
+            },
+        ))
     };
 
     TextureSet {

@@ -1,8 +1,4 @@
-(i) the green light: when the participant chooses an orientation within +-30 deg of the correct one, they see the green light
-    -> Edit controller to change green light to spawn when +-30 degress (i.e. cos(theta_rew) < |rad(30)|)
-    -? Keep the green light when closed
 
-YES
 
 (ii) a bar on top (potentially extending over much of the width of the screen) that keeps track of the overall progress in the game: meaning the
  overall level, and the state within each level (if there are multiple object in a level: show the “sum” of the state across objects) . 

@@ -77,6 +77,14 @@ pub fn build_app() -> App {
             primary_window: window,
             primary_cursor_options: cursor,
             ..default()
+        })
+        .set(AssetPlugin {
+            file_path: if cfg!(target_arch = "wasm32") {
+                "game_node/assets".to_string()
+            } else {
+                "assets".to_string()
+            },
+            ..default()
         }),
         LogDiagnosticsPlugin::default(),
         FrameTimeDiagnosticsPlugin::default(),

@@ -21,6 +21,7 @@ import init, {
   wasm_main,
 } from "./game_node/pkg/game_node.js";
 
+
 // ── Constants ──────────────────────────────────────────────────────────────
 const REFRESH_RATE_HZ = 60;
 const POLLING_INTERVAL_MS = 1; // ~1 ms between FSM ticks (matches Python's 1 ms)

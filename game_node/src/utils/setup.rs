@@ -33,7 +33,7 @@ pub fn setup_environment(
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 50.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            ..natural_material_tiled(&marble, 10.0)
+            ..natural_material_tiled(&marble, 8.0)
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
@@ -44,7 +44,7 @@ pub fn setup_environment(
     // Curved Background
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
-        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 5.0))),
+        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 8.0))),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
@@ -64,7 +64,7 @@ pub fn setup_environment(
     // Ambient Light
     commands.insert_resource(GlobalAmbientLight {
         color: Color::WHITE,
-        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/3.0, // Default start value
+        brightness: GLOBAL_AMBIENT_LIGHT_INTENSITY/2.0, // Default start value
         affects_lightmapped_meshes: true,
     });
 }

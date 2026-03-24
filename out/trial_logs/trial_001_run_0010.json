@@ -60,14 +60,14 @@
   },
   "outcome": "advance",
   "nr_attempts": 1,
-  "elapsed_time": 4.5498,
-  "timestamp_start": "2026-03-23T15:28:10.710404",
-  "timestamp_end": "2026-03-23T15:28:15.260183",
+  "elapsed_time": 2.0524,
+  "timestamp_start": "2026-03-24T16:45:15.653755",
+  "timestamp_end": "2026-03-24T16:45:17.706194",
   "frames": {
-    "167": {
+    "7": {
       "state_read": {
-        "frame_number": 167,
-        "elapsed_secs": 0.0,
+        "frame_number": 7,
+        "elapsed_secs": 0.11655949056148529,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -86,9 +86,9 @@
         "zoom_in": false,
         "zoom_out": false,
         "check": false,
-        "reset": true,
-        "blank_screen": true,
-        "stop_rendering": true,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
         "animation_door": false,
         "animation_all_door": false,
         "animation_colored": false
@@ -97,7 +97,7 @@
     "1": {
       "state_read": {
         "frame_number": 1,
-        "elapsed_secs": 0.017158331349492073,
+        "elapsed_secs": 0.016487419605255127,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -127,7 +127,7 @@
     "2": {
       "state_read": {
         "frame_number": 2,
-        "elapsed_secs": 0.034305330365896225,
+        "elapsed_secs": 0.033779993653297424,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -157,7 +157,7 @@
     "3": {
       "state_read": {
         "frame_number": 3,
-        "elapsed_secs": 0.05013413354754448,
+        "elapsed_secs": 0.049959857016801834,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -187,7 +187,7 @@
     "4": {
       "state_read": {
         "frame_number": 4,
-        "elapsed_secs": 0.06662300229072571,
+        "elapsed_secs": 0.06622574478387833,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -217,7 +217,7 @@
     "5": {
       "state_read": {
         "frame_number": 5,
-        "elapsed_secs": 0.08328737318515778,
+        "elapsed_secs": 0.08272570371627808,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -247,37 +247,7 @@
     "6": {
       "state_read": {
         "frame_number": 6,
-        "elapsed_secs": 0.10028322041034698,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 0,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": false,
-        "win_elapsed_secs": 0.0
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "7": {
-      "state_read": {
-        "frame_number": 7,
-        "elapsed_secs": 0.11688510328531265,
+        "elapsed_secs": 0.09960023313760757,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -307,7 +277,7 @@
     "8": {
       "state_read": {
         "frame_number": 8,
-        "elapsed_secs": 0.13326117396354675,
+        "elapsed_secs": 0.13240955770015717,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -337,7 +307,7 @@
     "9": {
       "state_read": {
         "frame_number": 9,
-        "elapsed_secs": 0.15073852241039276,
+        "elapsed_secs": 0.15031880140304565,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -367,7 +337,7 @@
     "10": {
       "state_read": {
         "frame_number": 10,
-        "elapsed_secs": 0.1666003167629242,
+        "elapsed_secs": 0.1668521910905838,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -397,7 +367,7 @@
     "11": {
       "state_read": {
         "frame_number": 11,
-        "elapsed_secs": 0.18316201865673065,
+        "elapsed_secs": 0.18304385244846344,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -427,7 +397,7 @@
     "12": {
       "state_read": {
         "frame_number": 12,
-        "elapsed_secs": 0.20076444745063782,
+        "elapsed_secs": 0.199656143784523,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -457,7 +427,277 @@
     "13": {
       "state_read": {
         "frame_number": 13,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.21710512042045593,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "14": {
+      "state_read": {
+        "frame_number": 14,
+        "elapsed_secs": 0.2329571694135666,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "15": {
+      "state_read": {
+        "frame_number": 15,
+        "elapsed_secs": 0.24921025335788727,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "16": {
+      "state_read": {
+        "frame_number": 16,
+        "elapsed_secs": 0.26673921942710876,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "17": {
+      "state_read": {
+        "frame_number": 17,
+        "elapsed_secs": 0.28306055068969727,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "18": {
+      "state_read": {
+        "frame_number": 18,
+        "elapsed_secs": 0.2997168004512787,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "19": {
+      "state_read": {
+        "frame_number": 19,
+        "elapsed_secs": 0.3158569931983948,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "20": {
+      "state_read": {
+        "frame_number": 20,
+        "elapsed_secs": 0.3335777521133423,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "21": {
+      "state_read": {
+        "frame_number": 21,
+        "elapsed_secs": 0.34996694326400757,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "22": {
+      "state_read": {
+        "frame_number": 22,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -484,280 +724,10 @@
         "animation_colored": true
       }
     },
-    "14": {
-      "state_read": {
-        "frame_number": 14,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "15": {
-      "state_read": {
-        "frame_number": 15,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "16": {
-      "state_read": {
-        "frame_number": 16,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "17": {
-      "state_read": {
-        "frame_number": 17,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "18": {
-      "state_read": {
-        "frame_number": 18,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "19": {
-      "state_read": {
-        "frame_number": 19,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "20": {
-      "state_read": {
-        "frame_number": 20,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "21": {
-      "state_read": {
-        "frame_number": 21,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
-    "22": {
-      "state_read": {
-        "frame_number": 22,
-        "elapsed_secs": 0.21702349185943604,
-        "camera_radius": 15.0,
-        "camera_position": [
-          0.0,
-          1.0,
-          15.0
-        ],
-        "nr_attempts": 1,
-        "cosine_alignment": 1.0,
-        "current_angle": 0.0,
-        "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
-      },
-      "commands_sent": {
-        "rotate_left": false,
-        "rotate_right": false,
-        "zoom_in": false,
-        "zoom_out": false,
-        "check": false,
-        "reset": false,
-        "blank_screen": false,
-        "stop_rendering": false,
-        "animation_door": false,
-        "animation_all_door": false,
-        "animation_colored": false
-      }
-    },
     "23": {
       "state_read": {
         "frame_number": 23,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -768,7 +738,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -787,7 +757,7 @@
     "24": {
       "state_read": {
         "frame_number": 24,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -798,7 +768,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -817,7 +787,7 @@
     "25": {
       "state_read": {
         "frame_number": 25,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -828,7 +798,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -847,7 +817,7 @@
     "26": {
       "state_read": {
         "frame_number": 26,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -858,7 +828,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -877,7 +847,7 @@
     "27": {
       "state_read": {
         "frame_number": 27,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -888,7 +858,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -907,7 +877,7 @@
     "28": {
       "state_read": {
         "frame_number": 28,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -918,7 +888,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -937,7 +907,7 @@
     "29": {
       "state_read": {
         "frame_number": 29,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -948,7 +918,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -967,7 +937,7 @@
     "30": {
       "state_read": {
         "frame_number": 30,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -978,7 +948,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -997,7 +967,7 @@
     "31": {
       "state_read": {
         "frame_number": 31,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1008,7 +978,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1027,7 +997,7 @@
     "32": {
       "state_read": {
         "frame_number": 32,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1038,7 +1008,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1057,7 +1027,7 @@
     "33": {
       "state_read": {
         "frame_number": 33,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1068,7 +1038,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1087,7 +1057,7 @@
     "34": {
       "state_read": {
         "frame_number": 34,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1098,7 +1068,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1117,7 +1087,7 @@
     "35": {
       "state_read": {
         "frame_number": 35,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1128,7 +1098,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1147,7 +1117,7 @@
     "36": {
       "state_read": {
         "frame_number": 36,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1158,7 +1128,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1177,7 +1147,7 @@
     "37": {
       "state_read": {
         "frame_number": 37,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1188,7 +1158,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1207,7 +1177,7 @@
     "38": {
       "state_read": {
         "frame_number": 38,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1218,7 +1188,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1237,7 +1207,7 @@
     "39": {
       "state_read": {
         "frame_number": 39,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1248,7 +1218,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1267,7 +1237,7 @@
     "40": {
       "state_read": {
         "frame_number": 40,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1278,7 +1248,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1297,7 +1267,7 @@
     "41": {
       "state_read": {
         "frame_number": 41,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1308,7 +1278,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1327,7 +1297,7 @@
     "42": {
       "state_read": {
         "frame_number": 42,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1338,7 +1308,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1357,7 +1327,7 @@
     "43": {
       "state_read": {
         "frame_number": 43,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1368,7 +1338,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1387,7 +1357,7 @@
     "44": {
       "state_read": {
         "frame_number": 44,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1398,7 +1368,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1417,7 +1387,7 @@
     "45": {
       "state_read": {
         "frame_number": 45,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1428,7 +1398,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1447,7 +1417,7 @@
     "46": {
       "state_read": {
         "frame_number": 46,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1458,7 +1428,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1477,7 +1447,7 @@
     "47": {
       "state_read": {
         "frame_number": 47,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1488,7 +1458,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1507,7 +1477,7 @@
     "48": {
       "state_read": {
         "frame_number": 48,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1518,7 +1488,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1537,7 +1507,7 @@
     "49": {
       "state_read": {
         "frame_number": 49,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1548,7 +1518,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1567,7 +1537,7 @@
     "50": {
       "state_read": {
         "frame_number": 50,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1578,7 +1548,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1597,7 +1567,7 @@
     "51": {
       "state_read": {
         "frame_number": 51,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1608,7 +1578,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1627,7 +1597,7 @@
     "52": {
       "state_read": {
         "frame_number": 52,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1638,7 +1608,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1657,7 +1627,7 @@
     "53": {
       "state_read": {
         "frame_number": 53,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1668,7 +1638,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1687,7 +1657,7 @@
     "54": {
       "state_read": {
         "frame_number": 54,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1698,7 +1668,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1717,7 +1687,7 @@
     "55": {
       "state_read": {
         "frame_number": 55,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1728,7 +1698,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1747,7 +1717,7 @@
     "56": {
       "state_read": {
         "frame_number": 56,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1758,7 +1728,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1777,7 +1747,7 @@
     "57": {
       "state_read": {
         "frame_number": 57,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1788,7 +1758,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1807,7 +1777,7 @@
     "58": {
       "state_read": {
         "frame_number": 58,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1818,7 +1788,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1837,7 +1807,7 @@
     "59": {
       "state_read": {
         "frame_number": 59,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1848,7 +1818,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1867,7 +1837,7 @@
     "60": {
       "state_read": {
         "frame_number": 60,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1878,7 +1848,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1897,7 +1867,7 @@
     "61": {
       "state_read": {
         "frame_number": 61,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1908,7 +1878,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1927,7 +1897,7 @@
     "62": {
       "state_read": {
         "frame_number": 62,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1938,7 +1908,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1957,7 +1927,7 @@
     "63": {
       "state_read": {
         "frame_number": 63,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1968,7 +1938,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -1987,7 +1957,7 @@
     "64": {
       "state_read": {
         "frame_number": 64,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -1998,7 +1968,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2017,7 +1987,7 @@
     "65": {
       "state_read": {
         "frame_number": 65,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2028,7 +1998,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2047,7 +2017,7 @@
     "66": {
       "state_read": {
         "frame_number": 66,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2058,7 +2028,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2077,7 +2047,7 @@
     "67": {
       "state_read": {
         "frame_number": 67,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2088,7 +2058,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2107,7 +2077,7 @@
     "68": {
       "state_read": {
         "frame_number": 68,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2118,7 +2088,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2137,7 +2107,7 @@
     "69": {
       "state_read": {
         "frame_number": 69,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2148,7 +2118,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2167,7 +2137,7 @@
     "70": {
       "state_read": {
         "frame_number": 70,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2178,7 +2148,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2197,7 +2167,7 @@
     "71": {
       "state_read": {
         "frame_number": 71,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2208,7 +2178,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2227,7 +2197,7 @@
     "72": {
       "state_read": {
         "frame_number": 72,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2238,7 +2208,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2257,7 +2227,7 @@
     "73": {
       "state_read": {
         "frame_number": 73,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2268,7 +2238,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2287,7 +2257,7 @@
     "74": {
       "state_read": {
         "frame_number": 74,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2298,7 +2268,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2317,7 +2287,7 @@
     "75": {
       "state_read": {
         "frame_number": 75,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2328,7 +2298,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2347,7 +2317,7 @@
     "76": {
       "state_read": {
         "frame_number": 76,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2358,7 +2328,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2377,7 +2347,7 @@
     "77": {
       "state_read": {
         "frame_number": 77,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2388,7 +2358,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2407,7 +2377,7 @@
     "78": {
       "state_read": {
         "frame_number": 78,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2418,7 +2388,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2437,7 +2407,7 @@
     "79": {
       "state_read": {
         "frame_number": 79,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2448,7 +2418,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2467,7 +2437,7 @@
     "80": {
       "state_read": {
         "frame_number": 80,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2478,7 +2448,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2497,7 +2467,7 @@
     "81": {
       "state_read": {
         "frame_number": 81,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2508,7 +2478,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2527,7 +2497,7 @@
     "82": {
       "state_read": {
         "frame_number": 82,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2538,7 +2508,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2557,7 +2527,7 @@
     "83": {
       "state_read": {
         "frame_number": 83,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2568,7 +2538,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2587,7 +2557,7 @@
     "84": {
       "state_read": {
         "frame_number": 84,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2598,7 +2568,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2617,7 +2587,7 @@
     "85": {
       "state_read": {
         "frame_number": 85,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2628,7 +2598,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2647,7 +2617,7 @@
     "86": {
       "state_read": {
         "frame_number": 86,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2658,7 +2628,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2677,7 +2647,7 @@
     "87": {
       "state_read": {
         "frame_number": 87,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2688,7 +2658,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2707,7 +2677,7 @@
     "88": {
       "state_read": {
         "frame_number": 88,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2718,7 +2688,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2737,7 +2707,7 @@
     "89": {
       "state_read": {
         "frame_number": 89,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2748,7 +2718,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2767,7 +2737,7 @@
     "90": {
       "state_read": {
         "frame_number": 90,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2778,7 +2748,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2797,7 +2767,7 @@
     "91": {
       "state_read": {
         "frame_number": 91,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2808,7 +2778,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2827,7 +2797,7 @@
     "92": {
       "state_read": {
         "frame_number": 92,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2838,7 +2808,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2857,7 +2827,7 @@
     "93": {
       "state_read": {
         "frame_number": 93,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2868,7 +2838,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2887,7 +2857,7 @@
     "94": {
       "state_read": {
         "frame_number": 94,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2898,7 +2868,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2917,7 +2887,7 @@
     "95": {
       "state_read": {
         "frame_number": 95,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2928,7 +2898,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2947,7 +2917,7 @@
     "96": {
       "state_read": {
         "frame_number": 96,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2958,7 +2928,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -2977,7 +2947,7 @@
     "97": {
       "state_read": {
         "frame_number": 97,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -2988,7 +2958,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3007,7 +2977,7 @@
     "98": {
       "state_read": {
         "frame_number": 98,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3018,7 +2988,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3037,7 +3007,7 @@
     "99": {
       "state_read": {
         "frame_number": 99,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3048,7 +3018,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3067,7 +3037,7 @@
     "100": {
       "state_read": {
         "frame_number": 100,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3078,7 +3048,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3097,7 +3067,7 @@
     "101": {
       "state_read": {
         "frame_number": 101,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3108,7 +3078,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3127,7 +3097,7 @@
     "102": {
       "state_read": {
         "frame_number": 102,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3138,7 +3108,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3157,7 +3127,7 @@
     "103": {
       "state_read": {
         "frame_number": 103,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3168,7 +3138,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": true,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3187,7 +3157,217 @@
     "104": {
       "state_read": {
         "frame_number": 104,
-        "elapsed_secs": 0.21702349185943604,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "105": {
+      "state_read": {
+        "frame_number": 105,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "106": {
+      "state_read": {
+        "frame_number": 106,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "107": {
+      "state_read": {
+        "frame_number": 107,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "108": {
+      "state_read": {
+        "frame_number": 108,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "109": {
+      "state_read": {
+        "frame_number": 109,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "110": {
+      "state_read": {
+        "frame_number": 110,
+        "elapsed_secs": 0.3658656179904938,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 1.0,
+        "current_angle": 0.0,
+        "is_animating": true,
+        "win_elapsed_secs": 766.2184448242188
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "blank_screen": false,
+        "stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "111": {
+      "state_read": {
+        "frame_number": 111,
+        "elapsed_secs": 0.3658656179904938,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3198,7 +3378,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": false,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,
@@ -3214,10 +3394,10 @@
         "animation_colored": false
       }
     },
-    "105": {
+    "112": {
       "state_read": {
-        "frame_number": 105,
-        "elapsed_secs": 0.2329256534576416,
+        "frame_number": 112,
+        "elapsed_secs": 0.38275301456451416,
         "camera_radius": 15.0,
         "camera_position": [
           0.0,
@@ -3228,7 +3408,7 @@
         "cosine_alignment": 1.0,
         "current_angle": 0.0,
         "is_animating": false,
-        "win_elapsed_secs": 29.64301872253418
+        "win_elapsed_secs": 766.2184448242188
       },
       "commands_sent": {
         "rotate_left": false,

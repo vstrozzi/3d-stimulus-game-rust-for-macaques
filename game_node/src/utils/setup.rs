@@ -151,6 +151,10 @@ pub fn setup_round(
 
     let mut decoration_sizes = [0.0; 3];
     let mut decoration_shapes = [DecorationShape::Circle; 3];
+    let mut decoration_thicknesses = [0.0; 3];
+    let mut face_textures = [0u32; 3];
+    let mut decoration_textures = [0u32; 3];
+    let mut decoration_colors = [Color::WHITE; 3];
     for i in 0..3 {
         decoration_sizes[i] = f32::from_bits(gs_game.decorations_size[i]);
         decoration_shapes[i] = match gs_game.decorations_shape[i] {
@@ -158,13 +162,21 @@ pub fn setup_round(
             1 => DecorationShape::Square,
             2 => DecorationShape::Star,
             3 => DecorationShape::Triangle,
-            _ => DecorationShape::Circle, // Default case
+            _ => DecorationShape::Circle,
         };
+        decoration_thicknesses[i] = f32::from_bits(gs_game.decorations_thickness[i]);
+        face_textures[i] = gs_game.textures[i];
+        decoration_textures[i] = gs_game.decorations_texture[i];
+        let r = f32::from_bits(gs_game.decorations_color[i * 4 + 0]);
+        let g = f32::from_bits(gs_game.decorations_color[i * 4 + 1]);
+        let b = f32::from_bits(gs_game.decorations_color[i * 4 + 2]);
+        let a = f32::from_bits(gs_game.decorations_color[i * 4 + 3]);
+        decoration_colors[i] = Color::srgba(r, g, b, a);
     }
 
     // Read target door from shared memory
     let target_door = gs_game.target_door as usize;
-    
+
     // Spawn the pyramid and capture winning door entities
     let (winning_light, winning_emissive) = spawn_pyramid(
         &mut commands,
@@ -179,6 +191,10 @@ pub fn setup_round(
         decoration_counts,
         decoration_sizes,
         decoration_shapes,
+        face_textures,
+        decoration_colors,
+        decoration_textures,
+        decoration_thicknesses,
         target_door,
     );
 

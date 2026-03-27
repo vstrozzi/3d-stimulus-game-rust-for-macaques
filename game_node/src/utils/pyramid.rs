@@ -7,7 +7,7 @@ use crate::utils::objects::{
 use crate::utils::load_textures:: {load_texture_set, natural_material, tinted_material, tinted_material_tiled};
 use bevy::prelude::*;
 use bevy::prelude::ops::sqrt;
-use shared::DecorationShape;
+use shared::{self, DecorationShape};
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 
 
@@ -389,6 +389,10 @@ pub fn spawn_pyramid(
     decoration_counts: [u32; 3],
     decoration_sizes: [f32; 3],
     decoration_shapes: [DecorationShape; 3],
+    face_textures: [u32; 3],
+    decoration_colors: [Color; 3],
+    decoration_textures: [u32; 3],
+    decoration_thicknesses: [f32; 3],
     target_door: usize,
 ) -> (Option<Entity>, Option<Entity>) {
     let height_y = p_height;
@@ -483,7 +487,9 @@ pub fn spawn_pyramid(
             br,
             decoration_counts[i],
             decoration_sizes[i],
-            decoration_shapes[i]
+            decoration_shapes[i],
+            decoration_colors[i],
+            decoration_thicknesses[i],
         )));
 
         // Set B (Top-Right Triangle)
@@ -494,7 +500,9 @@ pub fn spawn_pyramid(
             tr,
             decoration_counts[i],
             decoration_sizes[i],
-            decoration_shapes[i]
+            decoration_shapes[i],
+            decoration_colors[i],
+            decoration_thicknesses[i],
         )));
     }
 
@@ -541,15 +549,16 @@ pub fn spawn_pyramid(
                 [1.0, 0.0], // TR
             ],
         );
+        
         mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
-        let wood = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
+        let face_tex = load_texture_set(&asset_server, &shared::Texture::from_u32(face_textures[i]).asset_folder());
         let face_entity = commands
             .spawn((
-                Mesh3d(meshes.add(mesh)),           
+                Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(materials.add(
                     StandardMaterial{
-                        ..tinted_material(&wood, p_colors[i])})),
+                        ..tinted_material(&face_tex, p_colors[i])})),
                 Transform::default(),
                 Pyramid,
                 RotableComponent,
@@ -558,7 +567,6 @@ pub fn spawn_pyramid(
             .id();
 
         // Apply Set A to the first triangle (TL, BL, BR)
-
         if let Some(ref set_a) = dec_sets[i * 2] {
             spawn_decorations_from_set(
                 commands,
@@ -571,6 +579,7 @@ pub fn spawn_pyramid(
                 bl,
                 br,
                 normal,
+                decoration_textures[i],
             );
         }
 
@@ -587,6 +596,7 @@ pub fn spawn_pyramid(
                 br,
                 tr,
                 normal,
+                decoration_textures[i],
             );
         }
     }
@@ -608,6 +618,8 @@ fn generate_decoration_set(
     count: u32,
     size: f32,
     decoration_shape: DecorationShape,
+    color: Color,
+    thickness: f32,
 ) -> DecorationSet {
     // Determine the number of decorations to generate.
     let decoration_count = count as usize;
@@ -626,13 +638,6 @@ fn generate_decoration_set(
     let mut total_attempts = 0;
 
     let shape = decoration_shape;
-
-    // Choose a random vibrant color, which will be the same for all decorations on this face.
-    let color = Color::srgb(
-        rng.random_range(0.2..0.22),
-        rng.random_range(0.2..0.22),
-        rng.random_range(0.2..0.22),
-    );
 
     while successful_placements < decoration_count
         && (total_attempts as usize) < (decoration_count as usize) * MAX_PLACEMENT_ATTEMPTS
@@ -670,7 +675,7 @@ fn generate_decoration_set(
         decorations.push(Decoration {
             barycentric: Vec3::new(w0, w2, w1),
             size,
-            thickness: 0.1,//TODO
+            thickness,
         });
         decorations_world.push((world_position, size));
         successful_placements += 1;
@@ -696,15 +701,17 @@ fn spawn_decorations_from_set(
     corner1: Vec3,
     corner2: Vec3,
     face_normal: Vec3,
+    texture_id: u32,
 ) {
+    let dec_tex = load_texture_set(asset_server, &shared::Texture::from_u32(texture_id).asset_folder());
+
     for decoration in &decoration_set.decorations {
         // Reconstruct world position from barycentric coordinates
         let position = decoration.barycentric.x * top
             + decoration.barycentric.y * corner1
             + decoration.barycentric.z * corner2;
 
-        // TODO: Fixed size
-        let mesh = create_decoration_mesh(decoration_set.shape, decoration.size, 0.1);
+        let mesh = create_decoration_mesh(decoration_set.shape, decoration.size, decoration.thickness);
 
         // Calculate the rotation to align the decoration with the face plane
         let base_rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
@@ -714,22 +721,19 @@ fn spawn_decorations_from_set(
         // Offset slightly away from face surface to prevent z-fighting
         let offset_position = position + face_normal * 0.001;
 
-        // Spawn the decoration as a child of the face
-
-        let metal = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
-     
         commands.entity(parent_face).with_children(|parent| {
             parent.spawn((
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(materials.add(
-                    StandardMaterial{
-                    reflectance: 0.1,
-                    ..tinted_material_tiled(&metal, decoration_set.color, 0.05)})),
+                    StandardMaterial {
+                        reflectance: 0.1,
+                        ..tinted_material_tiled(&dec_tex, decoration_set.color, 0.05)
+                    })),
                 Transform {
                     translation: offset_position,
                     rotation: -final_rotation,
-                    scale: Vec3::new(1.0, 1.0, 1.0),
-                    },
+                    scale: Vec3::ONE,
+                },
                 GameEntity,
             ));
         });

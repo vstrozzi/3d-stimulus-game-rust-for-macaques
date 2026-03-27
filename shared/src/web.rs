@@ -128,6 +128,10 @@ impl WebSharedMemory {
         set("decorations_size",  off!(gs.decorations_size));
         set("decorations_seeds", off!(gs.decorations_seeds));
         set("decorations_shape", off!(gs.decorations_shape));
+        set("decorations_texture", off!(gs.decorations_texture));
+        set("decorations_thickness", off!(gs.decorations_thickness));
+        set("decorations_color", off!(gs.decorations_color));
+        set("textures", off!(gs.textures));
 
         set("cosine_alignment_threshold", off!(gs.cosine_alignment_threshold));
 
@@ -140,6 +144,10 @@ impl WebSharedMemory {
         set("main_spotlight_intensity", off!(gs.main_spotlight_intensity));
         set("ambient_brightness",       off!(gs.ambient_brightness));
         set("max_spotlight_intensity",  off!(gs.max_spotlight_intensity));
+
+        // Progress bar state
+        set("progress_bar_size", off!(gs.progress_bar_size));
+        set("progress_bar_cur_size", off!(gs.progress_bar_cur_size));
 
         // Dynamic fields
         set("frame_number",       off!(gs.frame_number));
@@ -186,6 +194,10 @@ impl WebSharedMemory {
         for i in 0..12 { colors.push(&JsValue::from_f64(def.colors[i].load(Relaxed) as f64)); }
         js_sys::Reflect::set(&obj, &JsValue::from_str("colors"), &colors).unwrap();
 
+        let textures = js_sys::Array::new();
+        for i in 0..3 { textures.push(&JsValue::from_f64(def.textures[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("textures"), &textures).unwrap();
+
         let dec_count = js_sys::Array::new();
         for i in 0..3 { dec_count.push(&JsValue::from_f64(def.decorations_count[i].load(Relaxed) as f64)); }
         js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_count"), &dec_count).unwrap();
@@ -202,13 +214,29 @@ impl WebSharedMemory {
         for i in 0..3 { dec_shape.push(&JsValue::from_f64(def.decorations_shape[i].load(Relaxed) as f64)); }
         js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_shape"), &dec_shape).unwrap();
 
+        let dec_texture = js_sys::Array::new();
+        for i in 0..3 { dec_texture.push(&JsValue::from_f64(def.decorations_texture[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_texture"), &dec_texture).unwrap();
+
+        let dec_thickness = js_sys::Array::new();
+        for i in 0..3 { dec_thickness.push(&JsValue::from_f64(def.decorations_thickness[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_thickness"), &dec_thickness).unwrap();
+
+        let dec_color = js_sys::Array::new();
+        for i in 0..12 { dec_color.push(&JsValue::from_f64(def.decorations_color[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_color"), &dec_color).unwrap();
+
         set_u32("cosine_alignment_threshold", def.cosine_alignment_threshold.load(Relaxed));
         set_u32("door_anim_fade_out",  def.door_anim_fade_out.load(Relaxed));
         set_u32("door_anim_stay_open", def.door_anim_stay_open.load(Relaxed));
         set_u32("door_anim_fade_in",   def.door_anim_fade_in.load(Relaxed));
+
         set_u32("main_spotlight_intensity", def.main_spotlight_intensity.load(Relaxed));
         set_u32("ambient_brightness",       def.ambient_brightness.load(Relaxed));
         set_u32("max_spotlight_intensity",  def.max_spotlight_intensity.load(Relaxed));
+
+        set_u32("progress_bar_size", def.progress_bar_size.load(Relaxed));
+        set_u32("progress_bar_cur_size", def.progress_bar_cur_size.load(Relaxed));
 
         set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
         set_u32("elapsed_secs", def.elapsed_secs.load(Relaxed));

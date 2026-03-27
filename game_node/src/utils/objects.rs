@@ -19,7 +19,6 @@ pub struct DecorationSet {
     pub decorations: Vec<Decoration>,
 }
 
-
 /// Resource for the current conditions the system across trials
 #[derive(Resource)]
 pub struct GameConditions{
@@ -108,9 +107,18 @@ pub struct BaseDoor {
 // Component of the UI bar showing the score with lights
 #[derive(Component)]
 pub struct ScoreBarUI;
-// Component marking the fill bar inside the ScoreBarUI
+
+// Component for the score bar dots
 #[derive(Component)]
-pub struct ScoreBarFill;
+pub struct ScoreBarDot {
+    pub index: u32,
+}
+
+// Component for the score bar chains (lines connecting the dots)
+#[derive(Component)]
+pub struct ScoreBarChain {
+    pub index: u32,
+}
 
 /// Marker component for the blank screen overlay entity
 #[derive(Component)]

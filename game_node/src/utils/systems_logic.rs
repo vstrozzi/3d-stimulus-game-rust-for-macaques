@@ -7,7 +7,7 @@ use crate::utils::camera::{spawn_persistent_camera};
 use crate::utils::ui::{update_ui_scale};
 use crate::utils::game_functions::{
     handle_door_animation,
-    update_score_bar_animation,
+    update_score_bar,
 };
 use crate::utils::setup::setup_environment;
 use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
@@ -53,7 +53,7 @@ impl Plugin for SystemsLogicPlugin {
                 Update,
                 (
                     handle_door_animation,
-                    update_score_bar_animation,
+                    update_score_bar,
                 )
             )
             // Post Update

@@ -1,5 +1,4 @@
 // Constants used in the game_node and shared across libraries.
-
 /// Generic game constants
 pub mod game_constants {
     pub const REFRESH_RATE_HZ: f64 = 60.0; // Hz
@@ -20,7 +19,10 @@ pub mod game_constants {
     pub const SCORE_BAR_WIDTH_PERCENT: f32 = 40.0; // 40% of screen width
     pub const SCORE_BAR_HEIGHT: f32 = 20.0; // pixels (scaled by UiScale)
     pub const SCORE_BAR_TOP_OFFSET: f32 = 50.0; // pixels from top (scaled by UiScale)
-    pub const SCORE_BAR_BORDER_THICKNESS: f32 = 2.0; // pixels (scaled by UiScale)
+
+    // Progress bar dots constants
+    pub const PROGRESS_BAR_WRAP_AROUND_SIZE: u32 = 20;
+    pub const PROGRESS_BAR_DOTS_SIZE: f32 = 20.0;
 
     // Loading screen duration in seconds (time for scene to render/stabilize)
     pub const LOADING_DURATION_SECS: f32 = 0.3;
@@ -50,7 +52,7 @@ pub mod object_constants {
 
 /// Pyramid object
 pub mod pyramid_constants {
-    use crate::DecorationShape;
+    use crate::{DecorationShape, Texture};
 
     pub const PYRAMID_BASE_RADIUS: f32 = 2.5;
     pub const PYRAMID_HEIGHT: f32 = 4.0;
@@ -67,6 +69,13 @@ pub mod pyramid_constants {
     [1.0, 0.0, 0.0, 1.0], // red, green, blue, alpha
     [0.0, 1.0, 0.0, 1.0], // green
     [0.0, 0.0, 1.0, 1.0], // blue
+    ];
+
+    // Default Textures
+    pub const PYRAMID_TEXTURES: [Texture; 3] = [
+        Texture::Bark001_1K,
+        Texture::ChristmasTreeOrnament021_1K,
+        Texture::Fabric079_1K,
     ];
 
     // Number of decorations on each pyramid side
@@ -89,6 +98,24 @@ pub mod pyramid_constants {
         DecorationShape::Star,
     ];
 
+    pub const PYRAMID_DECORATIONS_COLOR: [[f32; 4]; 3] = [
+        [1.0, 1.0, 0.0, 1.0], // yellow
+        [1.0, 0.0, 1.0, 1.0], // magenta
+        [0.0, 1.0, 1.0, 1.0], // cyan
+    ];
+
+    pub const PYRAMID_DECORATIONS_TEXTURE: [Texture; 3] = [
+        Texture::Bark001_1K,
+        Texture::Bark001_1K,
+        Texture::Bark001_1K,
+    ];
+
+    pub const PYRAMID_DECORATIONS_THICKNESS: [f32; 3] = [
+        0.02,
+        0.04,
+        0.06,
+    ];
+    
     // Index of the target door of the pyramid
     pub const PYRAMID_TARGET_DOOR_INDEX: usize = 0;
 

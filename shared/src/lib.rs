@@ -14,8 +14,8 @@
 //! 
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::atomic::Ordering;
+use strum_macros::{Display, FromRepr};
 
-use crate::constants::pyramid_constants::PYRAMID_DECORATIONS_SHAPE;
 pub mod constants;
 
 
@@ -84,6 +84,36 @@ pub enum DecorationShape {
     Triangle,
 }
 
+// Textures for the pyramid faces and decorations.
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, Debug, FromRepr, Display)]
+#[repr(u32)]
+pub enum Texture {
+    Bark001_1K                  = 0,
+    ChristmasTreeOrnament021_1K = 1,
+    Fabric079_1K                = 2,
+    Grass004_1K                 = 3,
+    Marble016_1K                = 4,
+    Metal061B_1K                = 5,
+    PavingStones146_1K          = 6,
+    Rock024_1K                  = 7,
+    Rock035_1K                  = 8,
+    Rope001_1K                  = 9,
+    Tiles017_1K                 = 10,
+    WoodFloor057_1K             = 11,
+}
+
+impl Texture {
+    pub fn from_u32(val: u32) -> Self {
+        Self::from_repr(val).unwrap_or(Texture::WoodFloor057_1K)
+    }
+
+    /// Asset folder path relative to assets/. Derived from the variant name.
+    pub fn asset_folder(&self) -> String {
+        format!("textures/{}-JPG/bevy_ready", self)
+    }
+}
+
 /// Shared atomic game structure for game state communication (1 for each Controller and Game, 2 in total, read-write respectively).
 /// It contains all the information realting the current game state (i.e. the game is a deterministic state).
 /// It is updated every Game tick by the game and whenever needed by the Controller.
@@ -100,10 +130,14 @@ macro_rules! shared_game_state {
 
             /// Colors: 3 faces * 4 channels (RGBA) = 12 floats as u32 bits
             pub colors: [$U32; 12],
+            pub textures: [$U32; 3], 
             pub decorations_count: [$U32; 3],
             pub decorations_size: [$U32; 3],
+            pub decorations_color: [$U32; 12],
             pub decorations_seeds: [$U64; 3],
             pub decorations_shape: [$U32; 3],
+            pub decorations_texture: [$U32; 3],
+            pub decorations_thickness: [$U32; 3],
 
             pub cosine_alignment_threshold: $U32,
 
@@ -116,6 +150,10 @@ macro_rules! shared_game_state {
             pub main_spotlight_intensity: $U32,
             pub ambient_brightness: $U32,
             pub max_spotlight_intensity: $U32,
+
+            // Level bar
+            pub progress_bar_size: $U32,
+            pub progress_bar_cur_size: $U32,
 
             // Dynamic trials fields
             pub frame_number: $U64,
@@ -140,7 +178,6 @@ shared_game_state!(SharedGameState, AtomicU32, AtomicU64, AtomicBool);
 // Not atomic version (local use in game logic systems)
 shared_game_state!(SharedGameStateLocal, u32, u64, bool);
 
-
 impl SharedGameState {
     pub const fn new() -> Self {
         // Constant initialization from constants.rs module file.
@@ -148,18 +185,8 @@ impl SharedGameState {
             game_constants::{
                 DECORATIONS_SEEDS,
                 COSINE_ALIGNMENT_TO_WIN},
-            pyramid_constants::{
-                PYRAMID_BASE_RADIUS,
-                PYRAMID_HEIGHT,
-                PYRAMID_START_ANGLE_OFFSET_RAD,
-                PYRAMID_TARGET_DOOR_INDEX,
-                PYRAMID_COLORS,
-                PYRAMID_DECORATIONS_COUNT,
-                PYRAMID_DECORATIONS_SIZE,
-                DOOR_ANIM_FADE_IN,
-                DOOR_ANIM_FADE_OUT,
-                DOOR_ANIM_STAY_OPEN
-            },
+            pyramid_constants::*,
+            
             lighting_constants::{
                 SPOTLIGHT_LIGHT_INTENSITY,
                 GLOBAL_AMBIENT_LIGHT_INTENSITY,
@@ -170,26 +197,27 @@ impl SharedGameState {
                 CAMERA_3D_INITIAL_Z,
                 CAMERA_3D_INITIAL_RADIUS,
             }
-
         };
             
         Self {
-            // Fixed trials vars
-            decorations_seeds: [
-                AtomicU64::new(DECORATIONS_SEEDS[0]),
-                AtomicU64::new(DECORATIONS_SEEDS[1]),
-                AtomicU64::new(DECORATIONS_SEEDS[2]),
-            ],
+            // Fixed trials fields
             base_radius: AtomicU32::new(PYRAMID_BASE_RADIUS.to_bits()),
             height: AtomicU32::new(PYRAMID_HEIGHT.to_bits()),
             start_orient: AtomicU32::new(PYRAMID_START_ANGLE_OFFSET_RAD.to_bits()),
             target_door: AtomicU32::new(PYRAMID_TARGET_DOOR_INDEX as u32),
+            
             colors: [
                 AtomicU32::new(PYRAMID_COLORS[0][0].to_bits()), AtomicU32::new(PYRAMID_COLORS[0][1].to_bits()), AtomicU32::new(PYRAMID_COLORS[0][2].to_bits()), AtomicU32::new(PYRAMID_COLORS[0][3].to_bits()),
                 AtomicU32::new(PYRAMID_COLORS[1][0].to_bits()), AtomicU32::new(PYRAMID_COLORS[1][1].to_bits()), AtomicU32::new(PYRAMID_COLORS[1][2].to_bits()), AtomicU32::new(PYRAMID_COLORS[1][3].to_bits()),
                 AtomicU32::new(PYRAMID_COLORS[2][0].to_bits()), AtomicU32::new(PYRAMID_COLORS[2][1].to_bits()), AtomicU32::new(PYRAMID_COLORS[2][2].to_bits()), AtomicU32::new(PYRAMID_COLORS[2][3].to_bits()),
             ],
-
+            
+            textures: [
+                AtomicU32::new(PYRAMID_TEXTURES[0] as u32),
+                AtomicU32::new(PYRAMID_TEXTURES[1] as u32),
+                AtomicU32::new(PYRAMID_TEXTURES[2] as u32),
+            ],
+            
             decorations_count: [
                 AtomicU32::new(PYRAMID_DECORATIONS_COUNT[0]),
                 AtomicU32::new(PYRAMID_DECORATIONS_COUNT[1]),
@@ -202,12 +230,37 @@ impl SharedGameState {
                 AtomicU32::new(PYRAMID_DECORATIONS_SIZE[2].to_bits()),
             ],
 
+            decorations_color: [
+                AtomicU32::new(PYRAMID_DECORATIONS_COLOR[0][0].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[0][1].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[0][2].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[0][3].to_bits()),
+                AtomicU32::new(PYRAMID_DECORATIONS_COLOR[1][0].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[1][1].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[1][2].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[1][3].to_bits()),
+                AtomicU32::new(PYRAMID_DECORATIONS_COLOR[2][0].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[2][1].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[2][2].to_bits()), AtomicU32::new(PYRAMID_DECORATIONS_COLOR[2][3].to_bits()),
+            ],
+
+            decorations_seeds: [
+                AtomicU64::new(DECORATIONS_SEEDS[0]),
+                AtomicU64::new(DECORATIONS_SEEDS[1]),
+                AtomicU64::new(DECORATIONS_SEEDS[2]),
+            ],
+
             decorations_shape: [
                 AtomicU32::new(PYRAMID_DECORATIONS_SHAPE[0] as u32),
                 AtomicU32::new(PYRAMID_DECORATIONS_SHAPE[1] as u32),
                 AtomicU32::new(PYRAMID_DECORATIONS_SHAPE[2] as u32),
             ],
-            cosine_alignment_threshold: AtomicU32::new(COSINE_ALIGNMENT_TO_WIN.to_bits()), // 0.9 approx
+            
+            decorations_texture: [
+                AtomicU32::new(PYRAMID_DECORATIONS_TEXTURE[0] as u32),
+                AtomicU32::new(PYRAMID_DECORATIONS_TEXTURE[1] as u32),
+                AtomicU32::new(PYRAMID_DECORATIONS_TEXTURE[2] as u32),
+            ],
+
+            decorations_thickness: [
+                AtomicU32::new(PYRAMID_DECORATIONS_THICKNESS[0].to_bits()),
+                AtomicU32::new(PYRAMID_DECORATIONS_THICKNESS[1].to_bits()),
+                AtomicU32::new(PYRAMID_DECORATIONS_THICKNESS[2].to_bits()),
+            ],
+
+            cosine_alignment_threshold: AtomicU32::new(COSINE_ALIGNMENT_TO_WIN.to_bits()),
             
             door_anim_fade_out: AtomicU32::new(DOOR_ANIM_FADE_OUT.to_bits()),
             door_anim_stay_open: AtomicU32::new(DOOR_ANIM_STAY_OPEN.to_bits()),
@@ -216,6 +269,9 @@ impl SharedGameState {
             main_spotlight_intensity: AtomicU32::new(SPOTLIGHT_LIGHT_INTENSITY.to_bits()),
             ambient_brightness: AtomicU32::new(GLOBAL_AMBIENT_LIGHT_INTENSITY.to_bits()),
             max_spotlight_intensity: AtomicU32::new(constants::lighting_constants::MAX_SPOTLIGHT_INTENSITY.to_bits()),
+
+            progress_bar_size: AtomicU32::new(0),
+            progress_bar_cur_size: AtomicU32::new(0),
 
             // Dynamic trials fields
             frame_number: AtomicU64::new(0),
@@ -230,6 +286,7 @@ impl SharedGameState {
             is_animating: AtomicBool::new(false),
             is_blank: AtomicBool::new(false),
             is_rendering_stopped: AtomicBool::new(false),
+            
             win_time: AtomicU32::new(0),
         }
     }
@@ -257,6 +314,9 @@ impl SharedGameState {
         self.ambient_brightness.store(other.ambient_brightness.load(Ordering::Relaxed), Ordering::Relaxed);
         self.max_spotlight_intensity.store(other.max_spotlight_intensity.load(Ordering::Relaxed), Ordering::Relaxed);
 
+        self.progress_bar_cur_size.store(other.progress_bar_cur_size.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.progress_bar_size.store(other.progress_bar_size.load(Ordering::Relaxed), Ordering::Relaxed);
+
         self.frame_number.store(other.frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.elapsed_secs.store(other.elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_radius.store(other.camera_radius.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -278,6 +338,39 @@ impl SharedGameState {
 
     pub fn to_not_atomic(&self) -> SharedGameStateLocal {
         SharedGameStateLocal {
+            base_radius: self.base_radius.load(Ordering::Relaxed),
+            height: self.height.load(Ordering::Relaxed),
+            start_orient: self.start_orient.load(Ordering::Relaxed),
+            target_door: self.target_door.load(Ordering::Relaxed),
+            colors: {
+                let mut cols = [0u32; 12];
+                for i in 0..12 {
+                    cols[i] = self.colors[i].load(Ordering::Relaxed);
+                }
+                cols
+            },
+            textures: [
+                self.textures[0].load(Ordering::Relaxed),
+                self.textures[1].load(Ordering::Relaxed),
+                self.textures[2].load(Ordering::Relaxed),
+            ],
+            decorations_count: [
+                self.decorations_count[0].load(Ordering::Relaxed),
+                self.decorations_count[1].load(Ordering::Relaxed),
+                self.decorations_count[2].load(Ordering::Relaxed),
+            ],
+            decorations_size: [
+                self.decorations_size[0].load(Ordering::Relaxed),
+                self.decorations_size[1].load(Ordering::Relaxed),
+                self.decorations_size[2].load(Ordering::Relaxed),
+            ],
+            decorations_color: {
+                let mut cols = [0u32; 12];
+                for i in 0..12 {
+                    cols[i] = self.decorations_color[i].load(Ordering::Relaxed);
+                }
+                cols
+            },
             decorations_seeds: {
                 let mut seeds = [0u64; 3];
                 for i in 0..3 {
@@ -292,40 +385,25 @@ impl SharedGameState {
                 }
                 shapes
             },
-            base_radius: self.base_radius.load(Ordering::Relaxed),
-            height: self.height.load(Ordering::Relaxed),
-            start_orient: self.start_orient.load(Ordering::Relaxed),
-            target_door: self.target_door.load(Ordering::Relaxed),
-            colors: {
-                let mut cols = [0u32; 12];
-                for i in 0..12 {
-                    cols[i] = self.colors[i].load(Ordering::Relaxed);
-                }
-                cols
-            },
-            decorations_count: {
-                let mut counts = [0u32; 3];
-                for i in 0..3 {
-                    counts[i] = self.decorations_count[i].load(Ordering::Relaxed);
-                }
-                counts
-            },
-            decorations_size: {
-                let mut sizes = [0u32; 3];
-                for i in 0..3 {
-                    sizes[i] = self.decorations_size[i].load(Ordering::Relaxed);
-                }
-                sizes
-            },
+            decorations_texture: [
+                self.decorations_texture[0].load(Ordering::Relaxed),
+                self.decorations_texture[1].load(Ordering::Relaxed),
+                self.decorations_texture[2].load(Ordering::Relaxed),
+            ],
+            decorations_thickness: [
+                self.decorations_thickness[0].load(Ordering::Relaxed),
+                self.decorations_thickness[1].load(Ordering::Relaxed),
+                self.decorations_thickness[2].load(Ordering::Relaxed),
+            ],
             cosine_alignment_threshold: self.cosine_alignment_threshold.load(Ordering::Relaxed),
             door_anim_fade_out: self.door_anim_fade_out.load(Ordering::Relaxed),
             door_anim_stay_open: self.door_anim_stay_open.load(Ordering::Relaxed),
             door_anim_fade_in: self.door_anim_fade_in.load(Ordering::Relaxed),
             main_spotlight_intensity: self.main_spotlight_intensity.load(Ordering::Relaxed),
             ambient_brightness: self.ambient_brightness.load(Ordering::Relaxed),
-            is_blank: self.is_blank.load(Ordering::Relaxed),
-            is_rendering_stopped: self.is_rendering_stopped.load(Ordering::Relaxed),
             max_spotlight_intensity: self.max_spotlight_intensity.load(Ordering::Relaxed),
+            progress_bar_size: self.progress_bar_size.load(Ordering::Relaxed),
+            progress_bar_cur_size: self.progress_bar_cur_size.load(Ordering::Relaxed),
             frame_number: self.frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
             camera_radius: self.camera_radius.load(Ordering::Relaxed),
@@ -336,6 +414,8 @@ impl SharedGameState {
             current_alignment: self.current_alignment.load(Ordering::Relaxed),
             current_angle: self.current_angle.load(Ordering::Relaxed),
             is_animating: self.is_animating.load(Ordering::Relaxed),
+            is_blank: self.is_blank.load(Ordering::Relaxed),
+            is_rendering_stopped: self.is_rendering_stopped.load(Ordering::Relaxed),
             win_time: self.win_time.load(Ordering::Relaxed),
         }
     }
@@ -347,12 +427,16 @@ impl SharedGameState {
         self.target_door.store(state.target_door, Ordering::Relaxed);
         for i in 0..12 {
             self.colors[i].store(state.colors[i], Ordering::Relaxed);
+            self.decorations_color[i].store(state.decorations_color[i], Ordering::Relaxed);
         }
         for i in 0..3 {
+            self.textures[i].store(state.textures[i], Ordering::Relaxed);
             self.decorations_count[i].store(state.decorations_count[i], Ordering::Relaxed);
             self.decorations_size[i].store(state.decorations_size[i], Ordering::Relaxed);
             self.decorations_seeds[i].store(state.decorations_seeds[i], Ordering::Relaxed);
             self.decorations_shape[i].store(state.decorations_shape[i], Ordering::Relaxed);
+            self.decorations_texture[i].store(state.decorations_texture[i], Ordering::Relaxed);
+            self.decorations_thickness[i].store(state.decorations_thickness[i], Ordering::Relaxed);
         }
         self.cosine_alignment_threshold.store(state.cosine_alignment_threshold, Ordering::Relaxed);
         self.door_anim_fade_out.store(state.door_anim_fade_out, Ordering::Relaxed);
@@ -361,6 +445,8 @@ impl SharedGameState {
         self.main_spotlight_intensity.store(state.main_spotlight_intensity, Ordering::Relaxed);
         self.ambient_brightness.store(state.ambient_brightness, Ordering::Relaxed);
         self.max_spotlight_intensity.store(state.max_spotlight_intensity, Ordering::Relaxed);
+        self.progress_bar_size.store(state.progress_bar_size, Ordering::Relaxed);
+        self.progress_bar_cur_size.store(state.progress_bar_cur_size, Ordering::Relaxed);
         self.frame_number.store(state.frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);
         self.camera_radius.store(state.camera_radius, Ordering::Relaxed);
@@ -373,7 +459,6 @@ impl SharedGameState {
         self.is_animating.store(state.is_animating, Ordering::Relaxed);
         self.is_blank.store(state.is_blank, Ordering::Relaxed);
         self.is_rendering_stopped.store(state.is_rendering_stopped, Ordering::Relaxed);
-
         self.win_time.store(state.win_time, Ordering::Relaxed);
     }
 

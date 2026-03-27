@@ -3,7 +3,9 @@
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
 use crate::shared_memory::shared_memory_writer::FrameCounterResource;
-use crate::utils::objects::{DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions, UIEntity, BlankScreen, GameEntity, GameStateLocal};
+use crate::utils::objects::{
+    DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions,
+    UIEntity, BlankScreen, GameEntity, GameStateLocal};
 use crate::utils::ui::{spawn_score_bar};
 use crate::utils::utils::{spawn_blank_screen, despawn_ui, despawn_all_game_and_ui};
 use crate::utils::setup::{setup_round};
@@ -45,6 +47,7 @@ pub fn handle_reset_command(
 
     // Clear is_animating flag in SHM
     local_game_struct.0.is_animating = false;
+    let progress_bar_size  = local_game_struct.0.progress_bar_size;
 
     despawn_all_game_and_ui(commands.reborrow(), game_entities, ui_entities);
 
@@ -63,7 +66,7 @@ pub fn handle_reset_command(
     door_win_entities,
     );
 
-    spawn_score_bar(&mut commands);
+    spawn_score_bar(&mut commands, progress_bar_size);
 
 }
 
@@ -175,7 +178,7 @@ pub fn handle_check_alignment(
 
     // Clean old UI and spawn new (Score Bar)
     despawn_ui(&mut commands, &ui_query);
-    spawn_score_bar(&mut commands);
+    spawn_score_bar(&mut commands, gs_game.progress_bar_size);
 }
 
 

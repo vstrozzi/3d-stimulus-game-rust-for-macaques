@@ -2,25 +2,50 @@
 
 Look for nice textures to use
 Add them to config files for trials.json
-Same for decorations 
+Same for decorations (j)
+For web wait until wasm has loaded all the textures then work
 
-(ii) a bar on top (potentially extending over much of the width of the screen) that keeps track of the overall progress in the game: meaning the
- overall level, and the state within each level (if there are multiple object in a level: show the “sum” of the state across objects) . 
- At the end of each trial, one could show the change in progress in a salient way (e.g. the bar increasing or decreasing in length, with the
-“delta” e.g. shown in white).
-    +
-(iii) I would not show the current bar indicating the distance to the reward, as this information was very hard to grasp/use
-for the participants in the pilot task.
-    -> Remove the current bar. make it discrete with small dots/bars starting centered and that wraps around after some fixed amount (CONST)
-       in the game set.
-    -> Extend shared memory of game with two new fields: progress_bar_size =, progress_bar_cur_size =, progress_bar_wrap_around_size= , progress_bar_dots_size = .
-       if progress_bar_size = 0 then nothing is shown naturally
-       The controller is responsible to work on these values. color is fixed so it the color progression of the bar (transparent the ones not followed)
 
-(2) Appearance: make some changes to increase the “realism” and enlarge the space of possible different object we can create.
-(i) Add some weak, almost uniform texture to all surfaces, e.g. the wall, platform, and floor. The texture should not be too
-prominent, so that the object remains more salient
 (ii) Add additional types of decorations (eg. lines, crescents, …)
+(4) Object editor:
+    define levels with trials over objects (FIXED) with prob of transitioning on other chain of p and staying of 1 - p unless last trial
+    trial is defined by.
+    level_1:{
+    trials: 
+    [{"nr_attempts_to_win":3,
+    "nr_attempts_suggestion":3,
+    "nr_attempts_to_retroceed":17,
+    "elapsed_time_to_win":30,
+    "elapsed_time_to_retroceed":60,
+    }]
+    plotted on the chain
+    object
+    [{
+    "decorations_seeds":[69,70,70],
+    "base_radius": 2.5,
+    "height":4,
+    "target_door":5,
+    "colors":[[0,0,0,1],[0,1,0,1],[0,1,0,1]],
+    "textures":[Grass004, Fabric079, Marble016]]
+    "decorations_count":[50,20,20],
+    "decorations_size":[0.1,0.2,0.2],
+    "decorations_thickness": [0.1, 0.1, 0.1],
+    "decorations_textures": [Grass004, Fabric079, Marble016]
+    "decorations_shape":[0,1,1],
+    "target_door": fixed per object type
+    }] // A;; the values here can be expressed on a range so that the controller can sample trough it an generate seemingless random object but with shared features
+    fixed values:
+    [
+    "start_orient": all doors, i.e. K*2PI//K,K in [0, 1/6, 2/6, 3/6, 4/6, 5/6],
+    "door_anim_fade_out":0.5,
+    "door_anim_stay_open":0.5,
+    "door_anim_fade_in":0.5,
+    "main_spotlight_intensity":5000000,
+    "ambient_brightness":300,
+    "max_spotlight_intensity":5000000,
+    "cosine_alignment_threshold":0.95
+    ]
+
 (ii) add depth to the “decorations” on the object faces. One could use this as an additional “dimension” of change:
  have all the decorations on a face stand out, have them hollow, or have them randomly be hollow or stand out.
 (iii) Add texture as an further additional dimension of the object faces, giving the option to choose between different textures.
@@ -28,12 +53,6 @@ prominent, so that the object remains more salient
  then ask them to select an orientation, and show them them the green light. We should discuss the details.
  -> Later, implementd into the controller. for example let light white on and when rotating on the object at right degree trigger the green light animation
 
-
-(4) I liked how your object editor created a file that controlled the structure of the task. It would be great if you could again have
-something similar for the new structure we discussed on Tuesday, i.e. with the various “levels” (each with a set of fixed objects)
-and the “states/chains” associated with each individual object. It would be important that it is relatively easy to change the specific
-parameters (e.g. how many hints are possible, the maximum duration of a state in a chain, and so on..) even for somebody
-that is not super familiar with the code. This will make it easier to also involve others in the experiments.
 
 # Definitions
 - Object: a full prism configuration (i.e. face colors, ..., decorations)
@@ -62,31 +81,9 @@ levels:
 "nr_attempts_to_retroceed":17,
 "elapsed_time_to_win":30,
 "elapsed_time_to_retroceed":60,
-"start_orient":0,
 }]
 
-objects:
-[{
-"decorations_seeds":[69,70,70],
-"base_radius": 2.5,
-"height":4,
-"target_door":5,
-"colors":[[0,0,0,1],[0,1,0,1],[0,1,0,1]],
-"decorations_count":[50,20,20],
-"decorations_size":[0.1,0.2,0.2],
-"decorations_shape":[0,1,1],
-}] // A;; the values here can be expressed on a range so that the controller can sample trough it an generate seemingless random object but with shared features
 
-fixed values:
-[
-"door_anim_fade_out":0.5,
-"door_anim_stay_open":0.5,
-"door_anim_fade_in":0.5,
-"main_spotlight_intensity":5000000,
-"ambient_brightness":300,
-"max_spotlight_intensity":5000000,
-"cosine_alignment_threshold":0.95
-]
 }
 
 - Level terminated when the chain completed for all objects.

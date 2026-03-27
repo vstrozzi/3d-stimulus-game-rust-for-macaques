@@ -1,16 +1,26 @@
 use bevy::prelude::*;
 // TODO: add to shared memory
 use shared::constants::game_constants::{
-    SCORE_BAR_BORDER_THICKNESS, SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT, UI_REFERENCE_HEIGHT
+    SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT, UI_REFERENCE_HEIGHT,
+    PROGRESS_BAR_DOTS_SIZE, PROGRESS_BAR_WRAP_AROUND_SIZE
 };
-
 use crate::utils::objects::{
-    ScoreBarFill, ScoreBarUI, UIEntity,
+    ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot
 };
+/// Spawns the energy score bar as a chain of dots at the top center of the screen (trials progression)
+pub fn spawn_score_bar(
+    commands: &mut Commands,
+    progress_bar_size: u32,
+    ) {
 
-/// Spawns the energy score bar at the top center of the screen
-pub fn spawn_score_bar(commands: &mut Commands) {
-    // Container for the score bar (centered at top)
+    // Don't show the bar if the size is 0
+    if progress_bar_size == 0 {
+        return;
+    }
+
+    // Calculate how many rows we need
+    let num_rows = (progress_bar_size + PROGRESS_BAR_WRAP_AROUND_SIZE - 1) / PROGRESS_BAR_WRAP_AROUND_SIZE;
+
     commands
         .spawn((
             Node {
@@ -18,36 +28,64 @@ pub fn spawn_score_bar(commands: &mut Commands) {
                 width: Val::Percent(100.0),
                 top: Val::Px(SCORE_BAR_TOP_OFFSET),
                 justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Column,
                 ..default()
             },
             UIEntity,
         ))
         .with_children(|parent| {
-            // Outer border/background of the bar
-            parent
-                .spawn((
-                    Node {
-                        width: Val::Percent(SCORE_BAR_WIDTH_PERCENT),
-                        height: Val::Px(SCORE_BAR_HEIGHT),
-                        border: UiRect::all(Val::Px(SCORE_BAR_BORDER_THICKNESS)),
-                        padding: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.5)), // Dark subtle background
-                    ScoreBarUI,
-                ))
-                .with_children(|bar_parent| {
-                    // Inner fill bar (starts empty)
-                    bar_parent.spawn((
+            // Create more Rows of levels if needed
+            for row in 0..num_rows {
+                let row_start = row * PROGRESS_BAR_WRAP_AROUND_SIZE;
+                let row_end = (row_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(progress_bar_size);
+
+                parent
+                    .spawn((
                         Node {
-                            width: Val::Percent(0.0), // Starts empty
-                            height: Val::Percent(100.0),
+                            width: Val::Percent(SCORE_BAR_WIDTH_PERCENT),
+                            height: Val::Px(SCORE_BAR_HEIGHT),
+                            padding: UiRect::all(Val::Px(2.0)),
+                            align_items: AlignItems::Center,
+                            justify_content: JustifyContent::SpaceEvenly,
+                            margin: UiRect::bottom(Val::Px(2.0)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgba(0.2, 0.6, 1.0, 0.3)), // Dim cyan glow when empty
-                        ScoreBarFill,
-                    ));
-                });
+                        // Invisible background
+                        BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.0)),
+                        ScoreBarUI,
+                    ))
+                    .with_children(|bar_parent| {
+                        for i in row_start..row_end {
+                            // Chain segment before each dot except the first in this row
+                            if i > row_start {
+                                bar_parent.spawn((
+                                    Node {
+                                        width: Val::Px(0.0),
+                                        height: Val::Px(1.0),
+                                        flex_grow: 1.0,
+                                        ..default()
+                                    },
+                                    ScoreBarChain { index: i - 1 },
+                                ));
+                            }
+
+                            // Dot
+                            bar_parent.spawn((
+                                Node {
+                                    width: Val::Px(PROGRESS_BAR_DOTS_SIZE),
+                                    height: Val::Px(PROGRESS_BAR_DOTS_SIZE),
+                                    flex_shrink: 0.0,
+                                    border_radius: BorderRadius::all(Val::Px(
+                                        PROGRESS_BAR_DOTS_SIZE / 2.0,
+                                    )),
+                                    ..default()
+                                },
+                                ScoreBarDot { index: i },
+                            ));
+                        }
+                    });
+            }
         });
 }
 

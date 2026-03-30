@@ -35,6 +35,7 @@ pub fn load_texture_set(
                 return None;
             }
         }
+        
         Some(asset_server.load_with_settings(
             format!("{}/{}", folder, name),
             |s: &mut ImageLoaderSettings| {

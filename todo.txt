@@ -6,6 +6,8 @@ Same for decorations (j)
 For web wait until wasm has loaded all the textures then work
 
 
+
+
 (ii) Add additional types of decorations (eg. lines, crescents, …)
 (4) Object editor:
     define levels with trials over objects (FIXED) with prob of transitioning on other chain of p and staying of 1 - p unless last trial
@@ -36,7 +38,7 @@ For web wait until wasm has loaded all the textures then work
     }] // A;; the values here can be expressed on a range so that the controller can sample trough it an generate seemingless random object but with shared features
     fixed values:
     [
-    "start_orient": all doors, i.e. K*2PI//K,K in [0, 1/6, 2/6, 3/6, 4/6, 5/6],
+    "start_orient":all doors, i.e. K*2PI//K,K in [0, 1/6, 2/6, 3/6, 4/6, 5/6],
     "door_anim_fade_out":0.5,
     "door_anim_stay_open":0.5,
     "door_anim_fade_in":0.5,

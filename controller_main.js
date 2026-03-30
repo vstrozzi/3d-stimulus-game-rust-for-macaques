@@ -19,11 +19,26 @@ import init, {
   create_shared_memory_wasm,
   WebSharedMemory,
   wasm_main,
+  refresh_rate_hz,
+  shared_game_state_byte_size,
 } from "./game_node/pkg/game_node.js";
 
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const REFRESH_RATE_HZ = 60;
+// Read from WASM after init() — mirrors Python's monkey_shared.REFRESH_RATE_HZ
+let REFRESH_RATE_HZ = null;
+
+// Struct layout constants — derived from shared/src/lib.rs SharedGameState / SharedCommands
+const N_FACES         = 3;
+const N_COLOR_CHANNELS = 4;                    // RGBA
+const N_COLOR_FLOATS  = N_FACES * N_COLOR_CHANNELS; // 12
+const N_COMMANDS      = 11;
+
+const TRIALS_PATH = "../trials_config/trials.jsonl";
+
+// Six evenly-spaced start orientations (one per door of the hexagonal base)
+const START_ORIENTS = Array.from({ length: N_FACES * 2 }, (_, k) => k * 2.0 * Math.PI / (N_FACES * 2));
+const COLOR_SUGGESTION_COS_SIM = Math.cos(Math.PI / 6);
 const POLLING_INTERVAL_MS = 1; // ~1 ms between FSM ticks (matches Python's 1 ms)
 const GAME_UNRESPONSIVENESS_THRESHOLD_S = 3.0;
 
@@ -60,10 +75,12 @@ let offsets = {}; // field offsets within SharedGameState
 let cmdOffsets = {}; // field offsets within SharedCommands
 let defaultGameState = null; // default SharedGameState values (from Rust)
 
-// Trials
-let trials = [];
-let trialsLength = 0;
-let currentTrialIndex = 0;
+// Levels / chains (mirrors Python's multi-level two-chain model)
+let levels = [];
+let currentLevelIndex = 0;
+let chainAIdx = 0;
+let chainBIdx = 0;
+let activeChain = 0; // 0 = chain A (object[0]), 1 = chain B (object[1])
 
 // FSM
 let fsmState = FSM.INIT;
@@ -187,32 +204,12 @@ function readGameState() {
     height: v.getUint32(o.height, true),
     start_orient: v.getUint32(o.start_orient, true),
     target_door: v.getUint32(o.target_door, true),
-    // colors: flat [u32;12]
-    colors: (() => {
-      const arr = [];
-      for (let i = 0; i < 12; i++) arr.push(v.getUint32(o.colors + i * 4, true));
-      return arr;
-    })(),
-    decorations_count: [
-      v.getUint32(o.decorations_count + 0, true),
-      v.getUint32(o.decorations_count + 4, true),
-      v.getUint32(o.decorations_count + 8, true),
-    ],
-    decorations_size: [
-      v.getUint32(o.decorations_size + 0, true),
-      v.getUint32(o.decorations_size + 4, true),
-      v.getUint32(o.decorations_size + 8, true),
-    ],
-    decorations_seeds: [
-      readU64(v, o.decorations_seeds + 0),
-      readU64(v, o.decorations_seeds + 8),
-      readU64(v, o.decorations_seeds + 16),
-    ],
-    decorations_shape: [
-      v.getUint32(o.decorations_shape + 0, true),
-      v.getUint32(o.decorations_shape + 4, true),
-      v.getUint32(o.decorations_shape + 8, true),
-    ],
+    // colors: flat [u32; N_COLOR_FLOATS]
+    colors: Array.from({ length: N_COLOR_FLOATS }, (_, i) => v.getUint32(o.colors + i * 4, true)),
+    decorations_count:  Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_count  + i * 4, true)),
+    decorations_size:   Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_size   + i * 4, true)),
+    decorations_seeds:  Array.from({ length: N_FACES }, (_, i) => readU64(v, o.decorations_seeds   + i * 8)),
+    decorations_shape:  Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_shape  + i * 4, true)),
     cosine_alignment_threshold: v.getUint32(o.cosine_alignment_threshold, true),
     door_anim_fade_out: v.getUint32(o.door_anim_fade_out, true),
     door_anim_stay_open: v.getUint32(o.door_anim_stay_open, true),
@@ -260,13 +257,13 @@ function writeU64(view, offset, val) {
  *                           animation_door, animation_all_door, animation_colored }
  */
 function writeCommands(cmds) {
-  const view = new Uint8Array(memory.buffer, pointers.cmd, 11);
+  const view = new Uint8Array(memory.buffer, pointers.cmd, N_COMMANDS);
   const co = cmdOffsets;
   view[co.rotate_left] = cmds.rotate_left ? 1 : 0;
   view[co.rotate_right] = cmds.rotate_right ? 1 : 0;
   view[co.zoom_in] = cmds.zoom_in ? 1 : 0;
   view[co.zoom_out] = cmds.zoom_out ? 1 : 0;
-  view[co.check_alignment] = cmds.check ? 1 : 0;
+  view[co.check] = cmds.check ? 1 : 0;
   view[co.reset] = cmds.reset ? 1 : 0;
   view[co.blank_screen] = cmds.blank_screen ? 1 : 0;
   view[co.stop_rendering] = cmds.stop_rendering ? 1 : 0;
@@ -279,13 +276,7 @@ function writeCommands(cmds) {
 
 /** Write all-false commands (Python's write_no_commands) */
 function writeNoCommands() {
-  const cmds = {
-    rotate_left: false, rotate_right: false,
-    zoom_in: false, zoom_out: false,
-    check: false, reset: false, blank_screen: false,
-    stop_rendering: false, animation_door: false,
-    animation_all_door: false, animation_colored: false,
-  };
+  const cmds = makeCmd();
   writeCommands(cmds);
   return cmds;
 }
@@ -304,35 +295,17 @@ function writeGameStateControl(state) {
   v.setUint32(o.start_orient, state.start_orient, true);
   v.setUint32(o.target_door, state.target_door, true);
 
-  // colors [u32;12]
-  if (state.colors) {
-    for (let i = 0; i < 12; i++) {
-      v.setUint32(o.colors + i * 4, state.colors[i], true);
-    }
-  }
-  // decorations_count [u32;3]
-  if (state.decorations_count) {
-    for (let i = 0; i < 3; i++) {
-      v.setUint32(o.decorations_count + i * 4, state.decorations_count[i], true);
-    }
-  }
-  // decorations_size [u32;3]
-  if (state.decorations_size) {
-    for (let i = 0; i < 3; i++) {
-      v.setUint32(o.decorations_size + i * 4, state.decorations_size[i], true);
-    }
-  }
-  // decorations_seeds [u64;3]
+  const writeU32Array = (base, arr, n) => { for (let i = 0; i < n; i++) v.setUint32(base + i * 4, arr[i], true); };
+  if (state.colors)              writeU32Array(o.colors,              state.colors,              N_COLOR_FLOATS);
+  if (state.decorations_count)   writeU32Array(o.decorations_count,   state.decorations_count,   N_FACES);
+  if (state.decorations_size)    writeU32Array(o.decorations_size,    state.decorations_size,     N_FACES);
+  if (state.decorations_shape)   writeU32Array(o.decorations_shape,   state.decorations_shape,   N_FACES);
+  if (state.textures)            writeU32Array(o.textures,            state.textures,            N_FACES);
+  if (state.decorations_texture) writeU32Array(o.decorations_texture, state.decorations_texture, N_FACES);
+  if (state.decorations_thickness) writeU32Array(o.decorations_thickness, state.decorations_thickness, N_FACES);
+  if (state.decorations_color)   writeU32Array(o.decorations_color,   state.decorations_color,   N_COLOR_FLOATS);
   if (state.decorations_seeds) {
-    for (let i = 0; i < 3; i++) {
-      writeU64(v, o.decorations_seeds + i * 8, state.decorations_seeds[i]);
-    }
-  }
-  // decorations_shape [u32;3]
-  if (state.decorations_shape) {
-    for (let i = 0; i < 3; i++) {
-      v.setUint32(o.decorations_shape + i * 4, state.decorations_shape[i], true);
-    }
+    for (let i = 0; i < N_FACES; i++) writeU64(v, o.decorations_seeds + i * 8, state.decorations_seeds[i]);
   }
 
   v.setUint32(o.cosine_alignment_threshold, state.cosine_alignment_threshold, true);
@@ -342,6 +315,9 @@ function writeGameStateControl(state) {
   v.setUint32(o.main_spotlight_intensity, state.main_spotlight_intensity, true);
   v.setUint32(o.ambient_brightness, state.ambient_brightness, true);
   v.setUint32(o.max_spotlight_intensity, state.max_spotlight_intensity, true);
+
+  v.setUint32(o.progress_bar_size,     state.progress_bar_size     ?? 0, true);
+  v.setUint32(o.progress_bar_cur_size, state.progress_bar_cur_size ?? 0, true);
 
   // Dynamic fields
   if (state.frame_number !== undefined) writeU64(v, o.frame_number, state.frame_number);
@@ -365,120 +341,106 @@ function writeGameStateControl(state) {
 
 /**
  * Copy raw bytes from game_structure_game to game_structure_control.
+ * Uses shared_game_state_byte_size() exported from web.rs — zero per-field maintenance.
  * Mirrors Python's self.write_game_state(state) calls during animation states.
  */
 function copyGameStateGameToControl() {
-  const srcView = new DataView(memory.buffer, pointers.gsGame);
-  const dstView = new DataView(memory.buffer, pointers.gsControl);
-  const o = offsets;
-
-  // Copy all scalar u32 fields (raw bits, no float decode/encode needed)
-  const u32Fields = [
-    'base_radius', 'height', 'start_orient', 'target_door',
-    'cosine_alignment_threshold', 'door_anim_fade_out', 'door_anim_stay_open',
-    'door_anim_fade_in', 'main_spotlight_intensity', 'ambient_brightness',
-    'max_spotlight_intensity', 'elapsed_secs', 'camera_radius',
-    'camera_x', 'camera_y', 'camera_z', 'attempts',
-    'current_alignment', 'current_angle', 'win_time',
-  ];
-  for (const key of u32Fields) {
-    dstView.setUint32(o[key], srcView.getUint32(o[key], true), true);
-  }
-
-  // colors [u32;12]
-  for (let i = 0; i < 12; i++) {
-    dstView.setUint32(o.colors + i * 4, srcView.getUint32(o.colors + i * 4, true), true);
-  }
-  // decorations_count [u32;3]
-  for (let i = 0; i < 3; i++) {
-    dstView.setUint32(o.decorations_count + i * 4, srcView.getUint32(o.decorations_count + i * 4, true), true);
-  }
-  // decorations_size [u32;3]
-  for (let i = 0; i < 3; i++) {
-    dstView.setUint32(o.decorations_size + i * 4, srcView.getUint32(o.decorations_size + i * 4, true), true);
-  }
-  // decorations_seeds [u64;3]
-  for (let i = 0; i < 3; i++) {
-    dstView.setUint32(o.decorations_seeds + i * 8, srcView.getUint32(o.decorations_seeds + i * 8, true), true);
-    dstView.setUint32(o.decorations_seeds + i * 8 + 4, srcView.getUint32(o.decorations_seeds + i * 8 + 4, true), true);
-  }
-  // decorations_shape [u32;3]
-  for (let i = 0; i < 3; i++) {
-    dstView.setUint32(o.decorations_shape + i * 4, srcView.getUint32(o.decorations_shape + i * 4, true), true);
-  }
-  // frame_number (u64)
-  dstView.setUint32(o.frame_number, srcView.getUint32(o.frame_number, true), true);
-  dstView.setUint32(o.frame_number + 4, srcView.getUint32(o.frame_number + 4, true), true);
-  // Booleans (u8)
-  const srcBytes = new Uint8Array(memory.buffer, pointers.gsGame);
-  const dstBytes = new Uint8Array(memory.buffer, pointers.gsControl);
-  dstBytes[o.is_animating] = srcBytes[o.is_animating];
-  dstBytes[o.is_blank] = srcBytes[o.is_blank];
-  dstBytes[o.is_rendering_stopped] = srcBytes[o.is_rendering_stopped];
+  const size = shared_game_state_byte_size();
+  new Uint8Array(memory.buffer, pointers.gsControl, size)
+    .set(new Uint8Array(memory.buffer, pointers.gsGame, size));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TRIAL CONFIG HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Current trial config dict */
-function getTrial() {
-  return trials[currentTrialIndex];
+// ── Level / chain helpers (mirrors Python's properties and helpers) ─────────
+
+function currentLevel() {
+  return levels[currentLevelIndex];
 }
+
+/** Flat trial: merges object[activeChain] + fixed + trial_cfg.
+ *  Mirrors Python's expand_flat_trial + flat_trial property. */
+function flatTrial() {
+  const level = currentLevel();
+  const obj = level.objects[activeChain];
+  const trialIdx = Math.min(
+    activeChain === 0 ? chainAIdx : chainBIdx,
+    level.trials.length - 1
+  );
+  const trialCfg = level.trials[trialIdx];
+  const fixed = level.fixed;
+  const flat = {};
+  for (const [k, v] of Object.entries(obj))    flat[k] = v;
+  for (const [k, v] of Object.entries(fixed))  { if (k !== "pr_switching_chain") flat[k] = v; }
+  for (const [k, v] of Object.entries(trialCfg)) flat[k] = v;
+  return flat;
+}
+
+function _trialIdx() {
+  return activeChain === 0 ? chainAIdx : chainBIdx;
+}
+
+function _setTrialIdx(val) {
+  if (activeChain === 0) chainAIdx = val;
+  else chainBIdx = val;
+}
+
+function _levelComplete() {
+  const n = currentLevel().trials.length;
+  return chainAIdx >= n && chainBIdx >= n;
+}
+
+function _maybeSwitch() {
+  const level = currentLevel();
+  const pr = level.fixed.pr_switching_chain ?? 0.5;
+  const other = 1 - activeChain;
+  const otherIdx = activeChain === 0 ? chainBIdx : chainAIdx;
+  if (otherIdx < level.trials.length && Math.random() < pr) {
+    activeChain = other;
+  }
+}
+
+function _progressBarCur() { return chainAIdx + chainBIdx; }
+function _progressBarSize() { return currentLevel().trials.length * currentLevel().objects.length; }
+
+// Mirrors Python's state_schema — drives buildTrialState conversion without a switch.
+// "f32"     → floatToU32Bits(value)
+// "f32[]"   → value.map(floatToU32Bits)
+// "f32[][]" → value.flatMap(face => face.map(floatToU32Bits))   (nested → flat u32 array)
+// "u32" / "u32[]" / "u64[]" → pass through unchanged
+const FIELD_SCHEMA = {
+  base_radius: "f32", height: "f32", start_orient: "f32",
+  cosine_alignment_threshold: "f32",
+  door_anim_fade_out: "f32", door_anim_stay_open: "f32", door_anim_fade_in: "f32",
+  main_spotlight_intensity: "f32", ambient_brightness: "f32", max_spotlight_intensity: "f32",
+  decorations_size:      "f32[]",
+  decorations_thickness: "f32[]",
+  colors:                "f32[][]",
+  decorations_color:     "f32[][]",
+  target_door:           "u32",
+  textures:              "u32[]",
+  decorations_count:     "u32[]",
+  decorations_shape:     "u32[]",
+  decorations_texture:   "u32[]",
+  decorations_seeds:     "u64[]",
+};
 
 /** Build a game-state object from default + trial config overlay.
  *  Mirrors Python's: default_state = read_default_game_state(); overlay(trial, default_state)
+ *  Conversion is driven by FIELD_SCHEMA — add a new field there, not here.
  */
 function buildTrialState(trialCfg) {
-  // Clone default state
   const state = JSON.parse(JSON.stringify(defaultGameState));
-
-  // Overlay trial config (game-state fields only)
   for (const [key, value] of Object.entries(trialCfg)) {
     if (CONTROLLER_META_FIELDS.has(key)) continue;
-
-    // Convert human-readable values to the bit representation used in SharedGameState
-    switch (key) {
-      case "decorations_seeds":
-        state.decorations_seeds = value; // u64 values, keep as-is
-        break;
-      case "base_radius":
-      case "height":
-      case "start_orient":
-      case "cosine_alignment_threshold":
-      case "door_anim_fade_out":
-      case "door_anim_stay_open":
-      case "door_anim_fade_in":
-      case "main_spotlight_intensity":
-      case "ambient_brightness":
-      case "max_spotlight_intensity":
-        state[key] = floatToU32Bits(value); // f32 → u32 bits
-        break;
-      case "target_door":
-        state[key] = value; // u32
-        break;
-      case "colors":
-        // [[r,g,b,a], [r,g,b,a], [r,g,b,a]] → flat [u32;12]
-        state.colors = [];
-        for (const face of value) {
-          for (const ch of face) {
-            state.colors.push(floatToU32Bits(ch));
-          }
-        }
-        break;
-      case "decorations_count":
-        state.decorations_count = value; // [u32;3]
-        break;
-      case "decorations_size":
-        state.decorations_size = value.map(floatToU32Bits); // [f32→u32;3]
-        break;
-      case "decorations_shape":
-        state.decorations_shape = value; // [u32;3]
-        break;
-      default:
-        // Unknown field, pass through
-        state[key] = value;
-    }
+    const type = FIELD_SCHEMA[key];
+    if      (!type)          state[key] = value;                                          // unknown: pass through
+    else if (type === "f32")      state[key] = floatToU32Bits(value);
+    else if (type === "f32[]")    state[key] = value.map(floatToU32Bits);
+    else if (type === "f32[][]")  state[key] = value.flatMap(face => face.map(floatToU32Bits));
+    else                          state[key] = value;                                     // u32 / u32[] / u64[]
   }
   return state;
 }
@@ -486,6 +448,19 @@ function buildTrialState(trialCfg) {
 // ═══════════════════════════════════════════════════════════════════════════
 // COMMAND HELPERS (mirrors Python's write_commands / reset_triggers)
 // ═══════════════════════════════════════════════════════════════════════════
+
+// All-false baseline — mirrors Python's write_no_commands dict.
+// Add new command fields here; FSM handlers pick them up automatically via makeCmd().
+const CMD_DEFAULTS = Object.freeze({
+  rotate_left: false, rotate_right: false, zoom_in: false, zoom_out: false,
+  check: false, reset: false, blank_screen: false, stop_rendering: false,
+  animation_door: false, animation_all_door: false, animation_colored: false,
+});
+
+/** Build a command object: all false except the given overrides. */
+function makeCmd(overrides = {}) {
+  return { ...CMD_DEFAULTS, ...overrides };
+}
 
 function resetTriggers() {
   for (const k of Object.keys(triggers)) triggers[k] = false;
@@ -516,8 +491,10 @@ function logFrame(stateRead, commandsSent) {
 function saveTrialLog(outcome) {
   const elapsed = (Date.now() - trialStartTime) / 1000;
   const log = {
-    trial_index: currentTrialIndex,
-    trial_config: getTrial(),
+    level_index: currentLevelIndex,
+    active_chain: activeChain,
+    trial_index_in_chain: _trialIdx(),
+    trial_config: flatTrial(),
     outcome,
     nr_attempts: nrAttempts,
     elapsed_time: Math.round(elapsed * 10000) / 10000,
@@ -526,7 +503,7 @@ function saveTrialLog(outcome) {
     frames: frameLog,
   };
   allTrialLogs.push(log);
-  console.log(`[LOG] Trial ${currentTrialIndex} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, ${elapsed.toFixed(1)}s`);
+  console.log(`[LOG] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, ${elapsed.toFixed(1)}s`);
 }
 
 function downloadLogs() {
@@ -543,7 +520,7 @@ function downloadLogs() {
 // CHECK HAS FINISHED (mirrors Python's check_has_finished)
 // ═══════════════════════════════════════════════════════════════════════════
 function checkHasFinished(state) {
-  const trial = getTrial();
+  const trial = flatTrial();
   const nrAttemptsToRetroceed = trial.nr_attempts_to_retroceed ?? 0;
   const elapsedTimeToRetroceed = trial.elapsed_time_to_retroceed ?? 0;
   // Use the local nrAttempts counter (maintained by the controller) instead of
@@ -563,11 +540,18 @@ function checkHasFinished(state) {
 function handleInit() {
   console.log("[FSM] INIT → issuing blank_screen + stop_rendering");
 
-  const trialCfg = getTrial();
-  console.log(`[FSM] Loading trial ${currentTrialIndex}:`, trialCfg);
+  const trialCfg = flatTrial();
+  console.log(`[FSM] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()}:`, trialCfg);
 
   // Build fresh default state and overlay trial config
   const trialState = buildTrialState(trialCfg);
+
+  // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS))
+  trialState.start_orient = floatToU32Bits(START_ORIENTS[Math.floor(Math.random() * START_ORIENTS.length)]);
+
+  // Progress bar
+  trialState.progress_bar_cur_size = _progressBarCur();
+  trialState.progress_bar_size = _progressBarSize();
 
   // Read previous game state (to check is_blank / is_rendering_stopped)
   const stateOld = readGameState();
@@ -579,14 +563,11 @@ function handleInit() {
   console.log(`[FSM] state old is_blank=${stateOld.is_blank} is_rendering_stopped=${stateOld.is_rendering_stopped}`);
 
   // Commands: reset + ensure blank + ensure stopped
-  writeCommands({
-    rotate_left: false, rotate_right: false,
-    zoom_in: false, zoom_out: false,
-    check: false, reset: true,
+  writeCommands(makeCmd({
+    reset: true,
     blank_screen: !stateOld.is_blank,
     stop_rendering: !stateOld.is_rendering_stopped,
-    animation_door: false, animation_all_door: false, animation_colored: false,
-  });
+  }));
 
   // Reset per-trial tracking
   nrAttempts = 0;
@@ -601,7 +582,7 @@ function handleInit() {
 
   // Show start overlay
   showStartOverlay(true);
-  updateStatusBar(`Trial ${currentTrialIndex + 1}/${trialsLength} — Press START`);
+  updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Press START`);
   console.log("[FSM] → WAITING_FOR_START");
 }
 
@@ -609,19 +590,13 @@ function handleWaitingForStart(state) {
   if (_start) {
     _start = false;
     // Turn off black screen and start rendering
-    const cmds = {
-      rotate_left: false, rotate_right: false,
-      zoom_in: false, zoom_out: false,
-      check: false, reset: true,
-      blank_screen: true, stop_rendering: true,
-      animation_door: false, animation_all_door: false, animation_colored: false,
-    };
+    const cmds = makeCmd({ reset: true, blank_screen: true, stop_rendering: true });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     logFrame(state, cmds);
     showStartOverlay(false);
-    updateStatusBar(`Trial ${currentTrialIndex + 1}/${trialsLength} — Playing`);
-    console.log(`[FSM] START pressed → PLAYING (trial ${currentTrialIndex})`);
+    updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Playing`);
+    console.log(`[FSM] START pressed → PLAYING (level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()})`);
     return;
   }
   // Otherwise send no commands
@@ -629,7 +604,7 @@ function handleWaitingForStart(state) {
 }
 
 function handlePlaying(state) {
-  const trial = getTrial();
+  const trial = flatTrial();
   const timeElapsed = state.elapsed_secs;
 
   const isWin =
@@ -650,13 +625,7 @@ function handlePlaying(state) {
   if (timeElapsed > (trial.elapsed_time_to_win ?? 0) && !_timeWinExpired) {
     console.log(`[TIME] Time to win exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeWinExpired = true;
-    const cmds = {
-      rotate_left: false, rotate_right: false,
-      zoom_in: false, zoom_out: false,
-      check: true, reset: false, blank_screen: false,
-      stop_rendering: true, animation_door: true,
-      animation_all_door: true, animation_colored: false,
-    };
+    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true });
     writeCommands(cmds);
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -668,13 +637,7 @@ function handlePlaying(state) {
   if (timeElapsed > (trial.elapsed_time_to_retroceed ?? 0) && !_timeRetroceedExpired) {
     console.log(`[TIME] Time to retroceed exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeRetroceedExpired = true;
-    const cmds = {
-      rotate_left: false, rotate_right: false,
-      zoom_in: false, zoom_out: false,
-      check: true, reset: false, blank_screen: false,
-      stop_rendering: true, animation_door: true,
-      animation_all_door: true, animation_colored: true,
-    };
+    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true, animation_colored: true });
     writeCommands(cmds);
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -702,53 +665,31 @@ function handlePlaying(state) {
     // Branch 1: Last attempt AND fail → all red
     if ((nrAttempts + 1) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed (all red)`);
-      cmds = {
-        rotate_left: false, rotate_right: false,
-        zoom_in: false, zoom_out: false,
-        check: true, reset: false, blank_screen: false,
-        stop_rendering: true, animation_door: true,
-        animation_all_door: true, animation_colored: true,
-      };
+      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true, animation_colored: true });
       writeCommands(cmds);
       fsmState = FSM.WAITING_ANIMATION_START;
       logFrame(state, cmds);
       return;
     }
-    // Branch 2: Single white hint (below suggestion & miss, OR STAY & correct)
+    // Branch 2: Single hint (below suggestion & miss, OR STAY & correct)
+    // colored if close enough (cosine > cos(π/6)), white otherwise
     else if (
       (nrAttempts < suggestionThreshold && cosineAlignment < cosineThreshold) ||
       (trialProceeding === PROCEEDING.STAY && cosineAlignment > cosineThreshold)
     ) {
-      console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single white)`);
-      cmds = {
-        rotate_left: false, rotate_right: false,
-        zoom_in: false, zoom_out: false,
-        check: true, reset: false, blank_screen: false,
-        stop_rendering: true, animation_door: true,
-        animation_all_door: false, animation_colored: false,
-      };
+      const coloredLight = cosineAlignment > COLOR_SUGGESTION_COS_SIM;
+      console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
+      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: coloredLight });
     }
     // Branch 3: Single green (isWin & correct & below suggestion)
     else if (isWin && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
-      cmds = {
-        rotate_left: false, rotate_right: false,
-        zoom_in: false, zoom_out: false,
-        check: true, reset: false, blank_screen: false,
-        stop_rendering: true, animation_door: true,
-        animation_all_door: false, animation_colored: true,
-      };
+      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: true });
     }
     // Branch 4: All doors white
     else {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → check (all white)`);
-      cmds = {
-        rotate_left: false, rotate_right: false,
-        zoom_in: false, zoom_out: false,
-        check: true, reset: false, blank_screen: false,
-        stop_rendering: true, animation_door: true,
-        animation_all_door: true, animation_colored: false,
-      };
+      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true });
     }
 
     nrAttempts += 1;
@@ -768,19 +709,12 @@ function handlePlaying(state) {
   // Drive touch: decay inertia when fingers are up, dispatch booleans
   processTouchInput(dt);
 
-  const cmds = {
-    rotate_left: inputs.rotate_left || touchState.rotateLeft,
+  const cmds = makeCmd({
+    rotate_left:  inputs.rotate_left  || touchState.rotateLeft,
     rotate_right: inputs.rotate_right || touchState.rotateRight,
-    zoom_in: inputs.zoom_in || touchState.zoomIn,
-    zoom_out: inputs.zoom_out || touchState.zoomOut,
-    check: false,
-    reset: false,
-    blank_screen: false,
-    stop_rendering: false,
-    animation_door: false,
-    animation_all_door: false,
-    animation_colored: false,
-  };
+    zoom_in:      inputs.zoom_in      || touchState.zoomIn,
+    zoom_out:     inputs.zoom_out     || touchState.zoomOut,
+  });
   writeCommands(cmds);
   logFrame(state, cmds);
 }
@@ -792,6 +726,11 @@ function handleWaitingAnimationStart(state) {
   }
   // Send all-false commands
   const cmds = writeNoCommands();
+  // Advance/stay/retroceed chain index if the trial is already decided
+  // (mirrors Python's _handle_waiting_animation_start → _handle_trial_index_update)
+  if (checkHasFinished(state)) {
+    handleTrialIndexUpdate();
+  }
   // Sync game state to control (matches Python's self.write_game_state(state))
   copyGameStateGameToControl();
   logFrame(state, cmds);
@@ -804,13 +743,7 @@ function handleWaitingAnimationEnd(state) {
     // Animation done → resume rendering
     console.log("[FSM] Animation finished → issuing stop_rendering (resume)");
     resetAllCommands();
-    const cmds = {
-      rotate_left: false, rotate_right: false,
-      zoom_in: false, zoom_out: false,
-      check: false, reset: false, blank_screen: false,
-      stop_rendering: true, // Toggle rendering back on
-      animation_door: false, animation_all_door: false, animation_colored: false,
-    };
+    const cmds = makeCmd({ stop_rendering: true });
     writeCommands(cmds);
     // Sync game state to control (matches Python's self.write_game_state(state))
     copyGameStateGameToControl();
@@ -826,32 +759,54 @@ function handleWaitingAnimationEnd(state) {
   logFrame(state, cmds);
 }
 
-function handleTrialComplete(state) {
-  const trial = getTrial();
-  const nrToWin = trial.nr_attempts_to_win ?? 999;
-  const nrToRetro = trial.nr_attempts_to_retroceed ?? 999;
-  const timeToWin = trial.elapsed_time_to_win ?? 9999;
-  const timeToRetro = trial.elapsed_time_to_retroceed ?? 9999;
+function handleTrialIndexUpdate() {
+  const n = currentLevel().trials.length;
+  const idx = _trialIdx();
 
-  console.log(`[EVAL] attempts=${nrAttempts} | win<=${nrToWin}/${timeToWin}s  retro>=${nrToRetro}/${timeToRetro}s`);
+  let newIdx;
+  if (trialProceeding === PROCEEDING.ADVANCE)    newIdx = idx + 1;
+  else if (trialProceeding === PROCEEDING.RETROCEED) newIdx = Math.max(0, idx - 1);
+  else                                           newIdx = idx; // STAY
 
-  let outcome, nextIndex;
-  if (trialProceeding === PROCEEDING.ADVANCE) {
-    outcome = "advance";
-    nextIndex = (currentTrialIndex + 1) % trialsLength;
-    console.log(`[EVAL] ADVANCE → trial ${nextIndex}`);
-  } else if (trialProceeding === PROCEEDING.RETROCEED) {
-    outcome = "retroceed";
-    nextIndex = Math.max(currentTrialIndex - 1, 0);
-    console.log(`[EVAL] RETROCEED → trial ${nextIndex}`);
-  } else {
-    outcome = "stay";
-    nextIndex = currentTrialIndex;
-    console.log(`[EVAL] STAY → trial ${nextIndex}`);
+  _setTrialIdx(newIdx);
+
+  // Both chains exhausted → advance to next level
+  if (_levelComplete()) {
+    currentLevelIndex = (currentLevelIndex + 1) % levels.length;
+    chainAIdx = 0;
+    chainBIdx = 0;
+    activeChain = 0;
+    console.log(`[LEVEL] Level complete → level ${currentLevelIndex}`);
+    return;
   }
 
+  // If active chain is done, force-switch to the other
+  if (_trialIdx() >= n) {
+    activeChain = 1 - activeChain;
+    console.log(`[CHAIN] Chain exhausted, switching to chain ${activeChain}`);
+  } else {
+    _maybeSwitch();
+  }
+}
+
+function handleTrialComplete(state) {
+  const trial = flatTrial();
+  const nrToWin   = trial.nr_attempts_to_win ?? 999;
+  const nrToRetro = trial.nr_attempts_to_retroceed ?? 999;
+  const timeToWin   = trial.elapsed_time_to_win ?? 9999;
+  const timeToRetro = trial.elapsed_time_to_retroceed ?? 9999;
+
+  console.log(`[EVAL] attempts=${nrAttempts} elapsed=${state.elapsed_secs?.toFixed(1)}s | win<=${nrToWin}/${timeToWin}s  retro>=${nrToRetro}/${timeToRetro}s`);
+
+  const outcome = {
+    [PROCEEDING.ADVANCE]:   "advance",
+    [PROCEEDING.STAY]:      "stay",
+    [PROCEEDING.RETROCEED]: "retroceed",
+  }[trialProceeding];
+
+  console.log(`[EVAL] ${outcome.toUpperCase()} → level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()}`);
+
   saveTrialLog(outcome);
-  currentTrialIndex = nextIndex;
   resyncWithGame();
 }
 
@@ -1297,18 +1252,28 @@ function setupInput() {
 // TRIALS LOADING
 // ═══════════════════════════════════════════════════════════════════════════
 
-async function loadTrials() {
+async function loadLevels() {
   try {
-    const resp = await fetch("../trials_config/trials.jsonl");
+    const resp = await fetch(TRIALS_PATH);
     const text = await resp.text();
     const lines = text.trim().split("\n").filter((l) => l.trim());
-    trials = lines.map((line) => JSON.parse(line));
-    trialsLength = trials.length;
-    console.log(`Loaded ${trialsLength} trials from trials.jsonl`);
+    levels = [];
+    for (let i = 0; i < lines.length; i++) {
+      const level = JSON.parse(lines[i]);
+      if (!level.objects || !level.trials || !level.fixed) {
+        console.warn(`Line ${i + 1} missing objects/trials/fixed, skipping`);
+        continue;
+      }
+      if (level.objects.length < 2) {
+        console.warn(`Line ${i + 1} needs at least 2 objects, skipping`);
+        continue;
+      }
+      levels.push(level);
+    }
+    console.log(`Loaded ${levels.length} levels from trials.jsonl`);
   } catch (e) {
     console.error("Failed to load trials.jsonl:", e);
-    trials = [];
-    trialsLength = 0;
+    levels = [];
   }
 }
 
@@ -1322,12 +1287,13 @@ async function start() {
   // Initialize WASM
   const wasm = await init();
   memory = wasm.memory;
+  REFRESH_RATE_HZ = refresh_rate_hz(); // read from Rust constants, like Python's monkey_shared.REFRESH_RATE_HZ
 
-  updateStatusBar("Loading trials...");
-  await loadTrials();
+  updateStatusBar("Loading levels...");
+  await loadLevels();
 
-  if (trialsLength === 0) {
-    updateStatusBar("ERROR: No trials loaded");
+  if (levels.length === 0) {
+    updateStatusBar("ERROR: No levels loaded");
     return;
   }
 

@@ -44,6 +44,11 @@ export class WebSharedMemory {
 export function create_shared_memory_wasm(): number;
 
 /**
+ * REFRESH_RATE_HZ from constants.rs — mirrors Python's monkey_shared.REFRESH_RATE_HZ
+ */
+export function refresh_rate_hz(): number;
+
+/**
  * Return the byte-size of SharedGameState so JS knows the extent of each region.
  */
 export function shared_game_state_byte_size(): number;
@@ -67,6 +72,7 @@ export interface InitOutput {
     readonly websharedmemory_get_game_state_offsets: (a: number) => any;
     readonly websharedmemory_get_default_game_state: (a: number) => any;
     readonly __wbg_websharedmemory_free: (a: number, b: number) => void;
+    readonly refresh_rate_hz: () => number;
     readonly shared_game_state_byte_size: () => number;
     readonly create_shared_memory_wasm: () => number;
     readonly wasm_bindgen__closure__destroy__hea883acee0d0ae9c: (a: number, b: number) => void;

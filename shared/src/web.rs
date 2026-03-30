@@ -25,6 +25,12 @@ pub fn shared_game_state_byte_size() -> u32 {
     std::mem::size_of::<SharedGameState>() as u32
 }
 
+/// REFRESH_RATE_HZ from constants.rs — mirrors Python's monkey_shared.REFRESH_RATE_HZ
+#[wasm_bindgen]
+pub fn refresh_rate_hz() -> f64 {
+    crate::constants::game_constants::REFRESH_RATE_HZ
+}
+
 // ---------------------------------------------------------------------------
 // Helper wrapper for WASM side
 // ---------------------------------------------------------------------------
@@ -89,7 +95,7 @@ impl WebSharedMemory {
         set("rotate_right",     off!(cmd.rotate_right));
         set("zoom_in",          off!(cmd.zoom_in));
         set("zoom_out",         off!(cmd.zoom_out));
-        set("check_alignment",  off!(cmd.check_alignment));
+        set("check",            off!(cmd.check_alignment)); // exposed as "check" to match Python interface
         set("reset",            off!(cmd.reset));
         set("blank_screen",     off!(cmd.blank_screen));
         set("stop_rendering",   off!(cmd.stop_rendering));

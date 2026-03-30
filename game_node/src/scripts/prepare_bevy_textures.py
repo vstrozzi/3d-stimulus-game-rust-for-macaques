@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 """
-prepare_bevy_textures.py  (v3 — multi-folder glob support + overwrite)
+prepare_bevy_textures.py  (v4 — with 1x1 neutral fallback textures)
 
 Usage:
   python prepare_bevy_textures.py <folder>          # single folder
-  python prepare_bevy_textures.py <parent_dir>/*    # all subfolders (shell glob)
-  python prepare_bevy_textures.py *                 # all subfolders in cwd
-
-Examples:
-  python prepare_bevy_textures.py ./textures/Metal061B_1K-JPG
-  python prepare_bevy_textures.py ./textures/*
-  python prepare_bevy_textures.py *
+  python prepare_bevy_textures.py <parent_dir>/* # all subfolders (shell glob)
+  python prepare_bevy_textures.py * # all subfolders in cwd
 """
 
 import sys
@@ -61,6 +56,20 @@ def save_gray(arr: np.ndarray, out_path: Path, label: str = ""):
     print(f"    ✓ {out_path.name}" + (f"  ({label})" if label else ""))
 
 
+def save_default_rgb(color: tuple[int, int, int], out_path: Path, label: str):
+    """Generates a 1x1 pixel texture with a specific fallback color."""
+    arr = np.array([[color]], dtype=np.uint8)
+    Image.fromarray(arr, "RGB").save(out_path)
+    print(f"    + {out_path.name}  (generated fallback: {label})")
+
+
+def save_default_gray(color: int, out_path: Path, label: str):
+    """Generates a 1x1 pixel grayscale texture with a specific fallback value."""
+    arr = np.array([[color]], dtype=np.uint8)
+    Image.fromarray(arr, "L").save(out_path)
+    print(f"    + {out_path.name}  (generated fallback: {label})")
+
+
 def srgb_to_linear(arr: np.ndarray) -> np.ndarray:
     return np.where(arr <= 0.04045, arr / 12.92, ((arr + 0.055) / 1.055) ** 2.4)
 
@@ -70,12 +79,6 @@ def linear_to_srgb(arr: np.ndarray) -> np.ndarray:
 
 
 def desaturate(arr: np.ndarray, saturation: float = 0.15) -> np.ndarray:
-    """
-    Reduce saturation of an sRGB image.
-    saturation=0.0 -> fully grayscale.
-    saturation=0.15 -> near-gray with faint original hue (recommended).
-    Operates in linear space for physically correct luminance.
-    """
     linear = srgb_to_linear(arr)
     luminance = (
         0.2126 * linear[:, :, 0] +
@@ -87,15 +90,19 @@ def desaturate(arr: np.ndarray, saturation: float = 0.15) -> np.ndarray:
 
 
 def prepare(folder: Path) -> bool:
-    """
-    Process a single texture folder.
-    Returns True if any textures were found and processed.
-    """
-    if not folder.is_dir():
+    if not folder.is_dir() or folder.name == "bevy_ready":
         return False
 
-    # Skip bevy_ready folders that might be passed in by a glob
-    if folder.name == "bevy_ready":
+    # 1. Gather all paths first
+    color_path = find_texture(folder, "color")
+    normal_path = find_texture(folder, "normal")
+    rough_path = find_texture(folder, "roughness")
+    metal_path = find_texture(folder, "metalness")
+    ao_path = find_texture(folder, "ao")
+    disp_path = find_texture(folder, "displacement")
+
+    # If NO recognizable maps exist, skip the folder completely
+    if not any([color_path, normal_path, rough_path, metal_path, ao_path, disp_path]):
         return False
 
     out_dir = folder / "bevy_ready"
@@ -106,71 +113,64 @@ def prepare(folder: Path) -> bool:
         print(f"    ♻ Overwriting existing bevy_ready/")
     out_dir.mkdir()
 
-    found_any = False
     print(f"\n  📂 {folder.name}")
 
     # 1. COLOR
-    color_path = find_texture(folder, "color")
     if color_path:
-        found_any = True
         arr = load_linear(color_path)
         save_rgb(arr, out_dir / "color.png", "sRGB, natural look")
         desat = desaturate(arr, saturation=0.15)
         save_rgb(desat, out_dir / "color_tintable.png", "near-grayscale, for base_color tinting")
+    else:
+        save_default_rgb((255, 255, 255), out_dir / "color.png", "white")
+        save_default_rgb((255, 255, 255), out_dir / "color_tintable.png", "white")
 
     # 2. NORMAL
-    normal_path = find_texture(folder, "normal")
     if normal_path:
-        found_any = True
         is_dx = any(x in normal_path.stem for x in ["NormalDX", "Normal_DX"])
         arr = load_linear(normal_path)
         if is_dx:
             arr[:, :, 1] = 1.0 - arr[:, :, 1]
             print("    i Converted DX->GL (flipped G channel)")
         save_rgb(arr, out_dir / "normal_gl.png", "linear, is_srgb: false")
+    else:
+        save_default_rgb((128, 128, 255), out_dir / "normal_gl.png", "flat normal")
 
-    # 3. METALLIC_ROUGHNESS — packed: G=roughness, B=metallic
-    rough_path = find_texture(folder, "roughness")
-    if rough_path:
-        found_any = True
-        roughness = load_gray(rough_path)
-        h, w = roughness.shape
-        metalness = np.zeros((h, w), dtype=np.float32)
-        metal_path = find_texture(folder, "metalness")
-        if metal_path:
-            metalness = load_gray(metal_path)
-        else:
-            print("    i No metalness map — B channel set to 0 (non-metal)")
+    # 3. METALLIC_ROUGHNESS
+    if rough_path or metal_path:
+        # We need the array dimensions from whichever map actually exists
+        reference_path = rough_path if rough_path else metal_path
+        h, w = load_gray(reference_path).shape
+
+        roughness = load_gray(rough_path) if rough_path else np.full((h, w), 0.5, dtype=np.float32)
+        if not rough_path: print("    i No roughness map — padding with 0.5")
+
+        metalness = load_gray(metal_path) if metal_path else np.zeros((h, w), dtype=np.float32)
+        if not metal_path: print("    i No metalness map — padding with 0.0")
+
         packed = np.zeros((h, w, 3), dtype=np.float32)
         packed[:, :, 1] = roughness
         packed[:, :, 2] = metalness
         save_rgb(packed, out_dir / "metallic_roughness.png", "linear, G=roughness B=metallic")
+    else:
+        save_default_rgb((0, 128, 0), out_dir / "metallic_roughness.png", "G=0.5 (rough), B=0 (non-metal)")
 
     # 4. AMBIENT OCCLUSION
-    ao_path = find_texture(folder, "ao")
     if ao_path:
-        found_any = True
         save_gray(load_gray(ao_path), out_dir / "occlusion.png", "linear, is_srgb: false")
+    else:
+        save_default_gray(255, out_dir / "occlusion.png", "white, fully unoccluded")
 
-    # 5. DISPLACEMENT — inverted for Bevy
-    disp_path = find_texture(folder, "displacement")
+    # 5. DISPLACEMENT
     if disp_path:
-        found_any = True
         save_gray(1.0 - load_gray(disp_path), out_dir / "displacement_inv.png", "inverted for Bevy depth_map")
+    else:
+        save_default_gray(0, out_dir / "displacement_inv.png", "black, flat depth")
 
-    if not found_any:
-        # Nothing useful found — clean up the empty dir
-        shutil.rmtree(out_dir)
-        print("    ! No recognisable PBR textures found, skipping.")
-
-    return found_any
+    return True
 
 
 def resolve_folders(args: list[str]) -> list[Path]:
-    """
-    Turn CLI arguments into a deduplicated list of directories to process.
-    The shell expands globs before Python sees them, so we just filter for dirs.
-    """
     folders = []
     seen = set()
     for arg in args:
@@ -180,7 +180,6 @@ def resolve_folders(args: list[str]) -> list[Path]:
         seen.add(p)
         if p.is_dir():
             folders.append(p)
-        # silently skip files (e.g. .png files caught by a bare * glob)
     return folders
 
 

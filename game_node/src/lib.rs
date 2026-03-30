@@ -5,9 +5,7 @@ use wasm_bindgen::prelude::*;
 
 
 use bevy::{
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
-    prelude::*,
-    window::*,
+    asset::AssetMetaCheck, diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin}, prelude::*, window::*
 };
 
 // Re-export shared memory functions so wasm-bindgen keeps them in the cdylib
@@ -85,6 +83,7 @@ pub fn build_app() -> App {
             } else {
                 "assets".to_string()
             },
+            meta_check: AssetMetaCheck::Never, // Disable .meta file checking for faster load times
             ..default()
         }),
         LogDiagnosticsPlugin::default(),

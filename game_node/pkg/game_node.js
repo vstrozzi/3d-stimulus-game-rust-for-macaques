@@ -109,6 +109,15 @@ export function create_shared_memory_wasm() {
 }
 
 /**
+ * REFRESH_RATE_HZ from constants.rs — mirrors Python's monkey_shared.REFRESH_RATE_HZ
+ * @returns {number}
+ */
+export function refresh_rate_hz() {
+    const ret = wasm.refresh_rate_hz();
+    return ret;
+}
+
+/**
  * Return the byte-size of SharedGameState so JS knows the extent of each region.
  * @returns {number}
  */

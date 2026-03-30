@@ -11,6 +11,7 @@ export const websharedmemory_get_commands_offsets: (a: number) => any;
 export const websharedmemory_get_game_state_offsets: (a: number) => any;
 export const websharedmemory_get_default_game_state: (a: number) => any;
 export const __wbg_websharedmemory_free: (a: number, b: number) => void;
+export const refresh_rate_hz: () => number;
 export const shared_game_state_byte_size: () => number;
 export const create_shared_memory_wasm: () => number;
 export const wasm_bindgen__closure__destroy__hea883acee0d0ae9c: (a: number, b: number) => void;

@@ -34,7 +34,7 @@ const N_COLOR_CHANNELS = 4;                    // RGBA
 const N_COLOR_FLOATS  = N_FACES * N_COLOR_CHANNELS; // 12
 const N_COMMANDS      = 11;
 
-const TRIALS_PATH = "./trials_config/trials.jsonl";
+const TRIALS_PATH = "../trials_config/trials.jsonl";
 
 // Six evenly-spaced start orientations (one per door of the hexagonal base)
 const START_ORIENTS = Array.from({ length: N_FACES * 2 }, (_, k) => k * 2.0 * Math.PI / (N_FACES * 2));
@@ -162,14 +162,14 @@ let touchState = {
   tapMaxMove: 10,
   tapMaxTime: 300,
   pinchTapCooldown: 250, // ms: suppress tap detection after pinch gesture
-  // Velocity → send-rate mapping
-  maxRotationVelocity: 800, // px/s: finger speed at which rotate fires every frame
-  maxZoomVelocity: 600,     // px/s: pinch speed at which zoom fires every frame
-  // Inertia (Three.js OrbitControls uses dampingFactor ≈ 0.05)
-  friction: 0.04,            // vel *= (1 - friction) per frame → longer coast
-  velocityStopThreshold: 20,  // px/s: below this, snap to zero
+  // Velocity reference (used only to compute inertia duration, not fire rate)
+  maxRotationVelocity: 500, // px/s: reference speed for inertia scaling
+  maxZoomVelocity: 350,     // px/s: reference speed for inertia scaling
+  // Inertia: short, clean coast after release (~0.25s)
+  friction: 0.18,            // vel *= (1 - friction) per frame → stops in ~15 frames
+  velocityStopThreshold: 60,  // px/s: below this, snap to zero cleanly
   // EMA smoothing for velocity during active drag
-  velocitySmoothing: 0.45,   // alpha: higher = more responsive, lower = smoother
+  velocitySmoothing: 0.55,   // alpha: higher = more responsive, lower = smoother
 };
 
 // Time tracking for consistent inertia regardless of tick rate
@@ -922,75 +922,41 @@ function processTouchInput(dt) {
 
 /**
  * Convert rotationVelocity into rotateLeft/rotateRight booleans.
- * Accumulator ensures smooth frame-skipping for sub-max speeds.
- * Resets on direction change to avoid phantom commands.
+ * Fires every frame while velocity is above threshold — no accumulator stutter.
+ * During active drag velocity is set by touchmove; after release it decays via
+ * friction until it falls below velocityStopThreshold and snaps to zero.
  */
-let rotationAccumulator = 0;
-let lastRotationSign = 0;
 function applyRotationFromVelocity() {
   const vel = touchState.rotationVelocity;
   const absVel = Math.abs(vel);
-  const sign = Math.sign(vel);
 
   if (absVel < touchState.velocityStopThreshold) {
     touchState.rotateLeft = false;
     touchState.rotateRight = false;
     touchState.rotationVelocity = 0;
-    rotationAccumulator = 0;
-    lastRotationSign = 0;
   } else {
-    // Reset accumulator when direction reverses
-    if (sign !== lastRotationSign) {
-      rotationAccumulator = 0;
-      lastRotationSign = sign;
-    }
-    const sendRate = Math.min(absVel / touchState.maxRotationVelocity, 1);
-    rotationAccumulator += sendRate;
-    if (rotationAccumulator >= 1) {
-      rotationAccumulator -= 1;
-      touchState.rotateLeft = vel < 0;
-      touchState.rotateRight = vel > 0;
-    } else {
-      touchState.rotateLeft = false;
-      touchState.rotateRight = false;
-    }
+    touchState.rotateLeft = vel < 0;
+    touchState.rotateRight = vel > 0;
   }
   setKeyUI("left", inputs.rotate_left || touchState.rotateLeft);
   setKeyUI("right", inputs.rotate_right || touchState.rotateRight);
 }
 
 /**
- * Convert zoomVelocity into zoomIn/zoomOut booleans via accumulator.
- * Same pattern as rotation: direction-change reset, frame-skipping.
+ * Convert zoomVelocity into zoomIn/zoomOut booleans.
+ * Fires every frame while velocity is above threshold — no accumulator stutter.
  */
-let zoomAccumulator = 0;
-let lastZoomSign = 0;
 function applyZoomFromVelocity() {
   const vel = touchState.zoomVelocity;
   const absVel = Math.abs(vel);
-  const sign = Math.sign(vel);
 
   if (absVel < touchState.velocityStopThreshold) {
     touchState.zoomIn = false;
     touchState.zoomOut = false;
     touchState.zoomVelocity = 0;
-    zoomAccumulator = 0;
-    lastZoomSign = 0;
   } else {
-    if (sign !== lastZoomSign) {
-      zoomAccumulator = 0;
-      lastZoomSign = sign;
-    }
-    const sendRate = Math.min(absVel / touchState.maxZoomVelocity, 1);
-    zoomAccumulator += sendRate;
-    if (zoomAccumulator >= 1) {
-      zoomAccumulator -= 1;
-      touchState.zoomIn = vel > 0;
-      touchState.zoomOut = vel < 0;
-    } else {
-      touchState.zoomIn = false;
-      touchState.zoomOut = false;
-    }
+    touchState.zoomIn = vel > 0;
+    touchState.zoomOut = vel < 0;
   }
   setKeyUI("up", inputs.zoom_in || touchState.zoomIn);
   setKeyUI("down", inputs.zoom_out || touchState.zoomOut);

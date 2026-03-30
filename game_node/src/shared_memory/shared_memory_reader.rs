@@ -93,8 +93,31 @@ pub fn read_shared_memory_commands(
     pending_commands.reset = shm.commands.reset.load(Ordering::Relaxed);
     pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
     pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
+
+    // Clear all commands in shared memory after reading
+    clear_shared_memory_commands(Some(shm_res));
 }
 
+// Clear shared memory of commands after reading
+pub fn clear_shared_memory_commands(
+    shm_res: Option<Res<SharedMemResource>>
+) {
+    let Some(shm_res) = shm_res else { return };
+    let shm = shm_res.0.get();
+
+    // Clear all commands in shared memory after reading
+    shm.commands.rotate_left.store(false, Ordering::Relaxed);
+    shm.commands.rotate_right.store(false, Ordering::Relaxed);
+    shm.commands.zoom_in.store(false, Ordering::Relaxed);
+    shm.commands.zoom_out.store(false, Ordering::Relaxed);
+    shm.commands.stop_rendering.store(false, Ordering::Relaxed);
+    shm.commands.animation_door.store(false, Ordering::Relaxed);
+    shm.commands.check_alignment.store(false, Ordering::Relaxed);
+    shm.commands.blank_screen.store(false, Ordering::Relaxed);
+    shm.commands.reset.store(false, Ordering::Relaxed);
+    shm.commands.animation_all_door.store(false, Ordering::Relaxed);
+    shm.commands.animation_colored.store(false, Ordering::Relaxed);
+}
 
 // Read shared memory to local structure (from game to local)
 pub fn read_shared_memory_game_state_local(

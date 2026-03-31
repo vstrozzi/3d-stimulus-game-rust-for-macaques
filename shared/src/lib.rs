@@ -14,7 +14,7 @@
 //! 
 use core::sync::atomic::{AtomicBool, AtomicU32, AtomicU64};
 use std::sync::atomic::Ordering;
-use strum_macros::{Display, FromRepr};
+use strum_macros::{Display, EnumIter, FromRepr};
 
 pub mod constants;
 
@@ -86,7 +86,7 @@ pub enum DecorationShape {
 
 // Textures for the pyramid faces and decorations.
 #[allow(non_camel_case_types)]
-#[derive(Clone, Copy, Debug, FromRepr, Display)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, FromRepr, Display, EnumIter)]
 #[repr(u32)]
 pub enum Texture {
     Bark001_1K                  = 0,
@@ -168,6 +168,7 @@ macro_rules! shared_game_state {
             pub is_animating: $B,
             pub is_blank: $B,
             pub is_rendering_stopped: $B,
+            pub is_scene_ready: $B,
             pub win_time: $U32,
         }
     };
@@ -286,7 +287,8 @@ impl SharedGameState {
             is_animating: AtomicBool::new(false),
             is_blank: AtomicBool::new(false),
             is_rendering_stopped: AtomicBool::new(false),
-            
+            is_scene_ready: AtomicBool::new(false),
+
             win_time: AtomicU32::new(0),
         }
     }
@@ -329,6 +331,7 @@ impl SharedGameState {
         self.is_animating.store(other.is_animating.load(Ordering::Relaxed), Ordering::Relaxed);
         self.is_blank.store(other.is_blank.load(Ordering::Relaxed), Ordering::Relaxed);
         self.is_rendering_stopped.store(other.is_rendering_stopped.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.is_scene_ready.store(other.is_scene_ready.load(Ordering::Relaxed), Ordering::Relaxed);
         self.win_time.store(other.win_time.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
@@ -416,6 +419,7 @@ impl SharedGameState {
             is_animating: self.is_animating.load(Ordering::Relaxed),
             is_blank: self.is_blank.load(Ordering::Relaxed),
             is_rendering_stopped: self.is_rendering_stopped.load(Ordering::Relaxed),
+            is_scene_ready: self.is_scene_ready.load(Ordering::Relaxed),
             win_time: self.win_time.load(Ordering::Relaxed),
         }
     }
@@ -459,6 +463,7 @@ impl SharedGameState {
         self.is_animating.store(state.is_animating, Ordering::Relaxed);
         self.is_blank.store(state.is_blank, Ordering::Relaxed);
         self.is_rendering_stopped.store(state.is_rendering_stopped, Ordering::Relaxed);
+        self.is_scene_ready.store(state.is_scene_ready, Ordering::Relaxed);
         self.win_time.store(state.win_time, Ordering::Relaxed);
     }
 

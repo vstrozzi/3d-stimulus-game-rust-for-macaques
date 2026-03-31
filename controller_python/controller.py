@@ -465,6 +465,10 @@ class MonkeyGameController:
         print("[FSM] → WAITING_FOR_START  (press 'r' to begin)")
 
     def _handle_waiting_for_start(self, state):
+        if not state.get("is_scene_ready", False):
+            print("[FSM] Waiting for scene to be ready...")
+            self.write_no_commands()
+            return
         if self._start:
             cmds = self.write_commands({
                 "rotate_left": False,

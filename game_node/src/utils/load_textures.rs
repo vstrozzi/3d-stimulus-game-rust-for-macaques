@@ -3,7 +3,7 @@ use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, Ima
 use bevy::math::Affine2;
 
 /// Holds all loaded handles for one PBR texture set.
-/// Store this as a resource or component so handles stay alive.
+/// Store this as a resource so handles stay alive.
 #[derive(Resource)]
 pub struct TextureSet {
     color:              Option<Handle<Image>>,
@@ -14,6 +14,26 @@ pub struct TextureSet {
     depth:              Option<Handle<Image>>,
 }
 
+impl TextureSet {
+    /// Returns true once every handle in this set is present in the Assets<Image> store.
+    pub fn all_loaded(&self, images: &Assets<Image>) -> bool {
+        [
+            self.color.as_ref(),
+            self.color_tintable.as_ref(),
+            self.normal.as_ref(),
+            self.metallic_roughness.as_ref(),
+            self.occlusion.as_ref(),
+            self.depth.as_ref(),
+        ]
+        .iter()
+        .all(|h| match h {
+            Some(h) => images.get(h.id()).is_some(),
+            None => true,
+        })
+    }
+}
+
+// Load the whole texture set for one material
 pub fn load_texture_set(
     asset_server: &AssetServer,
     folder: &str,
@@ -81,6 +101,7 @@ pub fn load_texture_set(
     }
 }
 
+// Create a natural material form loaded textures
 pub fn natural_material(tex: &TextureSet) -> StandardMaterial {
     StandardMaterial {
         base_color: Color::WHITE,
@@ -107,13 +128,12 @@ pub fn natural_material(tex: &TextureSet) -> StandardMaterial {
 // Tile a texture across the surface, using the uv_transform to repeat it
 pub fn natural_material_tiled(tex: &TextureSet, tile: f32) -> StandardMaterial {
     StandardMaterial {
-        // Disable parallax — it breaks with uv_transform
         uv_transform: Affine2::from_scale(Vec2::splat(tile)),
         ..natural_material(tex)
     }
 }
 
-/// Tinted look — grain detail from texture, hue from base_color
+/// Tinted look grain detail from texture, hue from base_color
 pub fn tinted_material(tex: &TextureSet, tint: Color) -> StandardMaterial {
     StandardMaterial {
         base_color: tint,

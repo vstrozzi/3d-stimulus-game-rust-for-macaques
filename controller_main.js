@@ -34,7 +34,7 @@ const N_COLOR_CHANNELS = 4;                    // RGBA
 const N_COLOR_FLOATS  = N_FACES * N_COLOR_CHANNELS; // 12
 const N_COMMANDS      = 11;
 
-const TRIALS_PATH = "./trials_config/trials.jsonl";
+const TRIALS_PATH = "../trials_config/trials.jsonl";
 
 // Six evenly-spaced start orientations (one per door of the hexagonal base)
 const START_ORIENTS = Array.from({ length: N_FACES * 2 }, (_, k) => k * 2.0 * Math.PI / (N_FACES * 2));
@@ -230,6 +230,7 @@ function readGameState() {
     is_animating: v.getUint8(o.is_animating) !== 0,
     is_blank: v.getUint8(o.is_blank) !== 0,
     is_rendering_stopped: v.getUint8(o.is_rendering_stopped) !== 0,
+    is_scene_ready: v.getUint8(o.is_scene_ready) !== 0,
     // win_time as f32 → read bits, interpret as float (0.0 = not won, >0 = won)
     win_elapsed_secs: u32BitsToFloat(v.getUint32(o.win_time, true)),
     // Keep nr_attempts alias for compat with Python's check_has_finished
@@ -335,6 +336,7 @@ function writeGameStateControl(state) {
   boolView[o.is_animating] = state.is_animating ? 1 : 0;
   boolView[o.is_blank] = state.is_blank ? 1 : 0;
   boolView[o.is_rendering_stopped] = state.is_rendering_stopped ? 1 : 0;
+  boolView[o.is_scene_ready] = state.is_scene_ready ? 1 : 0;
 
   v.setUint32(o.win_time, state.win_time ?? 0, true);
 }
@@ -580,13 +582,27 @@ function handleInit() {
   fsmState = FSM.WAITING_FOR_START;
   resetAllCommands();
 
-  // Show start overlay
+  // Show start overlay with loading text until is_scene_ready comes back true
   showStartOverlay(true);
-  updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Press START`);
+  setOverlayPrompt("Loading…");
+  updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Loading scene…`);
   console.log("[FSM] → WAITING_FOR_START");
 }
 
 function handleWaitingForStart(state) {
+  // Block start until the game confirms all trial textures are on the GPU
+  if (!state.is_scene_ready) {
+    writeNoCommands();
+    return;
+  }
+
+  // Textures just became ready — flip overlay and status bar to "Press START" (runs once per trial)
+  const statusEl = document.getElementById("status-bar");
+  if (statusEl && statusEl.innerText.includes("Loading scene")) {
+    setOverlayPrompt("Press the screen<br>or press space bar");
+    updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Press START`);
+  }
+
   if (_start) {
     _start = false;
     // Turn off black screen and start rendering
@@ -984,6 +1000,12 @@ function showStartOverlay(show) {
   const el = document.getElementById("start-trial-overlay");
   if (el) el.style.display = show ? "flex" : "none";
 }
+
+function setOverlayPrompt(html) {
+  const el = document.querySelector("#start-trial-overlay .prompt");
+  if (el) el.innerHTML = html;
+}
+
 
 function updateStatusBar(text) {
   const el = document.getElementById("status-bar");

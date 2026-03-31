@@ -1,7 +1,20 @@
 //! This file defines the various objects, resources, and components used in the game.
 use bevy::prelude::*;
 use std::time::Duration;
-use shared::{SharedGameState, SharedGameStateLocal, DecorationShape};
+use std::collections::HashMap;
+use shared::{SharedGameState, SharedGameStateLocal, DecorationShape, Texture};
+use crate::utils::load_textures::TextureSet;
+
+/// Holds strong handles for every texture set so they are never GC'd between resets.
+/// Populated once at startup; keeps assets hot in WASM so resets don't trigger new fetches.
+#[derive(Resource, Default)]
+pub struct PreloadedTextures(pub HashMap<Texture, TextureSet>);
+
+impl PreloadedTextures {
+    pub fn get(&self, tex: Texture) -> &TextureSet {
+        self.0.get(&tex).expect("texture not preloaded")
+    }
+}
 
 /// Single decoration on a pyramid face with barycentric coordinates relative to the triangle vertices (top, corner1, corner2)
 #[derive(Clone, Debug)]
@@ -24,6 +37,9 @@ pub struct DecorationSet {
 pub struct GameConditions{
     pub stop_rendering: bool,
     pub blank_screen: bool,
+    /// True once all texture assets for the current trial are fully loaded on the GPU.
+    /// Reset to false on every reset command; the controller gates space-to-start on this.
+    pub is_scene_ready: bool,
 }
 
 impl Default for GameConditions {
@@ -31,6 +47,7 @@ impl Default for GameConditions {
         GameConditions {
             stop_rendering: false,
             blank_screen: false,
+            is_scene_ready: false,
         }
     }
 }

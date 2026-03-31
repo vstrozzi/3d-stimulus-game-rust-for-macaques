@@ -49,6 +49,7 @@ pub fn update_shared_memory_local(
 
     game_state_local.0.is_blank = game_conditions.blank_screen;
     game_state_local.0.is_rendering_stopped = game_conditions.stop_rendering;
+    game_state_local.0.is_scene_ready = game_conditions.is_scene_ready;
 
     game_state_local.0.frame_number = frame_counter.0;
     game_state_local.0.elapsed_secs = if let Some(start) = round_start.0 {

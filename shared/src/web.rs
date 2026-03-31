@@ -168,6 +168,7 @@ impl WebSharedMemory {
         set("is_animating",       off!(gs.is_animating));
         set("is_blank",           off!(gs.is_blank));
         set("is_rendering_stopped", off!(gs.is_rendering_stopped));
+        set("is_scene_ready",     off!(gs.is_scene_ready));
         set("win_time",           off!(gs.win_time));
 
         obj.into()
@@ -256,6 +257,7 @@ impl WebSharedMemory {
         set_bool("is_animating", def.is_animating.load(Relaxed));
         set_bool("is_blank", def.is_blank.load(Relaxed));
         set_bool("is_rendering_stopped", def.is_rendering_stopped.load(Relaxed));
+        set_bool("is_scene_ready", def.is_scene_ready.load(Relaxed));
         set_u32("win_time", def.win_time.load(Relaxed));
 
         obj.into()

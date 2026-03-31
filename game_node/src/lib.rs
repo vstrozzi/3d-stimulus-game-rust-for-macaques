@@ -44,7 +44,7 @@ use crate::{
     },
     utils::{
         debug_functions::DebugFunctionsPlugin,
-        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions},
+        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions, PreloadedTextures},
         systems_logic::SystemsLogicPlugin,
     },
 };
@@ -98,7 +98,8 @@ pub fn build_app() -> App {
     .insert_resource(DoorWinEntities::default())
     .insert_resource(RoundStartTimestamp::default())
     .insert_resource(GameConditions::default())
-    .insert_resource(GameStateLocal::default());
+    .insert_resource(GameStateLocal::default())
+    .insert_resource(PreloadedTextures::default());
     app
 }
 

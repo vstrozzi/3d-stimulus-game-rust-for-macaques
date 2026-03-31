@@ -10,6 +10,7 @@ use shared::{DecorationShape};
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::load_textures::{load_texture_set, natural_material_tiled};
+use crate::utils::objects::PreloadedTextures;
 // TODO: Add these to the shared memory
 use shared::constants::{
     lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},
@@ -75,7 +76,7 @@ pub fn setup_round(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    asset_server: Res<AssetServer>,
+    preloaded: Res<PreloadedTextures>,
     mut camera_query: Query<&mut Transform, With<PersistentCamera>>,
     mut spotlight_query: Query<&mut SpotLight, (Without<HoleLight>, Without<GameEntity>)>,
     ambient_light: Option<ResMut<GlobalAmbientLight>>,
@@ -182,7 +183,7 @@ pub fn setup_round(
         &mut commands,
         &mut meshes,
         &mut materials,
-        &asset_server,
+        &preloaded,
         decoration_seeds,
         radius,
         height,

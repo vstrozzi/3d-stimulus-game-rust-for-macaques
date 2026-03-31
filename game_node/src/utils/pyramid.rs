@@ -2,12 +2,12 @@
 
 use crate::utils::objects::{
     BaseDoor, BaseFrame, Decoration, DecorationSet, GameEntity, HoleEmissive,
-    HoleLight, Pyramid, RotableComponent,
+    HoleLight, Pyramid, RotableComponent, PreloadedTextures,
 };
-use crate::utils::load_textures:: {load_texture_set, natural_material, tinted_material, tinted_material_tiled};
+use crate::utils::load_textures::{natural_material, tinted_material, tinted_material_tiled};
 use bevy::prelude::*;
 use bevy::prelude::ops::sqrt;
-use shared::{self, DecorationShape};
+use shared::{self, DecorationShape, Texture};
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
 
 
@@ -77,9 +77,9 @@ pub fn spawn_pyramid_base(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    asset_server: &AssetServer,
-    p_start_orientation_rad: f32, 
-    target_door: usize, 
+    preloaded: &PreloadedTextures,
+    p_start_orientation_rad: f32,
+    target_door: usize,
 ) -> (Option<Entity>, Option<Entity>) {
     let base_radius = BASE_RADIUS;
     let angle_increment = std::f32::consts::TAU / BASE_NR_SIDES as f32;
@@ -136,7 +136,7 @@ pub fn spawn_pyramid_base(
         let is_target = i == target_door;
 
         // Load wood textures for the frame
-        let wood = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
+        let wood = preloaded.get(Texture::WoodFloor057_1K);
 
         let frame_id = commands
             .spawn((
@@ -207,12 +207,11 @@ pub fn spawn_pyramid_base(
     // Create a polygon mesh matching the base's shape
     let top_lid_mesh = create_top_lid_mesh(base_radius, BASE_NR_SIDES, p_start_orientation_rad);
 
-    // Load wood textures for the frame
-    let wood = load_texture_set(&asset_server, "textures/WoodFloor057_1K-JPG/bevy_ready");
+    let wood = preloaded.get(Texture::WoodFloor057_1K);
 
     commands.spawn((
         Mesh3d(meshes.add(top_lid_mesh)),
-        MeshMaterial3d(materials.add(natural_material(&wood))),
+        MeshMaterial3d(materials.add(natural_material(wood))),
         Transform::from_xyz(0.0, top_y, 0.0),
         RotableComponent,
         GameEntity,
@@ -380,7 +379,7 @@ pub fn spawn_pyramid(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
-    asset_server: &AssetServer,
+    preloaded: &PreloadedTextures,
     decoration_seeds: [u64; 3],
     p_radius: f32,
     p_height: f32,
@@ -552,7 +551,7 @@ pub fn spawn_pyramid(
         
         mesh.insert_indices(bevy::mesh::Indices::U32(indices));
 
-        let face_tex = load_texture_set(&asset_server, &shared::Texture::from_u32(face_textures[i]).asset_folder());
+        let face_tex = preloaded.get(Texture::from_u32(face_textures[i]));
         let face_entity = commands
             .spawn((
                 Mesh3d(meshes.add(mesh)),
@@ -574,7 +573,7 @@ pub fn spawn_pyramid(
                 materials,
                 face_entity,
                 set_a,
-                &asset_server,
+                preloaded,
                 tl,
                 bl,
                 br,
@@ -591,7 +590,7 @@ pub fn spawn_pyramid(
                 materials,
                 face_entity,
                 set_b,
-                &asset_server,
+                preloaded,
                 tl,
                 br,
                 tr,
@@ -602,7 +601,7 @@ pub fn spawn_pyramid(
     }
 
     // Spawn the base and capture winning door entities
-    let (winning_light, winning_emissive) = spawn_pyramid_base(commands, meshes, materials, asset_server, p_orientation_rad, target_door);
+    let (winning_light, winning_emissive) = spawn_pyramid_base(commands, meshes, materials, preloaded, p_orientation_rad, target_door);
     // Max intensity not vital here or pass it in
 
     (winning_light, winning_emissive)
@@ -696,14 +695,14 @@ fn spawn_decorations_from_set(
     materials: &mut ResMut<Assets<StandardMaterial>>,
     parent_face: Entity,
     decoration_set: &DecorationSet,
-    asset_server: &AssetServer,
+    preloaded: &PreloadedTextures,
     top: Vec3,
     corner1: Vec3,
     corner2: Vec3,
     face_normal: Vec3,
     texture_id: u32,
 ) {
-    let dec_tex = load_texture_set(asset_server, &shared::Texture::from_u32(texture_id).asset_folder());
+    let dec_tex = preloaded.get(Texture::from_u32(texture_id));
 
     for decoration in &decoration_set.decorations {
         // Reconstruct world position from barycentric coordinates

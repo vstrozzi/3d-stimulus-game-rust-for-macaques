@@ -9,8 +9,6 @@ use crate::utils::objects::{
 use crate::utils::ui::{spawn_score_bar};
 use crate::utils::utils::{spawn_blank_screen, despawn_ui, despawn_all_game_and_ui};
 use crate::utils::setup::{setup_round};
-
-// TODO: add these variables to shared
 use shared::constants::camera_3d_constants::{
     CAMERA_3D_INITIAL_Y, CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
@@ -86,9 +84,11 @@ pub fn handle_animation_door_command(
     door_win_entities.animation_start_time = Some(time.elapsed());
     door_win_entities.animate_all = pending.animation_all_door;
 
-    door_win_entities.color = if pending.animation_colored{
-        if pending.animation_door && !pending.animation_all_door {
+    // Request of color
+    door_win_entities.color = 
+    if pending.animation_colored{
         // Single door with requested animation of color, then green
+        if !pending.animation_all_door {
         Color::srgba(0.0, 1.0, 0.0, 1.0)
         }
         else {
@@ -96,6 +96,11 @@ pub fn handle_animation_door_command(
         Color::srgba(1.0, 0.0, 0.0, 1.0)
         }
     }   
+    // Single animation not colored
+    else if !pending.animation_colored && !pending.animation_all_door {
+        // No animation colored, then red TODO: change name
+        Color::srgba(1.0, 0.0, 0.0, 1.0)
+    }
     else {
         // No color change if animation colored is not requested, then white
         Color::srgba(1.0, 1.0, 1.0, 1.0)

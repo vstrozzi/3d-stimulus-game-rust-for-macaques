@@ -119,6 +119,7 @@ let _start = false;
 let _timeWinExpired = false;
 let _timeRetroceedExpired = false;
 let _running = false;
+let _sceneReadyPromptShown = false;
 
 // All accumulated trial logs (for download)
 let allTrialLogs = [];
@@ -589,6 +590,7 @@ function handleInit() {
   showStartOverlay(true);
   setOverlayPrompt("Loading…");
   updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Loading scene…`);
+  _sceneReadyPromptShown = false;
   console.log("[FSM] → WAITING_FOR_START");
 }
 
@@ -600,8 +602,8 @@ function handleWaitingForStart(state) {
   }
 
   // Textures just became ready — flip overlay and status bar to "Press START" (runs once per trial)
-  const statusEl = document.getElementById("status-bar");
-  if (statusEl && statusEl.innerText.includes("Loading scene")) {
+  if (!_sceneReadyPromptShown) {
+    _sceneReadyPromptShown = true;
     setOverlayPrompt("Press the screen<br>or press space bar");
     updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Press START`);
   }
@@ -640,23 +642,16 @@ function handlePlaying(state) {
   else if (isStay) trialProceeding = PROCEEDING.STAY;
   else trialProceeding = PROCEEDING.RETROCEED;
 
-  // ── Time-to-win expired (one-shot) ──
+  // ── Time-to-win expired (one-shot) — disabled, mirrors Python commented-out block ──
   if (timeElapsed > (trial.elapsed_time_to_win ?? 0) && !_timeWinExpired) {
-    console.log(`[TIME] Time to win exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeWinExpired = true;
-    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true });
-    writeCommands(cmds);
-    fsmState = FSM.WAITING_ANIMATION_START;
-    console.log("[FSM] → WAITING_ANIMATION_START");
-    logFrame(state, cmds);
-    return;
   }
 
   // ── Time-to-retroceed expired (one-shot) ──
   if (timeElapsed > (trial.elapsed_time_to_retroceed ?? 0) && !_timeRetroceedExpired) {
     console.log(`[TIME] Time to retroceed exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeRetroceedExpired = true;
-    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true, animation_colored: true });
+    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: true });
     writeCommands(cmds);
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -681,10 +676,10 @@ function handlePlaying(state) {
 
     let cmds;
 
-    // Branch 1: Last attempt AND fail → all red
+    // Branch 1: Last attempt AND fail → single door (no all-door, no colored), mirrors Python
     if ((nrAttempts + 1) === retroceedThreshold && cosineAlignment < cosineThreshold) {
-      console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed (all red)`);
-      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true, animation_colored: true });
+      console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
+      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true });
       writeCommands(cmds);
       fsmState = FSM.WAITING_ANIMATION_START;
       logFrame(state, cmds);
@@ -1116,29 +1111,45 @@ function setupInput() {
       touchState.twoFingerTouch.lastMoveDistance = dist;
       touchState.twoFingerTouch.lastMoveTime = now;
 
-    } else if (e.touches.length === 1 && touchState.singleTouch.active) {
+    } else if (e.touches.length === 1) {
       const t = e.touches[0];
-      touchState.singleTouch.currentX = t.clientX;
-      touchState.singleTouch.currentY = t.clientY;
-      
-      const dt = (now - touchState.singleTouch.lastMoveTime) / 1000;
-      if (dt > 0 && dt < 0.15) {
-        const dx = t.clientX - touchState.singleTouch.lastMoveX;
-        const instantVel = dx / dt; // px/s
-        
-        // ASYMMETRIC SMOOTHING: 
-        // If swiping in the opposite direction of current momentum, bypass 
-        // smoothing to instantly catch the object and reverse direction.
-        let alpha = touchState.velocitySmoothing;
-        if (Math.sign(instantVel) !== Math.sign(touchState.rotationVelocity) && Math.abs(instantVel) > 20) {
-          alpha = 0.95; // Snap to new direction almost instantly
-        }
-        
-        touchState.rotationVelocity = touchState.rotationVelocity * (1 - alpha) + instantVel * alpha;
+      // Recovery: touch started before PLAYING (e.g. on the start overlay) — adopt it now
+      if (!touchState.singleTouch.active) {
+        touchState.singleTouch.active = true;
+        touchState.singleTouch.identifier = t.identifier;
+        touchState.singleTouch.startX = t.clientX;
+        touchState.singleTouch.startY = t.clientY;
+        touchState.singleTouch.currentX = t.clientX;
+        touchState.singleTouch.currentY = t.clientY;
+        touchState.singleTouch.lastMoveX = t.clientX;
+        touchState.singleTouch.lastMoveY = t.clientY;
+        touchState.singleTouch.lastMoveTime = now;
+        touchState.singleTouch.startTime = Date.now();
+        touchState.rotationVelocity = 0;
       }
-      touchState.singleTouch.lastMoveX = t.clientX;
-      touchState.singleTouch.lastMoveY = t.clientY;
-      touchState.singleTouch.lastMoveTime = now;
+      if (touchState.singleTouch.active) {
+        touchState.singleTouch.currentX = t.clientX;
+        touchState.singleTouch.currentY = t.clientY;
+
+        const dt = (now - touchState.singleTouch.lastMoveTime) / 1000;
+        if (dt > 0 && dt < 0.15) {
+          const dx = t.clientX - touchState.singleTouch.lastMoveX;
+          const instantVel = dx / dt; // px/s
+
+          // ASYMMETRIC SMOOTHING:
+          // If swiping in the opposite direction of current momentum, bypass
+          // smoothing to instantly catch the object and reverse direction.
+          let alpha = touchState.velocitySmoothing;
+          if (Math.sign(instantVel) !== Math.sign(touchState.rotationVelocity) && Math.abs(instantVel) > 20) {
+            alpha = 0.95; // Snap to new direction almost instantly
+          }
+
+          touchState.rotationVelocity = touchState.rotationVelocity * (1 - alpha) + instantVel * alpha;
+        }
+        touchState.singleTouch.lastMoveX = t.clientX;
+        touchState.singleTouch.lastMoveY = t.clientY;
+        touchState.singleTouch.lastMoveTime = now;
+      }
     }
   }, { passive: false });
 

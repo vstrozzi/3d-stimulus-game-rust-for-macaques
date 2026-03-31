@@ -55,8 +55,9 @@ pub fn handle_door_animation(
         let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
         let base_intensity = max_spotlight_intensity * intensity_factor;
         
-        if door_win_entities.animate_all {
-            base_intensity / 10.0
+        // If animating everythir
+        if door_win_entities.animate_all {  
+            0.0
         } else {
             base_intensity
         }

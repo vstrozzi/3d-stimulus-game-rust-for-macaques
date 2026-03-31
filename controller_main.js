@@ -155,6 +155,9 @@ let touchState = {
   // Velocity tracking (px/s, decayed by inertia after release)
   rotationVelocity: 0,  // positive = right, negative = left
   zoomVelocity: 0,      // positive = zoom in (fingers apart), negative = zoom out
+  // Accumulators for Pulse Width Modulation (PWM)
+  rotationAccumulator: 0,
+  zoomAccumulator: 0,
   // Pinch-tap suppression
   wasPinching: false,
   pinchEndTime: 0,
@@ -163,10 +166,10 @@ let touchState = {
   tapMaxTime: 300,
   pinchTapCooldown: 250, // ms: suppress tap detection after pinch gesture
   // Velocity reference (used only to compute inertia duration, not fire rate)
-  maxRotationVelocity: 500, // px/s: reference speed for inertia scaling
-  maxZoomVelocity: 350,     // px/s: reference speed for inertia scaling
+  maxRotationVelocity: 600, // px/s: reference speed for inertia scaling
+  maxZoomVelocity: 400,     // px/s: reference speed for inertia scaling
   // Inertia: short, clean coast after release (~0.25s)
-  friction: 0.18,            // vel *= (1 - friction) per frame → stops in ~15 frames
+  friction: 0.12,            // vel *= (1 - friction) per frame → stops in ~15 frames
   velocityStopThreshold: 60,  // px/s: below this, snap to zero cleanly
   // EMA smoothing for velocity during active drag
   velocitySmoothing: 0.55,   // alpha: higher = more responsive, lower = smoother
@@ -946,14 +949,39 @@ function applyRotationFromVelocity() {
   const vel = touchState.rotationVelocity;
   const absVel = Math.abs(vel);
 
-  if (absVel < touchState.velocityStopThreshold) {
+  // Map velocity to a duty cycle (0.0 to 1.0)
+  let dutyCycle = touchState.singleTouch.active ? 1.0 : (absVel / touchState.maxRotationVelocity);
+  dutyCycle = Math.min(1.0, Math.max(0.0, dutyCycle));
+
+  // The "1/3 Tick" Rule: Cut off the clumsy stutter at the end of the inertia
+  if (!touchState.singleTouch.active && dutyCycle > 0 && dutyCycle < 0.33) {
     touchState.rotateLeft = false;
     touchState.rotateRight = false;
     touchState.rotationVelocity = 0;
-  } else {
+    touchState.rotationAccumulator = 0;
+    return;
+  }
+
+  if (absVel === 0) {
+    touchState.rotateLeft = false;
+    touchState.rotateRight = false;
+    return;
+  }
+
+  // Accumulate the fractional duty cycle
+  touchState.rotationAccumulator += dutyCycle;
+
+  // If we cross 1.0, fire the boolean for this tick and subtract 1.0
+  if (touchState.rotationAccumulator >= 1.0) {
     touchState.rotateLeft = vel < 0;
     touchState.rotateRight = vel > 0;
+    touchState.rotationAccumulator -= 1.0;
+  } else {
+    // Drop the tick to simulate slower speed
+    touchState.rotateLeft = false;
+    touchState.rotateRight = false;
   }
+
   setKeyUI("left", inputs.rotate_left || touchState.rotateLeft);
   setKeyUI("right", inputs.rotate_right || touchState.rotateRight);
 }
@@ -966,14 +994,34 @@ function applyZoomFromVelocity() {
   const vel = touchState.zoomVelocity;
   const absVel = Math.abs(vel);
 
-  if (absVel < touchState.velocityStopThreshold) {
+  let dutyCycle = touchState.twoFingerTouch.active ? 1.0 : (absVel / touchState.maxZoomVelocity);
+  dutyCycle = Math.min(1.0, Math.max(0.0, dutyCycle));
+
+  if (!touchState.twoFingerTouch.active && dutyCycle > 0 && dutyCycle < 0.33) {
     touchState.zoomIn = false;
     touchState.zoomOut = false;
     touchState.zoomVelocity = 0;
-  } else {
+    touchState.zoomAccumulator = 0;
+    return;
+  }
+
+  if (absVel === 0) {
+    touchState.zoomIn = false;
+    touchState.zoomOut = false;
+    return;
+  }
+
+  touchState.zoomAccumulator += dutyCycle;
+
+  if (touchState.zoomAccumulator >= 1.0) {
     touchState.zoomIn = vel > 0;
     touchState.zoomOut = vel < 0;
+    touchState.zoomAccumulator -= 1.0;
+  } else {
+    touchState.zoomIn = false;
+    touchState.zoomOut = false;
   }
+
   setKeyUI("up", inputs.zoom_in || touchState.zoomIn);
   setKeyUI("down", inputs.zoom_out || touchState.zoomOut);
 }
@@ -1072,12 +1120,20 @@ function setupInput() {
       const t = e.touches[0];
       touchState.singleTouch.currentX = t.clientX;
       touchState.singleTouch.currentY = t.clientY;
-      // Compute rotation velocity from consecutive touchmove events
+      
       const dt = (now - touchState.singleTouch.lastMoveTime) / 1000;
       if (dt > 0 && dt < 0.15) {
         const dx = t.clientX - touchState.singleTouch.lastMoveX;
         const instantVel = dx / dt; // px/s
-        const alpha = touchState.velocitySmoothing;
+        
+        // ASYMMETRIC SMOOTHING: 
+        // If swiping in the opposite direction of current momentum, bypass 
+        // smoothing to instantly catch the object and reverse direction.
+        let alpha = touchState.velocitySmoothing;
+        if (Math.sign(instantVel) !== Math.sign(touchState.rotationVelocity) && Math.abs(instantVel) > 20) {
+          alpha = 0.95; // Snap to new direction almost instantly
+        }
+        
         touchState.rotationVelocity = touchState.rotationVelocity * (1 - alpha) + instantVel * alpha;
       }
       touchState.singleTouch.lastMoveX = t.clientX;

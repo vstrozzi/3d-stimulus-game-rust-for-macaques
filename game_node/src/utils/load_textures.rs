@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, ImageAddressMode};
 use bevy::math::Affine2;
+use crate::{PreloadedTextures, GameConditions, GameStateLocal};
 
 /// Holds all loaded handles for one PBR texture set.
 /// Store this as a resource so handles stay alive.
@@ -147,5 +148,48 @@ pub fn tinted_material_tiled(tex: &TextureSet, tint: Color, tile: f32) -> Standa
     StandardMaterial {
         uv_transform: Affine2::from_scale(Vec2::splat(tile)),
         ..tinted_material(tex, tint)
+    }
+}
+
+/// Load every texture set at startup and keep the handles in a resource.
+/// This prevents Bevy from GC-ing images between resets, eliminating WASM fetch stalls.
+pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMut<PreloadedTextures>) {
+    use shared::Texture;
+    use strum::IntoEnumIterator;
+    for tex in Texture::iter() {
+        preloaded.0.insert(tex, load_texture_set(&asset_server, &tex.asset_folder()));
+    }
+}
+
+/// Each frame while `is_scene_ready` is false, check whether all textures used by the
+/// current trial are fully loaded (including GPU upload). Once confirmed, set the flag so
+/// the controller knows it is safe to remove the blank screen.
+pub fn check_scene_ready(
+    mut game_conditions: ResMut<GameConditions>,
+    preloaded: Res<PreloadedTextures>,
+    images: Res<Assets<Image>>,
+    local_game_struct: Res<GameStateLocal>,
+) {
+    if game_conditions.is_scene_ready {
+        return;
+    }
+
+    use shared::Texture;
+    let gs = &local_game_struct.0;
+
+    // All six texture slots (face + decoration) used by the current trial config must be loaded
+    let all_loaded = gs.textures.iter()
+        .chain(gs.decorations_texture.iter())
+        .all(|&t| {
+            let tex = Texture::from_u32(t);
+            let res = 
+            preloaded.0.get(&tex)
+                .map(|set| set.all_loaded(&images))
+                .unwrap_or(false);
+            res
+        });
+
+    if all_loaded {
+        game_conditions.is_scene_ready = true;
     }
 }

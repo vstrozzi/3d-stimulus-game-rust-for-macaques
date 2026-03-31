@@ -651,7 +651,7 @@ function handlePlaying(state) {
   if (timeElapsed > (trial.elapsed_time_to_retroceed ?? 0) && !_timeRetroceedExpired) {
     console.log(`[TIME] Time to retroceed exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeRetroceedExpired = true;
-    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: true });
+    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: false });
     writeCommands(cmds);
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");

@@ -534,7 +534,7 @@ class MonkeyGameController:
                 "zoom_in": False, "zoom_out": False,
                 "check": True, "reset": False, "blank_screen": False,
                 "stop_rendering": True, "animation_door": True,
-                "animation_all_door": False, "animation_colored": True,
+                "animation_all_door": False, "animation_colored": False,
             })
             self.fsm_state = ControllerState.WAITING_ANIMATION_START
             print("[FSM] → WAITING_ANIMATION_START")

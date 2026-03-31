@@ -34,7 +34,7 @@ const N_COLOR_CHANNELS = 4;                    // RGBA
 const N_COLOR_FLOATS  = N_FACES * N_COLOR_CHANNELS; // 12
 const N_COMMANDS      = 11;
 
-const TRIALS_PATH = "./trials_config/trials.jsonl";
+const TRIALS_PATH = "../trials_config/trials.jsonl";
 
 // Six evenly-spaced start orientations (one per door of the hexagonal base)
 const START_ORIENTS = Array.from({ length: N_FACES * 2 }, (_, k) => k * 2.0 * Math.PI / (N_FACES * 2));

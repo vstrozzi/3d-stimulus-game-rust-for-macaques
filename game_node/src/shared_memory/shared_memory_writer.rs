@@ -30,7 +30,6 @@ pub fn increment_timing(
         return;
     }
 
-
     // Add the delta 
     if let Some(ref mut total) = round_start.0 {
         *total += time.delta();

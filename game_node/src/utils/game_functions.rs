@@ -22,6 +22,9 @@ pub fn handle_door_animation(
     }
 
     let Some(start_time) = door_win_entities.animation_start_time else {
+        // animation_start_time is None but is_animating is true: stale flag from shared
+        // memory overwrite (game_structure_control had a previous frame's value).
+        // Clear it so the controller can exit WAITING_ANIMATION_END and resume.
         return;
     };
 
@@ -32,7 +35,27 @@ pub fn handle_door_animation(
     let stay_open_end = fade_out_end + f32::from_bits(gs_game.door_anim_stay_open);
     let fade_in_end = stay_open_end + f32::from_bits(gs_game.door_anim_fade_in);
 
-    // Calculate animation intensity (0.0 to 1.0)
+    // Cleanup if animation is finished
+    let is_finished = elapsed >= fade_in_end;
+    if is_finished {
+        // Ensure final state is fully reset
+        for (mut vis, mut spotlight) in light_query.iter_mut() {
+            *vis = Visibility::Hidden;
+            spotlight.intensity = 0.0;
+        }
+        for (mut vis, mat_handle) in emissive_query.iter_mut() {
+            *vis = Visibility::Hidden;
+            if let Some(material) = materials.get_mut(&mat_handle.0) {
+                material.emissive = Color::BLACK.to_linear();
+            }
+        }
+        // Clean up state
+        door_win_entities.animation_start_time = Some(time.elapsed());
+        gs_game.is_animating = false;
+        return;
+    }
+
+    // Not finished, calculate intensity factor (0.0 to 1.0) based on phase
     let intensity_factor = if elapsed < fade_out_end {
         // Phase 1: Fade Out (Opening) - 0.0 to 1.0
         elapsed / fade_out_end + 0.0001 // Add to avoid edge case
@@ -47,27 +70,22 @@ pub fn handle_door_animation(
         0.0
     };
 
-    let is_active = intensity_factor > 0.0;
-    let target_visibility = if is_active { Visibility::Visible } else { Visibility::Hidden };
-
     // Determine target intensity
-    let target_intensity = if is_active {
+    let target_intensity = {
         let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
         let base_intensity = max_spotlight_intensity * intensity_factor;
         
-        // If animating everythir
+        // If animating everything
         if door_win_entities.animate_all {  
             0.0
         } else {
             base_intensity
         }
-    } else {
-        0.0
     };
 
     // Update helpers
     let update_light = |visibility: &mut Visibility, spotlight: &mut SpotLight, color: Color| {
-        *visibility = target_visibility;
+        *visibility = Visibility::Visible;
         spotlight.intensity = target_intensity;
         spotlight.color = color;
     };
@@ -78,7 +96,7 @@ pub fn handle_door_animation(
         materials: &mut Assets<StandardMaterial>,
         color: Color
     | {
-        *visibility = target_visibility;
+        *visibility = Visibility::Visible;
         if let Some(material) = materials.get_mut(&material_handle.0) {
             material.emissive = color.to_linear();
         }
@@ -108,11 +126,6 @@ pub fn handle_door_animation(
         }
     }
 
-    // Unify state cleanup at the end
-    if !is_active {
-        door_win_entities.animation_start_time = None;
-        gs_game.is_animating = false;
-    }
 }
 
 // Update the score bar based on the current level state

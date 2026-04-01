@@ -47,18 +47,10 @@ impl Plugin for SystemsLogicPlugin {
                     handle_stop_rendering,
                     handle_rotation,
                     handle_zoom,
-                    handle_check_alignment.after(handle_animation_door_command),
-                    ),
-            )
-            // Commands that needs to chain
-
-            // Animations
-            .add_systems(
-                Update,
-                (
+                    handle_check_alignment,
                     handle_door_animation,
                     update_score_bar,
-                )
+                    ).chain(),
             )
             // Post Update
             .add_systems(

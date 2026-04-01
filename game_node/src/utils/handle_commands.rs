@@ -30,6 +30,7 @@ pub fn handle_reset_command(
     spotlight_query: Query<&mut SpotLight, (Without<crate::utils::objects::HoleLight>, Without<GameEntity>)>,
     round_start: ResMut<RoundStartTimestamp>,
     mut door_win_entities: ResMut<DoorWinEntities>,
+    time: Res<Time>,
 ) {    
     if !pending.reset {
         return;
@@ -39,7 +40,6 @@ pub fn handle_reset_command(
     frame_counter.0 = 0;
 
     // Clear animation state to avoid stale entity references after despawn
-    door_win_entities.animation_start_time = None;
     door_win_entities.winning_light = None;
     door_win_entities.winning_emissive = None;
 
@@ -62,6 +62,7 @@ pub fn handle_reset_command(
     round_start,
     local_game_struct,
     door_win_entities,
+    time,
     );
 
     spawn_score_bar(&mut commands, progress_bar_size);
@@ -76,6 +77,7 @@ pub fn handle_animation_door_command(
     mut local_game_struct: ResMut<GameStateLocal>,
     time: Res<Time>,
 ) {
+    // React only on animation door or when not animating
     if !pending.animation_door{
         return;
     }
@@ -123,7 +125,7 @@ pub fn handle_check_alignment(
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
     // Only proceed check alignment was requested or when not animating
-    if !pending.check_alignment || local_game_struct.0.is_animating{
+    if !pending.check_alignment{
         return;
     }
 

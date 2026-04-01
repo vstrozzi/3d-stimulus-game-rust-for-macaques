@@ -113,6 +113,7 @@ let frameLog = {};
 let trialRunCounter = 0;
 let currentFrame = -1;
 let gameTimeUnresponsive = 0;
+let old_cmds = {}; // for change detection in logFrame
 
 // Special flags
 let _start = false;
@@ -194,6 +195,58 @@ function floatToU32Bits(f) {
 function u32BitsToFloat(u) {
   _u32View[0] = u;
   return _f32View[0];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOADING OVERLAY HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function setLoadingStep(label) {
+  const el = document.getElementById("loading-step");
+  if (el) el.textContent = label;
+}
+
+function setLoadingProgress(pct) {
+  const fill = document.getElementById("loading-bar-fill");
+  const pctEl = document.getElementById("loading-pct");
+  if (!fill) return;
+  if (pct < 0) {
+    // indeterminate
+    fill.classList.add("indeterminate");
+    if (pctEl) pctEl.textContent = "";
+  } else {
+    fill.classList.remove("indeterminate");
+    fill.style.width = `${pct}%`;
+    if (pctEl) pctEl.textContent = pct < 100 ? `${pct}%` : "";
+  }
+}
+
+function hideLoadingOverlay() {
+  const el = document.getElementById("loading-overlay");
+  if (el) el.style.display = "none";
+}
+
+// Fetch a URL while reporting download progress.
+// onProgress(loadedBytes, totalBytes) — totalBytes is 0 if Content-Length is absent.
+// Returns an ArrayBuffer of the full response body.
+async function fetchWithProgress(url, onProgress) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Fetch failed: ${url} (${resp.status})`);
+  const total = parseInt(resp.headers.get("content-length") || "0", 10);
+  const reader = resp.body.getReader();
+  const chunks = [];
+  let received = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    onProgress(received, total);
+  }
+  const buffer = new Uint8Array(received);
+  let pos = 0;
+  for (const chunk of chunks) { buffer.set(chunk, pos); pos += chunk.length; }
+  return buffer.buffer;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -589,7 +642,7 @@ function handleInit() {
 
   // Show start overlay with loading text until is_scene_ready comes back true
   showStartOverlay(true);
-  setOverlayPrompt("Loading…");
+  setOverlayPrompt("Loading scene & textures…", true);
   updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Loading scene…`);
   _sceneReadyPromptShown = false;
   console.log("[FSM] → WAITING_FOR_START");
@@ -605,7 +658,7 @@ function handleWaitingForStart(state) {
   // Textures just became ready — flip overlay and status bar to "Press START" (runs once per trial)
   if (!_sceneReadyPromptShown) {
     _sceneReadyPromptShown = true;
-    setOverlayPrompt("Press the screen<br>or press space bar");
+    setOverlayPrompt("Press the screen<br>or press space bar", false);
     updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Press START`);
   }
 
@@ -655,6 +708,7 @@ function handlePlaying(state) {
     _timeRetroceedExpired = true;
     const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: false });
     writeCommands(cmds);
+    old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
     logFrame(state, cmds);
@@ -683,6 +737,7 @@ function handlePlaying(state) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
       cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true });
       writeCommands(cmds);
+      old_cmds = cmds;
       fsmState = FSM.WAITING_ANIMATION_START;
       nrAttempts += 1;
       logFrame(state, cmds);
@@ -711,6 +766,7 @@ function handlePlaying(state) {
 
     nrAttempts += 1;
     writeCommands(cmds);
+    old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
     logFrame(state, cmds);
@@ -734,23 +790,25 @@ function handlePlaying(state) {
   });
   writeCommands(cmds);
   logFrame(state, cmds);
+  old_cmds = cmds;
 }
 
 function handleWaitingAnimationStart(state) {
   if (state.is_animating) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
-    fsmState = FSM.WAITING_ANIMATION_END;
+    fsmState = FSM.WAITING_ANIMATION_END;     
+    copyGameStateGameToControl();
+    cmds = writeNoCommands();
+
+  }else {
+    writeCommands(old_cmds);
   }
-  // Send all-false commands
-  const cmds = writeNoCommands();
-  // Advance/stay/retroceed chain index if the trial is already decided
   // (mirrors Python's _handle_waiting_animation_start → _handle_trial_index_update)
   if (checkHasFinished(state)) {
     handleTrialIndexUpdate();
   }
   // Sync game state to control (matches Python's self.write_game_state(state))
-  copyGameStateGameToControl();
-  logFrame(state, cmds);
+  logFrame(state, old_cmds);
 }
 
 function handleWaitingAnimationEnd(state) {
@@ -855,14 +913,7 @@ function controllerLoop() {
   if (frameNum === currentFrame) {
     gameTimeUnresponsive += POLLING_INTERVAL_MS / 1000;
     // Only resync when in states where the game should be producing frames.
-    // In WAITING_FOR_START the game is paused (blank + stop_rendering) so it may
-    // legitimately not advance frame_number. Same for animation-wait states.
-    // Resyncing here would re-enter INIT and re-toggle blank/stop, causing the
-    // screen to get stuck black (toggle-undo loop).
-    const canResync = fsmState !== FSM.WAITING_FOR_START &&
-      fsmState !== FSM.WAITING_ANIMATION_START &&
-      fsmState !== FSM.WAITING_ANIMATION_END;
-    if (canResync && (gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0)) {
+    if ((gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0)) {
       console.log(`[FSM] Game unresponsive for ${gameTimeUnresponsive.toFixed(1)}s, resyncing...`);
       resyncWithGame();
     }
@@ -1048,9 +1099,11 @@ function showStartOverlay(show) {
   if (el) el.style.display = show ? "flex" : "none";
 }
 
-function setOverlayPrompt(html) {
-  const el = document.querySelector("#start-trial-overlay .prompt");
+function setOverlayPrompt(html, isLoading = false) {
+  const el = document.getElementById("trial-prompt");
   if (el) el.innerHTML = html;
+  const spinner = document.getElementById("trial-spinner");
+  if (spinner) spinner.classList.toggle("visible", isLoading);
 }
 
 
@@ -1345,22 +1398,51 @@ async function loadLevels() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function start() {
+  // ── Step 1: Download WASM with progress bar ──────────────────────────────
+  setLoadingStep("Downloading game (WASM)...");
+  setLoadingProgress(0);
   updateStatusBar("Loading WASM...");
 
-  // Initialize WASM
-  const wasm = await init();
+  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm", import.meta.url);
+  let wasmBuffer;
+  try {
+    wasmBuffer = await fetchWithProgress(wasmUrl, (loaded, total) => {
+      const mb = (loaded / 1048576).toFixed(1);
+      if (total > 0) {
+        const pct = Math.min(99, Math.round((loaded / total) * 100));
+        setLoadingProgress(pct);
+        setLoadingStep(`Downloading game (WASM) — ${mb} / ${(total / 1048576).toFixed(1)} MB`);
+      } else {
+        setLoadingStep(`Downloading game (WASM) — ${mb} MB`);
+      }
+    });
+  } catch (e) {
+    setLoadingStep("Failed to download game: " + e.message);
+    console.error(e);
+    return;
+  }
+
+  // ── Step 2: Instantiate WASM ─────────────────────────────────────────────
+  setLoadingStep("Initializing WASM...");
+  setLoadingProgress(-1); // indeterminate while JS compiles
+  const wasm = await init({ module_or_path: wasmBuffer });
   memory = wasm.memory;
   REFRESH_RATE_HZ = refresh_rate_hz(); // read from Rust constants, like Python's monkey_shared.REFRESH_RATE_HZ
 
+  // ── Step 3: Load levels ──────────────────────────────────────────────────
+  setLoadingStep("Loading levels...");
+  setLoadingProgress(-1);
   updateStatusBar("Loading levels...");
   await loadLevels();
 
   if (levels.length === 0) {
+    setLoadingStep("ERROR: No levels loaded");
     updateStatusBar("ERROR: No levels loaded");
     return;
   }
 
-  // Create shared memory
+  // ── Step 4: Set up shared memory ─────────────────────────────────────────
+  setLoadingStep("Setting up game memory...");
   const sharedPtr = create_shared_memory_wasm();
   sharedMem = new WebSharedMemory(sharedPtr);
 
@@ -1380,7 +1462,7 @@ async function start() {
   pointers.gsGame = sharedMem.get_game_structure_game_ptr();
   pointers.gsControl = sharedMem.get_game_structure_control_ptr();
 
-  // Start Bevy game (WASM main on same thread)
+  // ── Step 5: Start Bevy ───────────────────────────────────────────────────
   wasm_main();
 
   // Setup input handlers
@@ -1404,6 +1486,10 @@ async function start() {
   }
 
   _running = true;
+  setLoadingStep("Ready!");
+  setLoadingProgress(100);
+  // Small delay so "Ready!" is visible, then hide the overlay
+  setTimeout(hideLoadingOverlay, 300);
   updateStatusBar("Ready");
 
   // Start controller FSM loop (~1ms tick, matching Python's POLLING_RATE_TIME_S)

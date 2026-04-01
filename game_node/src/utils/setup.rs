@@ -84,6 +84,7 @@ pub fn setup_round(
     mut round_start: ResMut<crate::utils::objects::RoundStartTimestamp>,
     mut local_game_struct: ResMut<GameStateLocal>,
     mut door_win_entities: ResMut<DoorWinEntities>,
+    time: Res<Time>,
 ) {
     // Read shared memory
     let Some(shm_res) = shm_res else {
@@ -202,7 +203,7 @@ pub fn setup_round(
     // Populate DoorWinEntities with the target door's entities and reset timer
     door_win_entities.winning_light = winning_light;
     door_win_entities.winning_emissive = winning_emissive;
-    door_win_entities.animation_start_time = None;
+    door_win_entities.animation_start_time = Some(time.elapsed());
 }
 
 fn create_extended_semicircle_mesh(

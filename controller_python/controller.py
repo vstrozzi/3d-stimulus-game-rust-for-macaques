@@ -138,7 +138,6 @@ def load_levels(trials_path="trials_config/trials.jsonl"):
 class ControllerState(Enum):
     INIT = auto()
     WAITING_FOR_START = auto()
-    LOADING_TRIAL = auto()
     PLAYING = auto()
     WAITING_ANIMATION_START = auto()
     WAITING_ANIMATION_END = auto()
@@ -197,6 +196,7 @@ class MonkeyGameController:
         # FSM
         self.fsm_state = ControllerState.INIT
         self.trial_proceeding = TrialProceeding.ADVANCE
+        self.old_cmds = {}
 
         # Special commands
         self._start = False
@@ -407,6 +407,7 @@ class MonkeyGameController:
                 self._handle_waiting_animation_end(state)
             elif self.fsm_state == ControllerState.TRIAL_COMPLETE:
                 self._handle_trial_complete(state)
+            self.write_game_state(state)
 
             time.sleep(POLLING_RATE_TIME_S / 1000.0)
             self.game_time_unresponsive = 0.0
@@ -536,9 +537,9 @@ class MonkeyGameController:
                 "stop_rendering": True, "animation_door": True,
                 "animation_all_door": False, "animation_colored": False,
             })
+            self.old_cmds = cmds
             self.fsm_state = ControllerState.WAITING_ANIMATION_START
             print("[FSM] → WAITING_ANIMATION_START")
-            self.write_commands(cmds)
             self.log_frame(state, cmds)
             return
 
@@ -565,6 +566,7 @@ class MonkeyGameController:
                     "stop_rendering": True, "animation_door": True,
                     "animation_all_door": False, "animation_colored": False,
                 })
+                self.old_cmds = cmds
                 self.fsm_state = ControllerState.WAITING_ANIMATION_START
                 self.nr_attempts += 1
                 print("[FSM] → WAITING_ANIMATION_START")
@@ -600,10 +602,11 @@ class MonkeyGameController:
                     "animation_all_door": True, "animation_colored": False,
                 })
 
+            self.old_cmds = cmds
             self.nr_attempts += 1
             self.fsm_state = ControllerState.WAITING_ANIMATION_START
             print("[FSM] → WAITING_ANIMATION_START")
-            self.write_commands(cmds)
+            self.write_game_state(state)
             self.log_frame(state, cmds)
             return
 
@@ -614,20 +617,15 @@ class MonkeyGameController:
         if state.get("is_animating", False):
             print("[FSM] Animation started → WAITING_ANIMATION_END")
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
-
-        cmds = self.write_commands({
-            "rotate_left": False, "rotate_right": False,
-            "zoom_in": False, "zoom_out": False,
-            "check": False, "reset": False, "blank_screen": False,
-            "stop_rendering": False, "animation_door": False,
-            "animation_all_door": False, "animation_colored": False,
-        })
+            self.write_game_state(state)  # mirrors copyGameStateGameToControl
+            self.write_no_commands()
+        else:
+            self.shm_wrapper.write_commands(**self.old_cmds)
 
         if self.check_has_finished(state):
             self._handle_trial_index_update()
 
-        self.write_game_state(state)
-        self.log_frame(state, cmds)
+        self.log_frame(state, self.old_cmds)
 
     def _handle_waiting_animation_end(self, state):
         if not state.get("is_animating", True):

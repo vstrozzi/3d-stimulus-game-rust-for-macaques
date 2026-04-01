@@ -396,7 +396,7 @@ class MonkeyGameController:
             state["progress_bar_size"] = self._progress_bar_size()
 
             if self.fsm_state == ControllerState.INIT:
-                self._handle_init()
+                self._handle_init(state)
             elif self.fsm_state == ControllerState.WAITING_FOR_START:
                 self._handle_waiting_for_start(state)
             elif self.fsm_state == ControllerState.PLAYING:
@@ -416,7 +416,7 @@ class MonkeyGameController:
         print("[FSM] Controller stopped.")
 
     # FSM handlers (command logic unchanged)
-    def _handle_init(self):
+    def _handle_init(self, state):
         print("[FSM] INIT → issuing blank_screen + stop_rendering")
         flat = self.flat_trial
         print(f"[FSM] Level {self.current_level_index} chain {self.active_chain} "
@@ -431,7 +431,7 @@ class MonkeyGameController:
 
         state_old = self.shm_wrapper.read_game_state()
 
-        self.write_game_state(trial_state)
+        state.update(trial_state)
         self.trial_start_state = trial_state
 
         print(f"state old {state_old.get('is_blank', False)} and stop {state_old.get('is_rendering_stopped', False)}")

@@ -122,8 +122,8 @@ pub fn handle_check_alignment(
     ui_query: Query<Entity, With<UIEntity>>,
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
-    // Only proceed check alignment was requested
-    if !pending.check_alignment {
+    // Only proceed check alignment was requested or when not animating
+    if !pending.check_alignment || local_game_struct.0.is_animating{
         return;
     }
 

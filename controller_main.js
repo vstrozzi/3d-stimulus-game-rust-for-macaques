@@ -29,10 +29,10 @@ import init, {
 let REFRESH_RATE_HZ = null;
 
 // Struct layout constants — derived from shared/src/lib.rs SharedGameState / SharedCommands
-const N_FACES         = 3;
+const N_FACES = 3;
 const N_COLOR_CHANNELS = 4;                    // RGBA
-const N_COLOR_FLOATS  = N_FACES * N_COLOR_CHANNELS; // 12
-const N_COMMANDS      = 11;
+const N_COLOR_FLOATS = N_FACES * N_COLOR_CHANNELS; // 12
+const N_COMMANDS = 11;
 
 const TRIALS_PATH = "./trials_config/trials.jsonl";
 
@@ -116,6 +116,7 @@ let gameTimeUnresponsive = 0;
 
 // Special flags
 let _start = false;
+let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
 let _timeWinExpired = false;
 let _timeRetroceedExpired = false;
 let _running = false;
@@ -210,10 +211,10 @@ function readGameState() {
     target_door: v.getUint32(o.target_door, true),
     // colors: flat [u32; N_COLOR_FLOATS]
     colors: Array.from({ length: N_COLOR_FLOATS }, (_, i) => v.getUint32(o.colors + i * 4, true)),
-    decorations_count:  Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_count  + i * 4, true)),
-    decorations_size:   Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_size   + i * 4, true)),
-    decorations_seeds:  Array.from({ length: N_FACES }, (_, i) => readU64(v, o.decorations_seeds   + i * 8)),
-    decorations_shape:  Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_shape  + i * 4, true)),
+    decorations_count: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_count + i * 4, true)),
+    decorations_size: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_size + i * 4, true)),
+    decorations_seeds: Array.from({ length: N_FACES }, (_, i) => readU64(v, o.decorations_seeds + i * 8)),
+    decorations_shape: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_shape + i * 4, true)),
     cosine_alignment_threshold: v.getUint32(o.cosine_alignment_threshold, true),
     door_anim_fade_out: v.getUint32(o.door_anim_fade_out, true),
     door_anim_stay_open: v.getUint32(o.door_anim_stay_open, true),
@@ -301,14 +302,14 @@ function writeGameStateControl(state) {
   v.setUint32(o.target_door, state.target_door, true);
 
   const writeU32Array = (base, arr, n) => { for (let i = 0; i < n; i++) v.setUint32(base + i * 4, arr[i], true); };
-  if (state.colors)              writeU32Array(o.colors,              state.colors,              N_COLOR_FLOATS);
-  if (state.decorations_count)   writeU32Array(o.decorations_count,   state.decorations_count,   N_FACES);
-  if (state.decorations_size)    writeU32Array(o.decorations_size,    state.decorations_size,     N_FACES);
-  if (state.decorations_shape)   writeU32Array(o.decorations_shape,   state.decorations_shape,   N_FACES);
-  if (state.textures)            writeU32Array(o.textures,            state.textures,            N_FACES);
+  if (state.colors) writeU32Array(o.colors, state.colors, N_COLOR_FLOATS);
+  if (state.decorations_count) writeU32Array(o.decorations_count, state.decorations_count, N_FACES);
+  if (state.decorations_size) writeU32Array(o.decorations_size, state.decorations_size, N_FACES);
+  if (state.decorations_shape) writeU32Array(o.decorations_shape, state.decorations_shape, N_FACES);
+  if (state.textures) writeU32Array(o.textures, state.textures, N_FACES);
   if (state.decorations_texture) writeU32Array(o.decorations_texture, state.decorations_texture, N_FACES);
   if (state.decorations_thickness) writeU32Array(o.decorations_thickness, state.decorations_thickness, N_FACES);
-  if (state.decorations_color)   writeU32Array(o.decorations_color,   state.decorations_color,   N_COLOR_FLOATS);
+  if (state.decorations_color) writeU32Array(o.decorations_color, state.decorations_color, N_COLOR_FLOATS);
   if (state.decorations_seeds) {
     for (let i = 0; i < N_FACES; i++) writeU64(v, o.decorations_seeds + i * 8, state.decorations_seeds[i]);
   }
@@ -321,7 +322,7 @@ function writeGameStateControl(state) {
   v.setUint32(o.ambient_brightness, state.ambient_brightness, true);
   v.setUint32(o.max_spotlight_intensity, state.max_spotlight_intensity, true);
 
-  v.setUint32(o.progress_bar_size,     state.progress_bar_size     ?? 0, true);
+  v.setUint32(o.progress_bar_size, state.progress_bar_size ?? 0, true);
   v.setUint32(o.progress_bar_cur_size, state.progress_bar_cur_size ?? 0, true);
 
   // Dynamic fields
@@ -378,8 +379,8 @@ function flatTrial() {
   const trialCfg = level.trials[trialIdx];
   const fixed = level.fixed;
   const flat = {};
-  for (const [k, v] of Object.entries(obj))    flat[k] = v;
-  for (const [k, v] of Object.entries(fixed))  { if (k !== "pr_switching_chain") flat[k] = v; }
+  for (const [k, v] of Object.entries(obj)) flat[k] = v;
+  for (const [k, v] of Object.entries(fixed)) { if (k !== "pr_switching_chain") flat[k] = v; }
   for (const [k, v] of Object.entries(trialCfg)) flat[k] = v;
   return flat;
 }
@@ -421,16 +422,16 @@ const FIELD_SCHEMA = {
   cosine_alignment_threshold: "f32",
   door_anim_fade_out: "f32", door_anim_stay_open: "f32", door_anim_fade_in: "f32",
   main_spotlight_intensity: "f32", ambient_brightness: "f32", max_spotlight_intensity: "f32",
-  decorations_size:      "f32[]",
+  decorations_size: "f32[]",
   decorations_thickness: "f32[]",
-  colors:                "f32[][]",
-  decorations_color:     "f32[][]",
-  target_door:           "u32",
-  textures:              "u32[]",
-  decorations_count:     "u32[]",
-  decorations_shape:     "u32[]",
-  decorations_texture:   "u32[]",
-  decorations_seeds:     "u64[]",
+  colors: "f32[][]",
+  decorations_color: "f32[][]",
+  target_door: "u32",
+  textures: "u32[]",
+  decorations_count: "u32[]",
+  decorations_shape: "u32[]",
+  decorations_texture: "u32[]",
+  decorations_seeds: "u64[]",
 };
 
 /** Build a game-state object from default + trial config overlay.
@@ -442,11 +443,11 @@ function buildTrialState(trialCfg) {
   for (const [key, value] of Object.entries(trialCfg)) {
     if (CONTROLLER_META_FIELDS.has(key)) continue;
     const type = FIELD_SCHEMA[key];
-    if      (!type)          state[key] = value;                                          // unknown: pass through
-    else if (type === "f32")      state[key] = floatToU32Bits(value);
-    else if (type === "f32[]")    state[key] = value.map(floatToU32Bits);
-    else if (type === "f32[][]")  state[key] = value.flatMap(face => face.map(floatToU32Bits));
-    else                          state[key] = value;                                     // u32 / u32[] / u64[]
+    if (!type) state[key] = value;                                          // unknown: pass through
+    else if (type === "f32") state[key] = floatToU32Bits(value);
+    else if (type === "f32[]") state[key] = value.map(floatToU32Bits);
+    else if (type === "f32[][]") state[key] = value.flatMap(face => face.map(floatToU32Bits));
+    else state[key] = value;                                     // u32 / u32[] / u64[]
   }
   return state;
 }
@@ -614,6 +615,7 @@ function handleWaitingForStart(state) {
     const cmds = makeCmd({ reset: true, blank_screen: true, stop_rendering: true });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
+    _playingStartTime = Date.now();
     logFrame(state, cmds);
     showStartOverlay(false);
     updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Playing`);
@@ -725,10 +727,10 @@ function handlePlaying(state) {
   processTouchInput(dt);
 
   const cmds = makeCmd({
-    rotate_left:  inputs.rotate_left  || touchState.rotateLeft,
+    rotate_left: inputs.rotate_left || touchState.rotateLeft,
     rotate_right: inputs.rotate_right || touchState.rotateRight,
-    zoom_in:      inputs.zoom_in      || touchState.zoomIn,
-    zoom_out:     inputs.zoom_out     || touchState.zoomOut,
+    zoom_in: inputs.zoom_in || touchState.zoomIn,
+    zoom_out: inputs.zoom_out || touchState.zoomOut,
   });
   writeCommands(cmds);
   logFrame(state, cmds);
@@ -764,6 +766,7 @@ function handleWaitingAnimationEnd(state) {
     copyGameStateGameToControl();
     logFrame(state, cmds);
     fsmState = FSM.PLAYING;
+    _playingStartTime = Date.now();
     console.log("[FSM] → PLAYING");
     return;
   }
@@ -779,9 +782,9 @@ function handleTrialIndexUpdate() {
   const idx = _trialIdx();
 
   let newIdx;
-  if (trialProceeding === PROCEEDING.ADVANCE)    newIdx = idx + 1;
+  if (trialProceeding === PROCEEDING.ADVANCE) newIdx = idx + 1;
   else if (trialProceeding === PROCEEDING.RETROCEED) newIdx = Math.max(0, idx - 1);
-  else                                           newIdx = idx; // STAY
+  else newIdx = idx; // STAY
 
   _setTrialIdx(newIdx);
 
@@ -806,16 +809,16 @@ function handleTrialIndexUpdate() {
 
 function handleTrialComplete(state) {
   const trial = flatTrial();
-  const nrToWin   = trial.nr_attempts_to_win ?? 999;
+  const nrToWin = trial.nr_attempts_to_win ?? 999;
   const nrToRetro = trial.nr_attempts_to_retroceed ?? 999;
-  const timeToWin   = trial.elapsed_time_to_win ?? 9999;
+  const timeToWin = trial.elapsed_time_to_win ?? 9999;
   const timeToRetro = trial.elapsed_time_to_retroceed ?? 9999;
 
   console.log(`[EVAL] attempts=${nrAttempts} elapsed=${state.elapsed_secs?.toFixed(1)}s | win<=${nrToWin}/${timeToWin}s  retro>=${nrToRetro}/${timeToRetro}s`);
 
   const outcome = {
-    [PROCEEDING.ADVANCE]:   "advance",
-    [PROCEEDING.STAY]:      "stay",
+    [PROCEEDING.ADVANCE]: "advance",
+    [PROCEEDING.STAY]: "stay",
     [PROCEEDING.RETROCEED]: "retroceed",
   }[trialProceeding];
 
@@ -857,8 +860,8 @@ function controllerLoop() {
     // Resyncing here would re-enter INIT and re-toggle blank/stop, causing the
     // screen to get stuck black (toggle-undo loop).
     const canResync = fsmState !== FSM.WAITING_FOR_START &&
-                      fsmState !== FSM.WAITING_ANIMATION_START &&
-                      fsmState !== FSM.WAITING_ANIMATION_END;
+      fsmState !== FSM.WAITING_ANIMATION_START &&
+      fsmState !== FSM.WAITING_ANIMATION_END;
     if (canResync && (gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0)) {
       console.log(`[FSM] Game unresponsive for ${gameTimeUnresponsive.toFixed(1)}s, resyncing...`);
       resyncWithGame();
@@ -1160,10 +1163,14 @@ function setupInput() {
       // ── Tap detection (with pinch-tap suppression) ──
       // wasPinching is set when a two-finger gesture occurred in this touch
       // sequence — reliably suppresses false taps after zoom gestures.
+      // Grace period: suppress false taps right after FSM enters PLAYING
+      // (e.g. the start-overlay touch is still mid-gesture when state flips)
+      const tapGraceOk = (Date.now() - _playingStartTime) > 500;
       if (
         touchState.singleTouch.active &&
         fsmState === FSM.PLAYING &&
-        !touchState.wasPinching
+        !touchState.wasPinching &&
+        tapGraceOk
       ) {
         const now = Date.now();
         const elapsed = now - touchState.singleTouch.startTime;
@@ -1391,6 +1398,7 @@ async function start() {
     });
     startOverlay.addEventListener("touchend", (e) => {
       e.preventDefault();
+      e.stopPropagation();  // prevent global touchend from firing a false tap→check
       if (fsmState === FSM.WAITING_FOR_START) _start = true;
     }, { passive: false });
   }

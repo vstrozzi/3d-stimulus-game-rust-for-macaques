@@ -682,6 +682,7 @@ function handlePlaying(state) {
       cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true });
       writeCommands(cmds);
       fsmState = FSM.WAITING_ANIMATION_START;
+      nrAttempts += 1;
       logFrame(state, cmds);
       return;
     }
@@ -1062,8 +1063,8 @@ function updateStatusBar(text) {
 function setupInput() {
   // ── TOUCH ──────────────────────────────────────────────────────────────
   window.addEventListener("touchstart", (e) => {
-    if (fsmState !== FSM.PLAYING) return;
     e.preventDefault();
+    if (fsmState !== FSM.PLAYING) return;
     if (e.touches.length >= 2) {
       touchState.singleTouch.active = false;
       touchState.twoFingerTouch.active = true;
@@ -1094,8 +1095,8 @@ function setupInput() {
   }, { passive: false });
 
   window.addEventListener("touchmove", (e) => {
-    if (fsmState !== FSM.PLAYING) return;
     e.preventDefault();
+    if (fsmState !== FSM.PLAYING) return;
     const now = performance.now();
 
     if (e.touches.length >= 2 && touchState.twoFingerTouch.active) {

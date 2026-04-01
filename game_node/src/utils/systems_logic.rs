@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local};
 use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local};
-use crate::utils::camera::{spawn_persistent_camera, adapt_camera_fov};
+use crate::utils::camera::{spawn_persistent_camera};
 use crate::utils::ui::{update_ui_scale};
 use crate::utils::game_functions::{
     handle_door_animation,
@@ -28,10 +28,8 @@ impl Plugin for SystemsLogicPlugin {
                     spawn_persistent_camera,
                     setup_environment,
                     preload_all_textures,
-                    adapt_camera_fov,
                 ).chain())
             // Re-adapt FOV whenever the window is resized (e.g. orientation change)
-            .add_systems(Update, adapt_camera_fov)
 
             // Shared memory
             .add_systems(

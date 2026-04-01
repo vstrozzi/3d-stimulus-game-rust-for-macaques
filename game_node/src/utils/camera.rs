@@ -25,23 +25,3 @@ pub fn spawn_persistent_camera(mut commands: Commands, local_game_struct: Res<Ga
         PersistentCamera,
     ));
 }
-
-/// Keeps a constant horizontal FOV across all screen sizes / aspect ratios.
-/// Runs at startup and whenever the window is resized.
-pub fn adapt_camera_fov(
-    windows: Query<&Window>,
-    mut cameras: Query<&mut Projection, With<PersistentCamera>>,
-) {
-    let Ok(window) = windows.single() else { return };
-    let aspect = window.width() / window.height();
-    if aspect <= 0.0 { return; }
-
-    // vfov that yields REF_HFOV for this aspect ratio
-    let vfov = 2.0 * ((REF_HFOV / 2.0).tan() / aspect).atan();
-
-    for mut proj in cameras.iter_mut() {
-        if let Projection::Perspective(ref mut persp) = *proj {
-            persp.fov = vfov;
-        }
-    }
-}

@@ -17,24 +17,36 @@
         touch-action: none;          /* prevent browser gestures */
         -webkit-user-select: none;
         user-select: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ── Fixed 16:9 game area — letterboxed on any screen shape ─────── */
+      #game-area {
+        position: relative;
+        /* Largest 16:9 rectangle that fits the viewport */
+        width: min(100vw, calc(100vh * 16 / 9));
+        height: min(100vh, calc(100vw * 9 / 16));
+        flex-shrink: 0;
       }
 
       /* ── Game canvas (Bevy renders here) ───────────────────────────── */
       #game-canvas {
-        position: fixed;
+        position: absolute;
         top: 0; left: 0;
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
         display: block;
         cursor: none;
       }
 
       /* ── HUD overlay layer (controller UI) ─────────────────────────── */
       #hud {
-        position: fixed;
+        position: absolute;
         top: 0; left: 0;
-        width: 100vw;
-        height: 100vh;
+        width: 100%;
+        height: 100%;
         pointer-events: none;   /* pass clicks through by default */
         z-index: 20;
       }
@@ -160,12 +172,15 @@
   </head>
 
   <body>
-    <!-- Bevy renders into this canvas -->
-    <canvas id="game-canvas"></canvas>
+    <!-- Fixed 16:9 container — Bevy canvas + HUD live here -->
+    <div id="game-area">
+      <!-- Bevy renders into this canvas -->
+      <canvas id="game-canvas"></canvas>
 
-    <!-- Controller HUD overlay -->
-    <div id="hud">
-      <div id="status-bar">Initializing...</div>
+      <!-- Controller HUD overlay -->
+      <div id="hud">
+        <div id="status-bar">Initializing...</div>
+      </div>
     </div>
 
     <!-- Initial loading overlay (hidden once game is ready) -->

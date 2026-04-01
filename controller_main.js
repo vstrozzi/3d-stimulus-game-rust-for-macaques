@@ -118,7 +118,6 @@ let old_cmds = {}; // for change detection in logFrame
 // Special flags
 let _start = false;
 let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
-let _timeWinExpired = false;
 let _timeRetroceedExpired = false;
 let _running = false;
 let _sceneReadyPromptShown = false;
@@ -583,12 +582,10 @@ function checkHasFinished(state) {
   const trial = flatTrial();
   const nrAttemptsToRetroceed = trial.nr_attempts_to_retroceed ?? 0;
   const elapsedTimeToRetroceed = trial.elapsed_time_to_retroceed ?? 0;
-  // Use the local nrAttempts counter (maintained by the controller) instead of
-  // state.nr_attempts (from game shared memory) to stay consistent with the
-  // isWin / isStay logic in handlePlaying which also uses nrAttempts.
+  // Use game state nr_attempts (mirrors Python's state.get("nr_attempts", 0))
   return (
     state.win_elapsed_secs !== 0.0 ||
-    nrAttempts >= nrAttemptsToRetroceed ||
+    state.nr_attempts >= nrAttemptsToRetroceed ||
     state.elapsed_secs >= elapsedTimeToRetroceed
   );
 }
@@ -634,7 +631,6 @@ function handleInit() {
   trialStartTime = Date.now();
   frameLog = {};
   trialRunCounter += 1;
-  _timeWinExpired = false;
   _timeRetroceedExpired = false;
 
   fsmState = FSM.WAITING_FOR_START;
@@ -697,10 +693,8 @@ function handlePlaying(state) {
   else if (isStay) trialProceeding = PROCEEDING.STAY;
   else trialProceeding = PROCEEDING.RETROCEED;
 
-  // ── Time-to-win expired (one-shot) — disabled, mirrors Python commented-out block ──
-  if (timeElapsed > (trial.elapsed_time_to_win ?? 0) && !_timeWinExpired) {
-    _timeWinExpired = true;
-  }
+  // ── Time-to-win expired — no-op, mirrors Python's string-literal (commented-out) block ──
+  // _timeWinExpired is intentionally never set, matching Python where _time_win_expired stays False.
 
   // ── Time-to-retroceed expired (one-shot) ──
   if (timeElapsed > (trial.elapsed_time_to_retroceed ?? 0) && !_timeRetroceedExpired) {
@@ -798,7 +792,7 @@ function handleWaitingAnimationStart(state) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
     fsmState = FSM.WAITING_ANIMATION_END;     
     copyGameStateGameToControl();
-    cmds = writeNoCommands();
+    writeNoCommands();
 
   }else {
     writeCommands(old_cmds);

@@ -134,7 +134,8 @@ const SWIPE = {
   reverseSnap: 0.95,    // alpha when flipping direction (instant reversal)
   maxEnergy: 700,       // px/s → maps to duty cycle 1.0 (full speed)
   minEnergy: 40,        // px/s → below this, stop cleanly
-  friction: 0.88,       // energy *= friction per frame (0.85 fast stop, 0.93 long coast)
+  frictionLow: 0.80,    // friction at low energy → clean quick stop after gentle swipe
+  frictionHigh: 0.97,   // friction at full energy → long satisfying spin after hard swipe
   tapMaxMove: 10,
   tapMaxTime: 300,
 };
@@ -931,11 +932,13 @@ function touchDist(t1, t2) {
 /** Decay energy when fingers are up, dispatch velocity/energy → PWM booleans. */
 function processTouchInput() {
   if (!swipe.active) {
-    swipe.energy *= SWIPE.friction;
+    const t = Math.abs(swipe.energy) / SWIPE.maxEnergy;
+    swipe.energy *= SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
     if (Math.abs(swipe.energy) < SWIPE.minEnergy) swipe.energy = 0;
   }
   if (!pinch.active) {
-    pinch.energy *= SWIPE.friction;
+    const t = Math.abs(pinch.energy) / SWIPE.maxEnergy;
+    pinch.energy *= SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
     if (Math.abs(pinch.energy) < SWIPE.minEnergy) pinch.energy = 0;
   }
 

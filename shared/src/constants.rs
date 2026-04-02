@@ -40,7 +40,7 @@ pub mod camera_3d_constants {
     pub const CAMERA_3D_SPEED_ZOOM: f32 = 0.10;
 
     // Radius range for the camera's orbit.
-    pub const CAMERA_3D_MIN_RADIUS: f32 = 12.0;
+    pub const CAMERA_3D_MIN_RADIUS: f32 = 20.0;
     pub const CAMERA_3D_MAX_RADIUS: f32 = 20.0;
 }
 

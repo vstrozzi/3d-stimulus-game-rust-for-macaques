@@ -44,7 +44,7 @@ pub fn setup_environment(
     
     // Curved Background
     commands.spawn((
-        Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 10.0, 20.0, 64))),
+        Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 30.0, 20.0, 64))),
         MeshMaterial3d(materials.add(natural_material_tiled(&metal, 8.0))),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));

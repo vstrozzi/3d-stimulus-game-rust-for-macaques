@@ -23,8 +23,11 @@ lto = "thin"
 
 [profile.wasm-release]
 inherits = "release"
-opt-level = "s"
-strip = "debuginfo"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
 
 
 [profile.wasm-dev]

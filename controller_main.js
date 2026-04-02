@@ -132,13 +132,14 @@ let pressedKeys = new Set();
 const SWIPE = {
   smoothing: 0.65,      // EMA alpha during drag (higher = more responsive)
   reverseSnap: 0.95,    // alpha when flipping direction (instant reversal)
-  maxEnergy: 700,       // px/s → maps to duty cycle 1.0 (full speed)
+  maxEnergy: 900,       // px/s → maps to duty cycle 1.0 (full speed)
   minEnergy: 40,        // px/s → below this, stop cleanly
-  frictionLow: 0.80,    // friction at low energy → clean quick stop after gentle swipe
-  frictionHigh: 0.985,  // friction at full energy → long satisfying spin after hard swipe
-  coastCutoff: 0.5,     // duty cycle below which coast-down snaps to zero (0.5 = 1 pulse every 2 frames)
+  frictionLow: 0.78,    // friction at low energy → clean quick stop after gentle swipe
+  frictionHigh: 0.997,  // friction at full energy → long satisfying spin after hard swipe
+  coastCutoff: 0.02,    // duty cycle below which coast-down snaps to zero
   tapMaxMove: 10,
   tapMaxTime: 300,
+  referenceFPS: 60,     // friction exponents are calibrated to this rate
 };
 
 // ── Swipe state (single finger → rotation) ──────────────────────────────────
@@ -165,6 +166,9 @@ let pinch = {
   zoomIn: false,
   zoomOut: false,
 };
+
+// ── Framerate-independent friction tracking ─────────────────────────────────
+let lastProcessTime = 0;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITY: float ↔ u32 bit conversion
@@ -932,14 +936,25 @@ function touchDist(t1, t2) {
 
 /** Decay energy when fingers are up, dispatch velocity/energy → PWM booleans. */
 function processTouchInput() {
+  const now = performance.now();
+  // Framerate-independent dt (clamped to avoid spiral after tab-away)
+  const dtRaw = lastProcessTime > 0 ? (now - lastProcessTime) / 1000 : 1 / SWIPE.referenceFPS;
+  const dt = Math.min(dtRaw, 0.1);
+  lastProcessTime = now;
+
+  // Frames-equivalent for this dt (friction^frames keeps feel identical at any fps)
+  const frames = dt * SWIPE.referenceFPS;
+
   if (!swipe.active) {
     const t = Math.abs(swipe.energy) / SWIPE.maxEnergy;
-    swipe.energy *= SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
+    const friction = SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
+    swipe.energy *= Math.pow(friction, frames);
     if (Math.abs(swipe.energy) < SWIPE.minEnergy) swipe.energy = 0;
   }
   if (!pinch.active) {
     const t = Math.abs(pinch.energy) / SWIPE.maxEnergy;
-    pinch.energy *= SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
+    const friction = SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
+    pinch.energy *= Math.pow(friction, frames);
     if (Math.abs(pinch.energy) < SWIPE.minEnergy) pinch.energy = 0;
   }
 

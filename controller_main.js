@@ -135,7 +135,8 @@ const SWIPE = {
   maxEnergy: 700,       // px/s → maps to duty cycle 1.0 (full speed)
   minEnergy: 40,        // px/s → below this, stop cleanly
   frictionLow: 0.80,    // friction at low energy → clean quick stop after gentle swipe
-  frictionHigh: 0.97,   // friction at full energy → long satisfying spin after hard swipe
+  frictionHigh: 0.985,  // friction at full energy → long satisfying spin after hard swipe
+  coastCutoff: 0.5,     // duty cycle below which coast-down snaps to zero (0.5 = 1 pulse every 2 frames)
   tapMaxMove: 10,
   tapMaxTime: 300,
 };
@@ -947,11 +948,16 @@ function processTouchInput() {
   swipe.rotateRight = false;
   const rv = swipe.active ? swipe.velocity : swipe.energy;
   const rDuty = Math.min(1, Math.abs(rv) / SWIPE.maxEnergy);
-  swipe.accumulator += rDuty;
-  if (swipe.accumulator >= 1) {
-    swipe.accumulator -= 1;
-    swipe.rotateLeft = rv < 0;
-    swipe.rotateRight = rv > 0;
+  if (!swipe.active && rDuty > 0 && rDuty < SWIPE.coastCutoff) {
+    swipe.energy = 0;
+    swipe.accumulator = 0;
+  } else {
+    swipe.accumulator += rDuty;
+    if (swipe.accumulator >= 1) {
+      swipe.accumulator -= 1;
+      swipe.rotateLeft = rv < 0;
+      swipe.rotateRight = rv > 0;
+    }
   }
   setKeyUI("left", inputs.rotate_left || swipe.rotateLeft);
   setKeyUI("right", inputs.rotate_right || swipe.rotateRight);

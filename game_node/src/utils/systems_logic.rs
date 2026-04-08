@@ -13,7 +13,7 @@ use crate::utils::setup::setup_environment;
 use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
 use crate::utils::load_textures::{preload_all_textures, check_scene_ready};
 
-// Plugin for managing all the game systems.config
+/// Plugin for managing all the game systems.config
 pub struct SystemsLogicPlugin;
 
 impl Plugin for SystemsLogicPlugin {
@@ -29,11 +29,9 @@ impl Plugin for SystemsLogicPlugin {
                     setup_environment,
                     preload_all_textures,
                 ).chain())
-            // Re-adapt FOV whenever the window is resized (e.g. orientation change)
-
             // Shared memory
             .add_systems(
-                PreUpdate,
+                FixedPreUpdate,
                 (read_shared_memory_commands, read_shared_memory_game_state_local).chain(),
             )
             // Global UI responsiveness system (runs every frame)
@@ -42,7 +40,7 @@ impl Plugin for SystemsLogicPlugin {
             .add_systems(Update, check_scene_ready)
             // Command driven
             .add_systems(
-                Update,
+                FixedUpdate,
                 (
                     handle_reset_command,
                     handle_animation_door_command,
@@ -57,7 +55,7 @@ impl Plugin for SystemsLogicPlugin {
             )
             // Post Update
             .add_systems(
-                PostUpdate,
+                FixedPostUpdate,
                 (
                 clear_pending_commands,
                 increment_timing,

@@ -1,5 +1,6 @@
 //! Cleanup and other utils functions
 use bevy::prelude::*;
+use bevy::mesh::{Indices, PrimitiveTopology};
 use crate::utils::objects::{GameEntity, UIEntity, BlankScreen};
 
 /// Despawn all game and UI entities
@@ -13,13 +14,6 @@ pub fn despawn_all_game_and_ui(
     }
     for entity in &ui_query {
         commands.entity(entity).try_despawn();
-    }
-}
-
-/// Helper to despawn ui entities given a mutable commands reference
-pub fn despawn_ui(commands: &mut Commands, query: &Query<Entity, With<UIEntity>>) {
-    for entity in query {
-        commands.entity(entity).despawn();
     }
 }
 
@@ -38,4 +32,22 @@ pub fn spawn_blank_screen(commands: &mut Commands) {
         GlobalZIndex(1000), // In front
         BlankScreen,
     ));
+}
+
+/// Builds a `TriangleList` mesh from raw attribute vectors
+/// Pass an empty `indices` vec to omit explicit indices (vertices used sequentially)
+pub fn build_mesh(
+    positions: Vec<[f32; 3]>,
+    normals: Vec<[f32; 3]>,
+    uvs: Vec<[f32; 2]>,
+    indices: Vec<u32>,
+) -> Mesh {
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, Default::default());
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
+    if !indices.is_empty() {
+        mesh.insert_indices(Indices::U32(indices));
+    }
+    mesh
 }

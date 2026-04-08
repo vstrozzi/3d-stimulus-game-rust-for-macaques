@@ -3,8 +3,8 @@ use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, Ima
 use bevy::math::Affine2;
 use crate::{PreloadedTextures, GameConditions, GameStateLocal};
 
-/// Holds all loaded handles for one PBR texture set.
-/// Store this as a resource so handles stay alive.
+/// Holds all loaded handles for one PBR texture set
+/// Store this as a resource so handles stay alive
 #[derive(Resource)]
 pub struct TextureSet {
     color:              Option<Handle<Image>>,
@@ -16,7 +16,7 @@ pub struct TextureSet {
 }
 
 impl TextureSet {
-    /// Returns true once every handle in this set is present in the Assets<Image> store.
+    /// Returns true once every handle in this set is present in the Assets<Image> store
     pub fn all_loaded(&self, images: &Assets<Image>) -> bool {
         [
             self.color.as_ref(),
@@ -151,8 +151,8 @@ pub fn tinted_material_tiled(tex: &TextureSet, tint: Color, tile: f32) -> Standa
     }
 }
 
-/// Load every texture set at startup and keep the handles in a resource.
-/// This prevents Bevy from GC-ing images between resets, eliminating WASM fetch stalls.
+/// Load every texture set at startup and keep the handles in a resource
+/// This prevents Bevy from GC-ing images between resets, eliminating latency at WASM trials's start
 pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMut<PreloadedTextures>) {
     use shared::Texture;
     use strum::IntoEnumIterator;

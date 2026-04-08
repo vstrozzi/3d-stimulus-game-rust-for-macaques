@@ -8,7 +8,7 @@ use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameC
 #[derive(Resource, Default)]
 pub struct FrameCounterResource(pub u64);
 
-// Update the shared memory game state after every game loop update.
+// Update the shared memory game state after every game loop update
 pub struct StateEmitterPlugin;
 
 impl Plugin for StateEmitterPlugin {
@@ -17,6 +17,7 @@ impl Plugin for StateEmitterPlugin {
     }
 }
 
+/// Increment the global timing variables
 pub fn increment_timing(
     mut counter: ResMut<FrameCounterResource>,
     time: Res<Time>,
@@ -36,7 +37,7 @@ pub fn increment_timing(
     }
 }
 
-// Update local memory
+/// Update local memory
 pub fn update_shared_memory_local(
     mut game_state_local: ResMut<GameStateLocal>,
     frame_counter: Res<FrameCounterResource>,
@@ -45,53 +46,39 @@ pub fn update_shared_memory_local(
     door_query: Query<(&BaseDoor, &Transform)>,
     game_conditions: ResMut<GameConditions>,
 ) {
-
     game_state_local.0.is_blank = game_conditions.blank_screen;
     game_state_local.0.is_rendering_stopped = game_conditions.stop_rendering;
     game_state_local.0.is_scene_ready = game_conditions.is_scene_ready;
-
     game_state_local.0.frame_number = frame_counter.0;
-    game_state_local.0.elapsed_secs = if let Some(start) = round_start.0 {
-        start.as_secs_f32().to_bits()
-    } else {
-        0.0_f32.to_bits()
-    };
-    if let Ok(camera_transform) = camera_query.single() {
-        let pos = camera_transform.translation;
-        game_state_local.0.camera_radius = pos.xz().length().to_bits();
-        game_state_local.0.camera_x = pos.x.to_bits();
-        game_state_local.0.camera_y = pos.y.to_bits();
-        game_state_local.0.camera_z = pos.z.to_bits();
-    }
+    game_state_local.0.elapsed_secs = round_start.0
+        .map(|t| t.as_secs_f32().to_bits())
+        .unwrap_or(0.0_f32.to_bits());
+
+    let Ok(camera_transform) = camera_query.single() else { return };
+
+    let pos = camera_transform.translation;
+    game_state_local.0.camera_radius = pos.xz().length().to_bits();
+    game_state_local.0.camera_x = pos.x.to_bits();
+    game_state_local.0.camera_y = pos.y.to_bits();
+    game_state_local.0.camera_z = pos.z.to_bits();
 
     let target_door_idx = game_state_local.0.target_door as usize;
+    let camera_forward = camera_transform.forward();
+    let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize_or_zero();
 
-    let current_alignment; 
-    let current_angle;  
-
-    if let Ok(camera_transform) = camera_query.single() {
-        let camera_forward = camera_transform.forward();
-        let camera_forward_xz = Vec3::new(camera_forward.x, 0.0, camera_forward.z).normalize_or_zero();
-
-        // Find target door
-        for (door, door_transform) in &door_query {
-            if door.door_index == target_door_idx {
-                let door_normal_world = door_transform.rotation * door.normal;
-                let door_normal_xz = Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize_or_zero();
-                
-                let alignment = door_normal_xz.dot(camera_forward_xz);
-                current_alignment = alignment;
-                current_angle = alignment.clamp(-1.0, 1.0).acos();
-
-                game_state_local.0.current_alignment = current_alignment.to_bits();
-                game_state_local.0.current_angle = current_angle.to_bits();
-                break;
-            }
+    for (door, door_transform) in &door_query {
+        if door.door_index == target_door_idx {
+            let door_normal_world = door_transform.rotation * door.normal;
+            let door_normal_xz = Vec3::new(door_normal_world.x, 0.0, door_normal_world.z).normalize_or_zero();
+            let alignment = door_normal_xz.dot(camera_forward_xz);
+            game_state_local.0.current_alignment = alignment.to_bits();
+            game_state_local.0.current_angle = alignment.clamp(-1.0, 1.0).acos().to_bits();
+            break;
         }
     }
 }
 
-// Write shared memory from the local game state to shared memory to be read by controller
+/// Write shared memory from the local game state to shared memory to be read by controller
 pub fn write_shared_memory_game_state(
     shm_res: Option<Res<SharedMemResource>>,
     game_state_local: Res<GameStateLocal>,
@@ -102,5 +89,5 @@ pub fn write_shared_memory_game_state(
     let gs_game = &shm.game_structure_game;
 
     // Update based on current values
-    gs_game.from_not_atomic(&game_state_local.0);
+    gs_game.write_from_local(&game_state_local.0);
 }

@@ -69,7 +69,6 @@ pub fn spawn_score_bar(
                                     ScoreBarChain { index: i - 1 },
                                 ));
                             }
-
                             // Dot
                             bar_parent.spawn((
                                 Node {

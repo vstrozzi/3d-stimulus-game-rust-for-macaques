@@ -140,3 +140,22 @@ pub struct ScoreBarChain {
 /// Marker component for the blank screen overlay entity
 #[derive(Component)]
 pub struct BlankScreen;
+
+/// All parameters needed to spawn a pyramid for one trial.
+/// Built from shared memory in setup.rs and consumed by pyramid.rs.
+pub struct PyramidConfig {
+    pub decoration_seeds: [u64; 3],
+    pub radius: f32,
+    pub height: f32,
+    /// Pre-adjusted orientation (start_orient + FRAC_PI_6)
+    pub orientation_rad: f32,
+    pub colors: [Color; 3],
+    pub decoration_counts: [u32; 3],
+    pub decoration_sizes: [f32; 3],
+    pub decoration_shapes: [DecorationShape; 3],
+    pub face_textures: [u32; 3],
+    pub decoration_colors: [Color; 3],
+    pub decoration_textures: [u32; 3],
+    pub decoration_thicknesses: [f32; 3],
+    pub target_door: usize,
+}

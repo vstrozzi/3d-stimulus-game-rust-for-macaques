@@ -9,9 +9,11 @@ use shared::constants::camera_3d_constants::{CAMERA_3D_SPEED_ROTATE, CAMERA_3D_S
 use shared::SharedMemoryHandle;
 use crate::utils::objects::GameStateLocal;
 
+/// Wrapper to access shared memory as a bevy resource
 #[derive(Resource)]
 pub struct SharedMemResource(pub SharedMemoryHandle);
 
+/// Local copy of pending commands read from shared memory
 #[derive(Resource, Default)]
 pub struct PendingCommands {
     pub reset: bool,
@@ -23,7 +25,10 @@ pub struct PendingCommands {
     pub animation_door: bool,
     pub animation_all_door: bool,
     pub animation_colored: bool,
+
 }
+
+/// Bevy plugin to read shared memory commands and update local game state
 pub struct SharedMemoryReaderPlugin;
 
 impl Plugin for SharedMemoryReaderPlugin {
@@ -50,18 +55,8 @@ pub fn init_shared_memory_system(mut commands: Commands) {
     }
 }
 
-pub fn clear_pending_commands(
-    mut pending_commands: ResMut<PendingCommands>,
-) {
-    pending_commands.reset = false;
-    pending_commands.rotation = 0.0;
-    pending_commands.zoom = 0.0;
-    pending_commands.check_alignment = false;
-    pending_commands.blank_screen = false;
-    pending_commands.stop_rendering = false;
-    pending_commands.animation_door = false;
-    pending_commands.animation_all_door = false;
-    pending_commands.animation_colored = false;
+pub fn clear_pending_commands(mut pending_commands: ResMut<PendingCommands>) {
+    *pending_commands = PendingCommands::default();
 }
 
 pub fn read_shared_memory_commands(

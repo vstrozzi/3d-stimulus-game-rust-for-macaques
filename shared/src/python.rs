@@ -1,5 +1,5 @@
 //! Python bindings for shared memroy of native.rs
-use crate::{SharedMemoryHandle, create_shared_memory, SharedGameState};
+use crate::{SharedMemoryHandle, open_shared_memory, SharedGameState};
 use std::sync::atomic::Ordering;
 use pyo3::exceptions::PyValueError;
 use pyo3::{prelude::*};
@@ -15,14 +15,11 @@ struct SharedMemoryWrapper {
 impl SharedMemoryWrapper {
     #[new]
     #[pyo3(signature = (name))]
-    /// Create (with file name) or open shared memory segment
+    /// Attach to an existing shared memory segment created by the game node.
     fn new(name: &str) -> PyResult<Self> {
-        let res = create_shared_memory(name);
-
-        match res {
-            Ok(handle) => Ok(SharedMemoryWrapper { inner: handle }),
-            Err(e) => Err(PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string())),
-        }
+        open_shared_memory(name)
+            .map(|handle| SharedMemoryWrapper { inner: handle })
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
     }
 
     /// Read the full game structure from shared memory as a dictionary.
@@ -33,7 +30,7 @@ impl SharedMemoryWrapper {
         read_game_state(gs)
     }
 
-    fn read_default_game_state(&mut self) -> Result<pyo3::Py<pyo3::PyAny>, pyo3::PyErr>{        
+    fn read_default_game_state(&self) -> Result<pyo3::Py<pyo3::PyAny>, pyo3::PyErr>{
         read_game_state(&SharedGameState::new())
     }
 
@@ -60,6 +57,7 @@ impl SharedMemoryWrapper {
         cmd.zoom_in.store(zoom_in, Ordering::Relaxed);
         cmd.zoom_out.store(zoom_out, Ordering::Relaxed);    
         cmd.check_alignment.store(check, Ordering::Relaxed);
+        // Release ensures all preceding Relaxed stores are visible to the game before it sees reset=true.
         cmd.reset.store(reset, Ordering::Release);
         cmd.blank_screen.store(blank_screen, Ordering::Relaxed);
         cmd.stop_rendering.store(stop_rendering, Ordering::Relaxed);
@@ -183,11 +181,9 @@ impl SharedMemoryWrapper {
 
         Ok(())
     }
+}
 
-    }
-
-
-    // Read a game state as a python dict
+// Read a game state as a python dict
     fn read_game_state(gs: &SharedGameState) -> PyResult<Py<PyAny>>{
         Python::attach(|py| {
             let dict = pyo3::types::PyDict::new(py);

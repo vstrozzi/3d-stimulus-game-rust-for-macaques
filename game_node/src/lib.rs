@@ -31,6 +31,7 @@ pub mod utils {
     pub mod macros;
     pub mod objects;
     pub mod pyramid;
+    pub mod decorations;
     pub mod setup;
     pub mod systems_logic;
     pub mod load_textures;
@@ -60,7 +61,7 @@ pub fn build_app() -> App {
         prevent_default_event_handling: true,
         #[cfg(not(target_arch = "wasm32"))]
         mode: WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
-        present_mode: PresentMode::AutoVsync,
+        present_mode: PresentMode::Fifo,
         ..default()
     });
 

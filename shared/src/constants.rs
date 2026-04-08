@@ -119,8 +119,6 @@ pub mod pyramid_constants {
     // Index of the target door of the pyramid
     pub const PYRAMID_TARGET_DOOR_INDEX: usize = 0;
 
-    // Decorations
-    pub const DECORATION_COUNT: u32 = 50;
     // Wooden base
     pub const BASE_HEIGHT: f32 = 0.3;
     pub const BASE_RADIUS: f32 = PYRAMID_BASE_RADIUS * 2.0;

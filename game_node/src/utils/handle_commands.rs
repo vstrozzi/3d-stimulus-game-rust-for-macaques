@@ -7,7 +7,8 @@ use crate::utils::objects::{
     DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions,
     UIEntity, BlankScreen, GameEntity, GameStateLocal};
 use crate::utils::ui::{spawn_score_bar};
-use crate::utils::utils::{spawn_blank_screen, despawn_ui, despawn_all_game_and_ui};
+use crate::utils::utils::{spawn_blank_screen, despawn_all_game_and_ui};
+use crate::utils::ui::despawn_ui;
 use crate::utils::setup::{setup_round};
 use shared::constants::camera_3d_constants::{
     CAMERA_3D_INITIAL_Y, CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
@@ -215,7 +216,7 @@ pub fn handle_blank_screen(
     }
 }
 
-/// Apply rotation.
+/// Apply rotation
 pub fn handle_rotation(
     pending: Res<PendingCommands>,
     mut rot_entities: Query<&mut Transform, (With<RotableComponent>, Without<Camera3d>)>,
@@ -227,7 +228,7 @@ pub fn handle_rotation(
     }
 }
 
-/// Apply zoom.
+/// Apply zoom
 pub fn handle_zoom(
     pending: Res<PendingCommands>,
     mut camera_query: Query<&mut Transform, With<Camera3d>>,

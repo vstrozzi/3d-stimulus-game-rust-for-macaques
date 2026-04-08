@@ -50,7 +50,7 @@ pub fn handle_door_animation(
             }
         }
         // Clean up state
-        door_win_entities.animation_start_time = Some(time.elapsed());
+        door_win_entities.animation_start_time = None;
         gs_game.is_animating = false;
         return;
     }

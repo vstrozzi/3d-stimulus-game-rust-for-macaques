@@ -76,12 +76,13 @@ pub enum Phase {
 }
 
 /// Shapes for decorations on the pyramid faces
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DecorationShape {
-    Circle,
-    Square,
-    Star,
-    Triangle,
+    Circle   = 0,
+    Square   = 1,
+    Star     = 2,
+    Triangle = 3,
 }
 
 // Textures for the pyramid faces and decorations.
@@ -302,10 +303,16 @@ impl SharedGameState {
             self.colors[i].store(other.colors[i].load(Ordering::Relaxed), Ordering::Relaxed);
         }
         for i in 0..3 {
+            self.textures[i].store(other.textures[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_count[i].store(other.decorations_count[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_size[i].store(other.decorations_size[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_seeds[i].store(other.decorations_seeds[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_shape[i].store(other.decorations_shape[i].load(Ordering::Relaxed), Ordering::Relaxed);
+            self.decorations_texture[i].store(other.decorations_texture[i].load(Ordering::Relaxed), Ordering::Relaxed);
+            self.decorations_thickness[i].store(other.decorations_thickness[i].load(Ordering::Relaxed), Ordering::Relaxed);
+        }
+        for i in 0..12 {
+            self.decorations_color[i].store(other.decorations_color[i].load(Ordering::Relaxed), Ordering::Relaxed);
         }
         self.cosine_alignment_threshold.store(other.cosine_alignment_threshold.load(Ordering::Relaxed), Ordering::Relaxed);
         self.door_anim_fade_out.store(other.door_anim_fade_out.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -424,7 +431,7 @@ impl SharedGameState {
         }
     }
 
-    pub fn from_not_atomic(&self, state: &SharedGameStateLocal){
+    pub fn write_from_local(&self, state: &SharedGameStateLocal){
         self.base_radius.store(state.base_radius, Ordering::Relaxed);
         self.height.store(state.height, Ordering::Relaxed);
         self.start_orient.store(state.start_orient, Ordering::Relaxed);

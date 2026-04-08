@@ -18,6 +18,8 @@ use strum_macros::{Display, EnumIter, FromRepr};
 
 pub mod constants;
 
+/// Number of slots in the frame ring buffer.
+pub const RING_BUFFER_SIZE: usize = 8;
 
 /// Commands sent from Controller to Game.
 #[repr(C)]
@@ -480,22 +482,60 @@ impl Default for SharedGameState {
     fn default() -> Self { Self::new() }
 }
 
+/// Ring buffer of recent frame states.  Each slot is a full `SharedGameState`
+/// so that all existing read/write helpers work unchanged.  The game writes one
+/// entry per fixed tick via `push`, advancing `write_head` monotonically.
+/// The controller drains unseen entries to backfill any frames missed during
+/// polling gaps.
+#[repr(C)]
+#[derive(Debug)]
+pub struct FrameRingBuffer {
+    /// Monotonically increasing write counter.
+    /// Slot index = `write_head % RING_BUFFER_SIZE`.
+    /// Written with Release after filling the slot; read with Acquire by consumers.
+    pub write_head: AtomicU64,
+    pub entries: [SharedGameState; RING_BUFFER_SIZE],
+}
+
+impl FrameRingBuffer {
+    pub fn new() -> Self {
+        Self {
+            write_head: AtomicU64::new(0),
+            entries: core::array::from_fn(|_| SharedGameState::new()),
+        }
+    }
+
+    /// Write a frame into the next ring slot and advance the head.
+    pub fn push(&self, state: &SharedGameStateLocal) {
+        let head = self.write_head.load(Ordering::Relaxed);
+        let idx = (head as usize) % RING_BUFFER_SIZE;
+        self.entries[idx].write_from_local(state);
+        // Release ensures all entry stores are visible before the consumer sees the new head.
+        self.write_head.store(head + 1, Ordering::Release);
+    }
+}
+
+impl Default for FrameRingBuffer {
+    fn default() -> Self { Self::new() }
+}
+
 /// Combined shared memory region between Controller and Game.
-/// Using sequence number to track updates and synchronize between read and write operations.
 #[repr(C)]
 #[derive(Debug)]
 pub struct SharedMemory {
     pub commands: SharedCommands,
     pub game_structure_game: SharedGameState,
     pub game_structure_control: SharedGameState,
+    pub frame_ring_buffer: FrameRingBuffer,
 }
 
 impl SharedMemory {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             commands: SharedCommands::new(),
             game_structure_game: SharedGameState::new(),
             game_structure_control: SharedGameState::new(),
+            frame_ring_buffer: FrameRingBuffer::new(),
         }
     }
 }

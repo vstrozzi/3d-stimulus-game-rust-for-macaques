@@ -4,7 +4,7 @@
 //! so that the JS controller can read/write the same memory regions as the
 //! Bevy game running in the same WASM instance.
 
-use crate::{SharedMemory, SharedGameState};
+use crate::{SharedMemory, SharedGameState, RING_BUFFER_SIZE};
 use wasm_bindgen::prelude::*;
 use std::sync::OnceLock;
 
@@ -69,6 +69,26 @@ impl WebSharedMemory {
     /// Pointer to game_structure_control (Controller → Game: controller writes, game reads on reset)
     pub fn get_game_structure_control_ptr(&self) -> usize {
         unsafe { &(*self.ptr).game_structure_control as *const _ as usize }
+    }
+
+    /// Pointer to frame_ring_buffer.write_head (AtomicU64)
+    pub fn get_frame_buffer_write_head_ptr(&self) -> usize {
+        unsafe { &(*self.ptr).frame_ring_buffer.write_head as *const _ as usize }
+    }
+
+    /// Pointer to frame_ring_buffer.entries[0] (first SharedGameState slot)
+    pub fn get_frame_buffer_entries_ptr(&self) -> usize {
+        unsafe { &(*self.ptr).frame_ring_buffer.entries[0] as *const _ as usize }
+    }
+
+    /// Byte size of one ring buffer entry (= SharedGameState).
+    pub fn get_frame_buffer_entry_stride(&self) -> u32 {
+        std::mem::size_of::<SharedGameState>() as u32
+    }
+
+    /// Number of slots in the ring buffer.
+    pub fn get_frame_buffer_size(&self) -> u32 {
+        RING_BUFFER_SIZE as u32
     }
 
     // -----------------------------------------------------------------------

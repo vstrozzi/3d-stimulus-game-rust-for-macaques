@@ -90,4 +90,7 @@ pub fn write_shared_memory_game_state(
 
     // Update based on current values
     gs_game.write_from_local(&game_state_local.0);
+
+    // Also push into the ring buffer so the controller can catch skipped frames
+    shm.frame_ring_buffer.push(&game_state_local.0);
 }

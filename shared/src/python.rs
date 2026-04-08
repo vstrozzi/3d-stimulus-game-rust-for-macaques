@@ -1,5 +1,5 @@
 //! Python bindings for shared memroy of native.rs
-use crate::{SharedMemoryHandle, open_shared_memory, SharedGameState};
+use crate::{SharedMemoryHandle, open_shared_memory, SharedGameState, RING_BUFFER_SIZE};
 use std::sync::atomic::Ordering;
 use pyo3::exceptions::PyValueError;
 use pyo3::{prelude::*};
@@ -22,12 +22,51 @@ impl SharedMemoryWrapper {
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
     }
 
-    /// Read the full game structure from shared memory as a dictionary.
+    /// Return the current write head of the frame buffer.
+    fn frame_write_head(&self) -> u64 {
+        let shm = self.inner.get();
+        shm.frame_ring_buffer.write_head.load(Ordering::Acquire)
+    }
+
+    /// Read the latest game state snapshot (from game_structure_game).
     fn read_game_state(&self) -> PyResult<Py<PyAny>> {
         let shm = self.inner.get();
-        let gs= &shm.game_structure_game;
+        read_game_state(&shm.game_structure_game)
+    }
 
-        read_game_state(gs)
+    /// Read all game states written since `last_head`.
+    /// Returns `(new_head, list_of_state_dicts)`.
+    /// If the caller has fallen behind by more than the buffer capacity,
+    /// only the most recent entries are returned.
+    fn read_game_state_since(&self, last_head: u64) -> PyResult<Py<PyAny>> {
+        let shm = self.inner.get();
+        let ring = &shm.frame_ring_buffer;
+        let current_head = ring.write_head.load(Ordering::Acquire);
+
+        Python::attach(|py| {
+            let result_list = pyo3::types::PyList::empty(py);
+
+            if current_head <= last_head {
+                let tup = pyo3::types::PyTuple::new(py, &[current_head.into_pyobject(py)?.into_any(), result_list.into_any()])?;
+                return Ok(tup.into());
+            }
+
+            let start = if current_head - last_head > RING_BUFFER_SIZE as u64 {
+                current_head - RING_BUFFER_SIZE as u64
+            } else {
+                last_head
+            };
+
+            for i in start..current_head {
+                let idx = (i as usize) % RING_BUFFER_SIZE;
+                let entry = &ring.entries[idx];
+                let dict = read_game_state(entry)?;
+                result_list.append(dict)?;
+            }
+
+            let tup = pyo3::types::PyTuple::new(py, &[current_head.into_pyobject(py)?.into_any(), result_list.into_any()])?;
+            Ok(tup.into())
+        })
     }
 
     fn read_default_game_state(&self) -> Result<pyo3::Py<pyo3::PyAny>, pyo3::PyErr>{

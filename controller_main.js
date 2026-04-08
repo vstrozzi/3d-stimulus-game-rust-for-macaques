@@ -70,7 +70,10 @@ const PROCEEDING = {
 // ── Global State ───────────────────────────────────────────────────────────
 let memory = null; // WASM Memory
 let sharedMem = null; // WebSharedMemory wrapper
-let pointers = { cmd: 0, gsGame: 0, gsControl: 0 };
+let pointers = { cmd: 0, gsGame: 0, gsControl: 0, ringWriteHead: 0, ringEntries: 0 };
+let ringEntryStride = 0;
+let ringBufferSize = 0;
+let lastWriteHead = 0;
 let offsets = {}; // field offsets within SharedGameState
 let cmdOffsets = {}; // field offsets within SharedCommands
 let defaultGameState = null; // default SharedGameState values (from Rust)
@@ -244,14 +247,31 @@ async function fetchWithProgress(url, onProgress) {
 
 /** Read game_structure_game → JS object (mirrors Python's read_game_state) */
 function readGameState() {
-  const v = new DataView(memory.buffer, pointers.gsGame);
+  return readGameStateAt(pointers.gsGame);
+}
+
+/** Helper to read u64 from DataView (little-endian) */
+function readU64(view, offset) {
+  const lo = view.getUint32(offset, true);
+  const hi = view.getUint32(offset + 4, true);
+  return hi * 0x100000000 + lo;
+}
+
+/** Write u64 to DataView (little-endian) */
+function writeU64(view, offset, val) {
+  view.setUint32(offset, val & 0xFFFFFFFF, true);
+  view.setUint32(offset + 4, Math.floor(val / 0x100000000) & 0xFFFFFFFF, true);
+}
+
+/** Read a single game state from a given base pointer (reuses offsets). */
+function readGameStateAt(basePtr) {
+  const v = new DataView(memory.buffer, basePtr);
   const o = offsets;
   return {
     base_radius: v.getUint32(o.base_radius, true),
     height: v.getUint32(o.height, true),
     start_orient: v.getUint32(o.start_orient, true),
     target_door: v.getUint32(o.target_door, true),
-    // colors: flat [u32; N_COLOR_FLOATS]
     colors: Array.from({ length: N_COLOR_FLOATS }, (_, i) => v.getUint32(o.colors + i * 4, true)),
     decorations_count: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_count + i * 4, true)),
     decorations_size: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_size + i * 4, true)),
@@ -271,31 +291,41 @@ function readGameState() {
     camera_y: v.getUint32(o.camera_y, true),
     camera_z: v.getUint32(o.camera_z, true),
     attempts: v.getUint32(o.attempts, true),
-    // Return current_alignment as float for easy comparison
     cosine_alignment: u32BitsToFloat(v.getUint32(o.current_alignment, true)),
     current_angle: u32BitsToFloat(v.getUint32(o.current_angle, true)),
     is_animating: v.getUint8(o.is_animating) !== 0,
     is_blank: v.getUint8(o.is_blank) !== 0,
     is_rendering_stopped: v.getUint8(o.is_rendering_stopped) !== 0,
     is_scene_ready: v.getUint8(o.is_scene_ready) !== 0,
-    // win_time as f32 → read bits, interpret as float (0.0 = not won, >0 = won)
     win_elapsed_secs: u32BitsToFloat(v.getUint32(o.win_time, true)),
-    // Keep nr_attempts alias for compat with Python's check_has_finished
     nr_attempts: v.getUint32(o.attempts, true),
   };
 }
 
-/** Helper to read u64 from DataView (little-endian) */
-function readU64(view, offset) {
-  const lo = view.getUint32(offset, true);
-  const hi = view.getUint32(offset + 4, true);
-  return hi * 0x100000000 + lo;
-}
+/**
+ * Read all game states written since lastWriteHead.
+ * Returns { newHead, states: [...] }.
+ */
+function readGameStateSince() {
+  const headView = new DataView(memory.buffer, pointers.ringWriteHead);
+  const currentHead = readU64(headView, 0);
 
-/** Write u64 to DataView (little-endian) */
-function writeU64(view, offset, val) {
-  view.setUint32(offset, val & 0xFFFFFFFF, true);
-  view.setUint32(offset + 4, Math.floor(val / 0x100000000) & 0xFFFFFFFF, true);
+  if (currentHead <= lastWriteHead) {
+    return { newHead: currentHead, states: [] };
+  }
+
+  const start = (currentHead - lastWriteHead > ringBufferSize)
+    ? currentHead - ringBufferSize
+    : lastWriteHead;
+
+  const states = [];
+  for (let i = start; i < currentHead; i++) {
+    const idx = Number(i) % ringBufferSize;
+    const entryPtr = pointers.ringEntries + idx * ringEntryStride;
+    states.push(readGameStateAt(entryPtr));
+  }
+
+  return { newHead: currentHead, states };
 }
 
 /**
@@ -866,6 +896,9 @@ function handleTrialComplete(state) {
 
 function resyncWithGame() {
   currentFrame = -1;
+  // Advance lastWriteHead to current so we don't replay stale entries
+  const headView = new DataView(memory.buffer, pointers.ringWriteHead);
+  lastWriteHead = readU64(headView, 0);
   gameTimeUnresponsive = 0;
   fsmState = FSM.INIT;
 }
@@ -876,21 +909,10 @@ function resyncWithGame() {
 function controllerLoop() {
   if (!memory || !_running) return;
 
-  // Read game state from game_structure_game
-  const state = readGameState();
-  const frameNum = state.frame_number;
+  const { newHead, states } = readGameStateSince();
 
-  // Sync: first frame
-  if (currentFrame === -1) {
-    currentFrame = frameNum;
-    console.log(`[FSM] Starting at frame ${currentFrame}`);
-    return;
-  }
-
-  // Wait for new frame
-  if (frameNum === currentFrame) {
+  if (states.length === 0) {
     gameTimeUnresponsive += POLLING_INTERVAL_MS / 1000;
-    // Only resync when in states where the game should be producing frames.
     if ((gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0)) {
       console.log(`[FSM] Game unresponsive for ${gameTimeUnresponsive.toFixed(1)}s, resyncing...`);
       resyncWithGame();
@@ -898,8 +920,26 @@ function controllerLoop() {
     return;
   }
 
-  // New frame
-  currentFrame = frameNum;
+  lastWriteHead = newHead;
+
+  // Sync: first frame
+  if (currentFrame === -1) {
+    currentFrame = states[states.length - 1].frame_number;
+    console.log(`[FSM] Starting at frame ${currentFrame}`);
+    return;
+  }
+
+  // Log intermediate frames that the old polling loop would have missed
+  for (let i = 0; i < states.length - 1; i++) {
+    const fn = states[i].frame_number;
+    if (!(String(fn) in frameLog)) {
+      logFrame(states[i], {});
+    }
+  }
+
+  // Use the latest state for FSM dispatch
+  const state = states[states.length - 1];
+  currentFrame = state.frame_number;
   gameTimeUnresponsive = 0;
 
   // Dispatch FSM
@@ -1321,6 +1361,10 @@ async function start() {
   pointers.cmd = sharedMem.get_commands_ptr();
   pointers.gsGame = sharedMem.get_game_structure_game_ptr();
   pointers.gsControl = sharedMem.get_game_structure_control_ptr();
+  pointers.ringWriteHead = sharedMem.get_frame_buffer_write_head_ptr();
+  pointers.ringEntries = sharedMem.get_frame_buffer_entries_ptr();
+  ringEntryStride = sharedMem.get_frame_buffer_entry_stride();
+  ringBufferSize = sharedMem.get_frame_buffer_size();
 
   // ── Step 5: Start Bevy ───────────────────────────────────────────────────
   wasm_main();

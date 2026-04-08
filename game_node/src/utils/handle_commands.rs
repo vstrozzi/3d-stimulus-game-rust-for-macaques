@@ -106,7 +106,7 @@ pub fn handle_animation_door_command(
     }
     else {
         // No color change if animation colored is not requested, then white
-        Color::srgba(1.0, 1.0, 1.0, 1.0)
+        Color::srgba(0.0, 1.0, 0.0, 0.0)
     };
 
     // Set animation flag

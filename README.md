@@ -57,3 +57,8 @@ Create Custom levels by using trials_editor.html
 ### Prepare Textures from ambientCG for bevy
 
 python prepare_bevy_textures.py ./Metal061B_1K-JPG
+
+
+### Verify run
+
+python tools/verify_trial_logs.py out/trial_logs/

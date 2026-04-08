@@ -1329,8 +1329,8 @@ async function start() {
   setupInput();
 
   // Setup download button
-  // const dlBtn = document.getElementById("btn-download-logs");
-  // if (dlBtn) dlBtn.addEventListener("click", downloadLogs);
+  const dlBtn = document.getElementById("btn-download-logs");
+  if (dlBtn) dlBtn.addEventListener("click", downloadLogs);
 
   // Setup start-trial overlay: tap/click anywhere on it to start
   const startOverlay = document.getElementById("start-trial-overlay");

@@ -23,8 +23,7 @@ pub fn handle_door_animation(
 
     let Some(start_time) = door_win_entities.animation_start_time else {
         // animation_start_time is None but is_animating is true: stale flag from shared
-        // memory overwrite (game_structure_control had a previous frame's value).
-        // Clear it so the controller can exit WAITING_ANIMATION_END and resume.
+        door_win_entities.animation_start_time = None;
         return;
     };
 

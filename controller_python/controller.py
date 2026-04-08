@@ -407,7 +407,16 @@ class MonkeyGameController:
                 self._handle_waiting_animation_end(state)
             elif self.fsm_state == ControllerState.TRIAL_COMPLETE:
                 self._handle_trial_complete(state)
-            self.write_game_state(state)
+
+            # During animation states, copy game→control to preserve the
+            # game's is_animating flag (mirrors JS copyGameStateGameToControl).
+            # In all other states, write the controller's view of state.
+            if self.fsm_state in (ControllerState.WAITING_ANIMATION_START,
+                                  ControllerState.WAITING_ANIMATION_END):
+                game_state = self.shm_wrapper.read_game_state()
+                self.write_game_state(game_state)
+            else:
+                self.write_game_state(state)
 
             time.sleep(POLLING_RATE_TIME_S / 1000.0)
             self.game_time_unresponsive = 0.0
@@ -433,6 +442,10 @@ class MonkeyGameController:
 
         state.update(trial_state)
         self.trial_start_state = trial_state
+
+        # Write trial config to shared memory BEFORE the reset command,
+        # so the game always reads the new config when it processes reset.
+        self.write_game_state(state)
 
         print(f"state old {state_old.get('is_blank', False)} and stop {state_old.get('is_rendering_stopped', False)}")
         self.write_commands({

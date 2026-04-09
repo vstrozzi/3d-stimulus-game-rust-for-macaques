@@ -1,5 +1,4 @@
-//! Functions to handle commands received by the Controlelr
-
+//! Functions to handle commands received by the Controller
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
 use crate::shared_memory::shared_memory_writer::FrameCounterResource;
@@ -198,7 +197,7 @@ pub fn handle_blank_screen(
     mut game_conditions: ResMut<GameConditions>,
 
 ) {
-    if !pending.blank_screen {
+    if !pending.toggle_blank {
         return;
     }
 
@@ -252,7 +251,7 @@ pub fn handle_stop_rendering(
     pending: Res<PendingCommands>,
     mut game_conditions: ResMut<GameConditions>,
 ) {
-    if !pending.stop_rendering {
+    if !pending.toggle_stop_rendering {
         return;
     }
     // Modulo through blank screen state

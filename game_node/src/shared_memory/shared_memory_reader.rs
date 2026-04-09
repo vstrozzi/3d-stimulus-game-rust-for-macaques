@@ -13,6 +13,10 @@ use crate::utils::objects::GameStateLocal;
 #[derive(Resource)]
 pub struct SharedMemResource(pub SharedMemoryHandle);
 
+/// Tracks the last command sequence number processed by the game.
+#[derive(Resource, Default)]
+pub struct LastCommandSeq(pub u64);
+
 /// Local copy of pending commands read from shared memory
 #[derive(Resource, Default)]
 pub struct PendingCommands {
@@ -20,12 +24,11 @@ pub struct PendingCommands {
     pub rotation: f32,
     pub zoom: f32,
     pub check_alignment: bool,
-    pub blank_screen: bool,
-    pub stop_rendering: bool,
+    pub toggle_blank: bool,
+    pub toggle_stop_rendering: bool,
     pub animation_door: bool,
     pub animation_all_door: bool,
     pub animation_colored: bool,
-
 }
 
 /// Bevy plugin to read shared memory commands and update local game state
@@ -34,6 +37,7 @@ pub struct SharedMemoryReaderPlugin;
 impl Plugin for SharedMemoryReaderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PendingCommands>();
+        app.init_resource::<LastCommandSeq>();
     }
 }
 
@@ -62,11 +66,18 @@ pub fn clear_pending_commands(mut pending_commands: ResMut<PendingCommands>) {
 pub fn read_shared_memory_commands(
     shm_res: Option<Res<SharedMemResource>>,
     mut pending_commands: ResMut<PendingCommands>,
+    mut last_seq: ResMut<LastCommandSeq>,
 ) {
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
 
-    // Read commands from shared memory and apply pending
+    // Check if there are new commands (seq != last processed)
+    let seq = shm.command_seq.load(Ordering::Acquire);
+    if seq == last_seq.0 {
+        return; // Already processed this command batch
+    }
+
+    // New commands available — read ALL command bools
     if shm.commands.rotate_left.load(Ordering::Relaxed) {
         pending_commands.rotation -= CAMERA_3D_SPEED_ROTATE;
     }
@@ -80,38 +91,18 @@ pub fn read_shared_memory_commands(
         pending_commands.zoom += CAMERA_3D_SPEED_ZOOM;
     }
 
-    // New rendering control commands
-    pending_commands.stop_rendering = shm.commands.stop_rendering.load(Ordering::Relaxed);    
+    pending_commands.toggle_stop_rendering = shm.commands.toggle_stop_rendering.load(Ordering::Relaxed);
     pending_commands.animation_door = shm.commands.animation_door.load(Ordering::Relaxed);
     pending_commands.check_alignment = shm.commands.check_alignment.load(Ordering::Relaxed);
-    pending_commands.blank_screen = shm.commands.blank_screen.load(Ordering::Relaxed);
+    pending_commands.toggle_blank = shm.commands.toggle_blank.load(Ordering::Relaxed);
     pending_commands.reset = shm.commands.reset.load(Ordering::Relaxed);
     pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
     pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
 
-    // Clear all commands in shared memory after reading
-    clear_shared_memory_commands(Some(shm_res));
-}
-
-// Clear shared memory of commands after reading
-pub fn clear_shared_memory_commands(
-    shm_res: Option<Res<SharedMemResource>>
-) {
-    let Some(shm_res) = shm_res else { return };
-    let shm = shm_res.0.get();
-
-    // Clear all commands in shared memory after reading
-    shm.commands.rotate_left.store(false, Ordering::Relaxed);
-    shm.commands.rotate_right.store(false, Ordering::Relaxed);
-    shm.commands.zoom_in.store(false, Ordering::Relaxed);
-    shm.commands.zoom_out.store(false, Ordering::Relaxed);
-    shm.commands.stop_rendering.store(false, Ordering::Relaxed);
-    shm.commands.animation_door.store(false, Ordering::Relaxed);
-    shm.commands.check_alignment.store(false, Ordering::Relaxed);
-    shm.commands.blank_screen.store(false, Ordering::Relaxed);
-    shm.commands.reset.store(false, Ordering::Relaxed);
-    shm.commands.animation_all_door.store(false, Ordering::Relaxed);
-    shm.commands.animation_colored.store(false, Ordering::Relaxed);
+    // Acknowledge: tell the controller we processed this batch.
+    // Release ensures all reads above are complete before the controller sees the ack.
+    shm.command_ack.store(seq, Ordering::Release);
+    last_seq.0 = seq;
 }
 
 // Read shared memory to local structure (from game to local)

@@ -8,6 +8,7 @@ use pyo3::{prelude::*};
 #[pyclass]
 struct SharedMemoryWrapper {
     inner: SharedMemoryHandle,
+    command_seq_counter: u64,
 }
 
 // Python wrapper around methods for SharedMemoryHandle
@@ -18,7 +19,12 @@ impl SharedMemoryWrapper {
     /// Attach to an existing shared memory segment created by the game node.
     fn new(name: &str) -> PyResult<Self> {
         open_shared_memory(name)
-            .map(|handle| SharedMemoryWrapper { inner: handle })
+            .map(|handle| {
+                // Initialize seq counter from current ack in SHM.
+                // This supports recovery: new controller attaching to a running game.
+                let ack = handle.get().command_ack.load(Ordering::Acquire);
+                SharedMemoryWrapper { inner: handle, command_seq_counter: ack }
+            })
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyIOError, _>(e.to_string()))
     }
 
@@ -26,6 +32,24 @@ impl SharedMemoryWrapper {
     fn frame_write_head(&self) -> u64 {
         let shm = self.inner.get();
         shm.frame_ring_buffer.write_head.load(Ordering::Acquire)
+    }
+
+    /// Return the current command_ack from the game.
+    fn read_command_ack(&self) -> u64 {
+        let shm = self.inner.get();
+        shm.command_ack.load(Ordering::Acquire)
+    }
+
+    /// Return the controller's current command_seq counter.
+    fn command_seq(&self) -> u64 {
+        self.command_seq_counter
+    }
+
+    /// Reset the seq counter to the current ack value in SHM.
+    /// Call this when resyncing with a (re)started game.
+    fn resync_seq(&mut self) {
+        let shm = self.inner.get();
+        self.command_seq_counter = shm.command_ack.load(Ordering::Acquire);
     }
 
     /// Read the latest game state snapshot (from game_structure_game).
@@ -74,6 +98,10 @@ impl SharedMemoryWrapper {
     }
 
     /// Write commands to shared memory.
+    /// When `increment_seq` is true, the command sequence counter is incremented
+    /// so the game knows there are new commands to process.
+    /// When false, re-writes with the same seq (for pending toggle re-sends).
+    #[pyo3(signature = (rotate_left, rotate_right, zoom_in, zoom_out, check, reset, toggle_blank, toggle_stop_rendering, animation_door, animation_all_door, animation_colored, increment_seq=true))]
     fn write_commands(
         &mut self,
         rotate_left: bool,
@@ -82,11 +110,12 @@ impl SharedMemoryWrapper {
         zoom_out: bool,
         check: bool,
         reset: bool,
-        blank_screen: bool,
-        stop_rendering: bool,
+        toggle_blank: bool,
+        toggle_stop_rendering: bool,
         animation_door: bool,
         animation_all_door: bool,
         animation_colored: bool,
+        increment_seq: bool,
     ) {
         let shm = self.inner.get();
         let cmd = &shm.commands;
@@ -94,16 +123,20 @@ impl SharedMemoryWrapper {
         cmd.rotate_left.store(rotate_left, Ordering::Relaxed);
         cmd.rotate_right.store(rotate_right, Ordering::Relaxed);
         cmd.zoom_in.store(zoom_in, Ordering::Relaxed);
-        cmd.zoom_out.store(zoom_out, Ordering::Relaxed);    
+        cmd.zoom_out.store(zoom_out, Ordering::Relaxed);
         cmd.check_alignment.store(check, Ordering::Relaxed);
-        // Release ensures all preceding Relaxed stores are visible to the game before it sees reset=true.
-        cmd.reset.store(reset, Ordering::Release);
-        cmd.blank_screen.store(blank_screen, Ordering::Relaxed);
-        cmd.stop_rendering.store(stop_rendering, Ordering::Relaxed);
+        cmd.reset.store(reset, Ordering::Relaxed);
+        cmd.toggle_blank.store(toggle_blank, Ordering::Relaxed);
+        cmd.toggle_stop_rendering.store(toggle_stop_rendering, Ordering::Relaxed);
         cmd.animation_door.store(animation_door, Ordering::Relaxed);
         cmd.animation_all_door.store(animation_all_door, Ordering::Relaxed);
         cmd.animation_colored.store(animation_colored, Ordering::Relaxed);
-        
+
+        if increment_seq {
+            self.command_seq_counter += 1;
+        }
+        // Release ensures all preceding Relaxed stores are visible before the game sees the new seq.
+        shm.command_seq.store(self.command_seq_counter, Ordering::Release);
     }
 
     /// Write game structure config fields to controller shared memory.

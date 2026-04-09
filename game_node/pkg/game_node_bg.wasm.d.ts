@@ -3,6 +3,8 @@
 export const memory: WebAssembly.Memory;
 export const wasm_main: () => void;
 export const websharedmemory_new: (a: number) => number;
+export const websharedmemory_get_command_seq_ptr: (a: number) => number;
+export const websharedmemory_get_command_ack_ptr: (a: number) => number;
 export const websharedmemory_get_commands_ptr: (a: number) => number;
 export const websharedmemory_get_game_structure_game_ptr: (a: number) => number;
 export const websharedmemory_get_game_structure_control_ptr: (a: number) => number;

@@ -1,6 +1,5 @@
 use crate::SharedMemory;
 use std::fs::OpenOptions;
-use std::io::Write;
 use std::sync::Arc;
 
 fn shm_path(name: &str) -> std::path::PathBuf {
@@ -17,14 +16,16 @@ impl NativeSharedMemory {
     /// Must only be called by the game node at startup.
     fn create(name: &str) -> std::io::Result<Self> {
         let size = std::mem::size_of::<SharedMemory>();
-        let mut file = OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create(true)
-            .truncate(true)
             .open(shm_path(name))?;
 
-        file.write_all(&vec![0u8; size])?;
+        // Use set_len instead of truncate(true) + write_all to avoid
+        // briefly setting file size to 0, which would SIGBUS any process
+        // that still has the old file mapped.
+        file.set_len(size as u64)?;
         file.sync_all()?;
 
         let ptr = unsafe { mmap_file(&file, size)? };

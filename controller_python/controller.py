@@ -173,8 +173,8 @@ class MonkeyGameController:
         self.triggers = {
             "check": False,
             "reset": False,
-            "blank_screen": False,
-            "stop_rendering": False,
+            "toggle_blank": False,
+            "toggle_stop_rendering": False,
             "animation_door": False,
             "animation_all_door": False,
             "animation_colored": False,
@@ -301,12 +301,20 @@ class MonkeyGameController:
     def reset_triggers(self):
         self.triggers = {k: False for k in self.triggers}
 
+    def _has_pending_toggles(self):
+        """Check if there are unacknowledged commands in SHM."""
+        return self.shm_wrapper.read_command_ack() < self.shm_wrapper.command_seq()
+
     def write_commands(self, commands=None):
         if commands is None:
             data_to_write = {**self.inputs, **self.triggers}
         else:
             data_to_write = commands
-        self.shm_wrapper.write_commands(**data_to_write)
+        # Don't increment seq if the game hasn't acked the previous batch yet.
+        # This keeps the current command state (including toggles) in SHM with
+        # the same seq, preventing the game from missing them.
+        increment = not self._has_pending_toggles()
+        self.shm_wrapper.write_commands(**data_to_write, increment_seq=increment)
         cmds_snapshot = dict(data_to_write)
         self.reset_triggers()
         return cmds_snapshot
@@ -319,8 +327,8 @@ class MonkeyGameController:
             "zoom_out": False,
             "check": False,
             "reset": False,
-            "blank_screen": False,
-            "stop_rendering": False,
+            "toggle_blank": False,
+            "toggle_stop_rendering": False,
             "animation_door": False,
             "animation_all_door": False,
             "animation_colored": False,
@@ -464,8 +472,8 @@ class MonkeyGameController:
             "zoom_out": False,
             "check": False,
             "reset": True,
-            "blank_screen": not state_old.get("is_blank", False),
-            "stop_rendering": not state_old.get("is_rendering_stopped", False),
+            "toggle_blank": not state_old.get("is_blank", False),
+            "toggle_stop_rendering": not state_old.get("is_rendering_stopped", False),
             "animation_door": False,
             "animation_all_door": False,
             "animation_colored": False,
@@ -493,8 +501,8 @@ class MonkeyGameController:
                 "zoom_out": False,
                 "check": False,
                 "reset": True,
-                "blank_screen": True,
-                "stop_rendering": True,
+                "toggle_blank": True,
+                "toggle_stop_rendering": True,
                 "animation_door": False,
                 "animation_all_door": False,
                 "animation_colored": False,
@@ -532,8 +540,8 @@ class MonkeyGameController:
             cmds = self.write_commands({
                 "rotate_left": False, "rotate_right": False,
                 "zoom_in": False, "zoom_out": False,
-                "check": True, "reset": False, "blank_screen": False,
-                "stop_rendering": True, "animation_door": True,
+                "check": True, "reset": False, "toggle_blank": False,
+                "toggle_stop_rendering": True, "animation_door": True,
                 "animation_all_door": False, "animation_colored": False,
             })
             self.old_cmds = cmds
@@ -561,8 +569,8 @@ class MonkeyGameController:
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "blank_screen": False,
-                    "stop_rendering": True, "animation_door": True,
+                    "check": True, "reset": False, "toggle_blank": False,
+                    "toggle_stop_rendering": True, "animation_door": True,
                     "animation_all_door": False, "animation_colored": False,
                 })
                 self.old_cmds = cmds
@@ -578,8 +586,8 @@ class MonkeyGameController:
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "blank_screen": False,
-                    "stop_rendering": True, "animation_door": True,
+                    "check": True, "reset": False, "toggle_blank": False,
+                    "toggle_stop_rendering": True, "animation_door": True,
                     "animation_all_door": False, "animation_colored": colored_light,
                 })
             # Won: animate green light
@@ -587,8 +595,8 @@ class MonkeyGameController:
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "blank_screen": False,
-                    "stop_rendering": True, "animation_door": True,
+                    "check": True, "reset": False, "toggle_blank": False,
+                    "toggle_stop_rendering": True, "animation_door": True,
                     "animation_all_door": False, "animation_colored": True,
                 })
             # No suggestions available but can still play: animate all lights with red
@@ -596,8 +604,8 @@ class MonkeyGameController:
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "blank_screen": False,
-                    "stop_rendering": True, "animation_door": True,
+                    "check": True, "reset": False, "toggle_blank": False,
+                    "toggle_stop_rendering": True, "animation_door": True,
                     "animation_all_door": True, "animation_colored": False,
                 })
 
@@ -618,7 +626,9 @@ class MonkeyGameController:
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
             self.write_game_state(state)  # mirrors copyGameStateGameToControl
         else:
-            self.shm_wrapper.write_commands(**self.old_cmds)
+            # Command still pending in SHM (seq gate ensures game processes it
+            # exactly once). No need to re-send — just wait for next game tick.
+            pass
 
         if self.check_has_finished(state):
             self._handle_trial_index_update()
@@ -627,13 +637,13 @@ class MonkeyGameController:
 
     def _handle_waiting_animation_end(self, state):
         if not state.get("is_animating", True):
-            print("[FSM] Animation finished → issuing stop_rendering (resume)")
+            print("[FSM] Animation finished → issuing toggle_stop_rendering (resume)")
             self.reset_commands()
             cmds = self.write_commands({
                 "rotate_left": False, "rotate_right": False,
                 "zoom_in": False, "zoom_out": False,
-                "check": False, "reset": False, "blank_screen": False,
-                "stop_rendering": True, "animation_door": False,
+                "check": False, "reset": False, "toggle_blank": False,
+                "toggle_stop_rendering": True, "animation_door": False,
                 "animation_all_door": False, "animation_colored": False,
             })
             self.write_game_state(state)
@@ -645,8 +655,8 @@ class MonkeyGameController:
         cmds = self.write_commands({
             "rotate_left": False, "rotate_right": False,
             "zoom_in": False, "zoom_out": False,
-            "check": False, "reset": False, "blank_screen": False,
-            "stop_rendering": False, "animation_door": False,
+            "check": False, "reset": False, "toggle_blank": False,
+            "toggle_stop_rendering": False, "animation_door": False,
             "animation_all_door": False, "animation_colored": False,
         })
         self.write_game_state(state)
@@ -706,6 +716,7 @@ class MonkeyGameController:
     def _resync_with_game(self):
         self.current_frame = -1
         self.last_write_head = self.shm_wrapper.frame_write_head()
+        self.shm_wrapper.resync_seq()  # Reset seq counter to current ack (handles game restart)
         self.game_time_unresponsive = 0.0
         self.fsm_state = ControllerState.INIT
 

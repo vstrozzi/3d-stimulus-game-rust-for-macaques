@@ -70,7 +70,7 @@ const PROCEEDING = {
 // ── Global State ───────────────────────────────────────────────────────────
 let memory = null; // WASM Memory
 let sharedMem = null; // WebSharedMemory wrapper
-let pointers = { cmd: 0, gsGame: 0, gsControl: 0, ringWriteHead: 0, ringEntries: 0 };
+let pointers = { cmd: 0, gsGame: 0, gsControl: 0, ringWriteHead: 0, ringEntries: 0, commandSeq: 0, commandAck: 0 };
 let ringEntryStride = 0;
 let ringBufferSize = 0;
 let lastWriteHead = 0;
@@ -101,12 +101,15 @@ let inputs = {
 let triggers = {
   check: false,
   reset: false,
-  blank_screen: false,
-  stop_rendering: false,
+  toggle_blank: false,
+  toggle_toggle_stop_rendering: false,
   animation_door: false,
   animation_all_door: false,
   animation_colored: false,
 };
+
+// Command sequence counter (mirrors Python's shm_wrapper.command_seq_counter)
+let commandSeqCounter = 0;
 
 // Per-trial tracking
 let nrAttempts = 0;
@@ -331,11 +334,11 @@ function readGameStateSince() {
 /**
  * Write commands to SharedCommands (mirrors Python's write_commands).
  * @param {Object} cmds - { rotate_left, rotate_right, zoom_in, zoom_out,
- *                           check, reset, blank_screen, stop_rendering,
+ *                           check, reset, toggle_blank, toggle_stop_rendering,
  *                           animation_door, animation_all_door, animation_colored }
  */
-function writeCommands(cmds) {
-  const view = new Uint8Array(memory.buffer, pointers.cmd, N_COMMANDS);
+function writeCommands(cmds, incrementSeq = true) {
+  const view = new Uint8Array(memory.buffer, pointers.cmd);
   const co = cmdOffsets;
   view[co.rotate_left] = cmds.rotate_left ? 1 : 0;
   view[co.rotate_right] = cmds.rotate_right ? 1 : 0;
@@ -343,21 +346,40 @@ function writeCommands(cmds) {
   view[co.zoom_out] = cmds.zoom_out ? 1 : 0;
   view[co.check] = cmds.check ? 1 : 0;
   view[co.reset] = cmds.reset ? 1 : 0;
-  view[co.blank_screen] = cmds.blank_screen ? 1 : 0;
-  view[co.stop_rendering] = cmds.stop_rendering ? 1 : 0;
+  view[co.toggle_blank] = cmds.toggle_blank ? 1 : 0;
+  view[co.toggle_stop_rendering] = cmds.toggle_stop_rendering ? 1 : 0;
   view[co.animation_door] = cmds.animation_door ? 1 : 0;
   view[co.animation_all_door] = cmds.animation_all_door ? 1 : 0;
   view[co.animation_colored] = cmds.animation_colored ? 1 : 0;
+
+  // Write command_seq so the game knows there are new commands
+  if (incrementSeq) {
+    commandSeqCounter++;
+  }
+  const seqView = new DataView(memory.buffer, pointers.commandSeq);
+  seqView.setBigUint64(0, BigInt(commandSeqCounter), true); // little-endian
+
   // Match Python's write_commands: always reset triggers after writing
   resetTriggers();
 }
 
-/** Write all-false commands (Python's write_no_commands) */
+/** Write all-false commands (Python's write_no_commands). */
 function writeNoCommands() {
   const cmds = makeCmd();
   writeCommands(cmds);
   return cmds;
 }
+
+/**
+ * Ack-aware wrapper: write commands but don't increment seq if the game
+ * hasn't acked the previous batch yet (prevents missed toggles).
+ */
+function writeCommandsAckAware(cmds) {
+  const increment = !hasPendingCommands();
+  writeCommands(cmds, increment);
+  return cmds;
+}
+
 
 /**
  * Write game state config to game_structure_control.
@@ -532,7 +554,7 @@ function buildTrialState(trialCfg) {
 // Add new command fields here; FSM handlers pick them up automatically via makeCmd().
 const CMD_DEFAULTS = Object.freeze({
   rotate_left: false, rotate_right: false, zoom_in: false, zoom_out: false,
-  check: false, reset: false, blank_screen: false, stop_rendering: false,
+  check: false, reset: false, toggle_blank: false, toggle_toggle_stop_rendering: false,
   animation_door: false, animation_all_door: false, animation_colored: false,
 });
 
@@ -548,6 +570,22 @@ function resetTriggers() {
 function resetAllCommands() {
   for (const k of Object.keys(inputs)) inputs[k] = false;
   resetTriggers();
+}
+
+/** Read command_ack from SHM (game writes this after processing commands). */
+function readCommandAck() {
+  const v = new DataView(memory.buffer, pointers.commandAck);
+  return Number(v.getBigUint64(0, true));
+}
+
+/** Check if there are unacknowledged commands pending. */
+function hasPendingCommands() {
+  return readCommandAck() < commandSeqCounter;
+}
+
+/** Reset seq counter to current ack (for resync after game restart). */
+function resyncSeq() {
+  commandSeqCounter = readCommandAck();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -615,7 +653,7 @@ function checkHasFinished(state) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function handleInit() {
-  console.log("[FSM] INIT → issuing blank_screen + stop_rendering");
+  console.log("[FSM] INIT → issuing toggle_blank + toggle_stop_rendering");
 
   const trialCfg = flatTrial();
   console.log(`[FSM] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()}:`, trialCfg);
@@ -640,10 +678,10 @@ function handleInit() {
   console.log(`[FSM] state old is_blank=${stateOld.is_blank} is_rendering_stopped=${stateOld.is_rendering_stopped}`);
 
   // Commands: reset + ensure blank + ensure stopped
-  writeCommands(makeCmd({
+  writeCommandsAckAware(makeCmd({
     reset: true,
-    blank_screen: !stateOld.is_blank,
-    stop_rendering: !stateOld.is_rendering_stopped,
+    toggle_blank: !stateOld.is_blank,
+    toggle_stop_rendering: !stateOld.is_rendering_stopped,
   }));
 
   // Reset per-trial tracking
@@ -681,8 +719,8 @@ function handleWaitingForStart(state) {
   if (_start) {
     _start = false;
     // Turn off black screen and start rendering
-    const cmds = makeCmd({ reset: true, blank_screen: true, stop_rendering: true });
-    writeCommands(cmds);
+    const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: true });
+    writeCommandsAckAware(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
     logFrame(state, cmds);
@@ -720,8 +758,8 @@ function handlePlaying(state) {
   if (timeElapsed > (trial.elapsed_time_to_retroceed ?? 0) && !_timeRetroceedExpired) {
     console.log(`[TIME] Time to retroceed exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeRetroceedExpired = true;
-    const cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: false });
-    writeCommands(cmds);
+    const cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: false });
+    writeCommandsAckAware(cmds);
     old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -749,8 +787,8 @@ function handlePlaying(state) {
     // Branch 1: Last attempt AND fail → single door (no all-door, no colored), mirrors Python
     if ((nrAttempts + 1) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
-      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true });
-      writeCommands(cmds);
+      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true });
+      writeCommandsAckAware(cmds);
       old_cmds = cmds;
       fsmState = FSM.WAITING_ANIMATION_START;
       nrAttempts += 1;
@@ -765,21 +803,21 @@ function handlePlaying(state) {
     ) {
       const coloredLight = cosineAlignment > COLOR_SUGGESTION_COS_SIM;
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
-      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: coloredLight });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: coloredLight });
     }
     // Branch 3: Single green (isWin & correct & below suggestion)
     else if (isWin && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
-      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_colored: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: true });
     }
     // Branch 4: All doors white
     else {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → check (all white)`);
-      cmds = makeCmd({ check: true, stop_rendering: true, animation_door: true, animation_all_door: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_all_door: true });
     }
 
     nrAttempts += 1;
-    writeCommands(cmds);
+    writeCommandsAckAware(cmds);
     old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -796,7 +834,7 @@ function handlePlaying(state) {
     zoom_in: inputs.zoom_in || pinch.zoomIn,
     zoom_out: inputs.zoom_out || pinch.zoomOut,
   });
-  writeCommands(cmds);
+  writeCommandsAckAware(cmds);
   logFrame(state, cmds);
   old_cmds = cmds;
 }
@@ -804,12 +842,12 @@ function handlePlaying(state) {
 function handleWaitingAnimationStart(state) {
   if (state.is_animating) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
-    fsmState = FSM.WAITING_ANIMATION_END;     
+    fsmState = FSM.WAITING_ANIMATION_END;
     copyGameStateGameToControl();
     writeNoCommands();
-
-  }else {
-    writeCommands(old_cmds);
+  } else {
+    // Command still pending in SHM (seq gate ensures game processes it
+    // exactly once). No need to re-send — just wait for next game tick.
   }
   // (mirrors Python's _handle_waiting_animation_start → _handle_trial_index_update)
   if (checkHasFinished(state)) {
@@ -824,10 +862,10 @@ function handleWaitingAnimationEnd(state) {
   // state.get("is_animating", True) — avoids premature exit on undefined.
   if (!(state.is_animating ?? true)) {
     // Animation done → resume rendering
-    console.log("[FSM] Animation finished → issuing stop_rendering (resume)");
+    console.log("[FSM] Animation finished → issuing toggle_stop_rendering (resume)");
     resetAllCommands();
-    const cmds = makeCmd({ stop_rendering: true });
-    writeCommands(cmds);
+    const cmds = makeCmd({ toggle_stop_rendering: true });
+    writeCommandsAckAware(cmds);
     // Sync game state to control (matches Python's self.write_game_state(state))
     copyGameStateGameToControl();
     logFrame(state, cmds);
@@ -899,6 +937,7 @@ function resyncWithGame() {
   // Advance lastWriteHead to current so we don't replay stale entries
   const headView = new DataView(memory.buffer, pointers.ringWriteHead);
   lastWriteHead = readU64(headView, 0);
+  resyncSeq(); // Reset seq counter to current ack (handles game restart)
   gameTimeUnresponsive = 0;
   fsmState = FSM.INIT;
 }
@@ -1358,6 +1397,8 @@ async function start() {
   }
 
   // Pointers
+  pointers.commandSeq = sharedMem.get_command_seq_ptr();
+  pointers.commandAck = sharedMem.get_command_ack_ptr();
   pointers.cmd = sharedMem.get_commands_ptr();
   pointers.gsGame = sharedMem.get_game_structure_game_ptr();
   pointers.gsControl = sharedMem.get_game_structure_control_ptr();

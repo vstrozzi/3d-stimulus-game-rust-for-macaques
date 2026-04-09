@@ -31,10 +31,7 @@ pub fn refresh_rate_hz() -> f64 {
     crate::constants::game_constants::REFRESH_RATE_HZ
 }
 
-// ---------------------------------------------------------------------------
 // Helper wrapper for WASM side
-// ---------------------------------------------------------------------------
-
 #[wasm_bindgen]
 pub struct WebSharedMemory {
     ptr: *mut SharedMemory,
@@ -52,9 +49,15 @@ impl WebSharedMemory {
         self.ptr as usize
     }
 
-    // -----------------------------------------------------------------------
-    // Pointers to the three top-level regions
-    // -----------------------------------------------------------------------
+    /// Pointer to command_seq (AtomicU64, Controller writes)
+    pub fn get_command_seq_ptr(&self) -> usize {
+        unsafe { &(*self.ptr).command_seq as *const _ as usize }
+    }
+
+    /// Pointer to command_ack (AtomicU64, Game writes)
+    pub fn get_command_ack_ptr(&self) -> usize {
+        unsafe { &(*self.ptr).command_ack as *const _ as usize }
+    }
 
     /// Pointer to SharedCommands (Controller → Game)
     pub fn get_commands_ptr(&self) -> usize {
@@ -91,10 +94,6 @@ impl WebSharedMemory {
         RING_BUFFER_SIZE as u32
     }
 
-    // -----------------------------------------------------------------------
-    // Offset maps – returned as JS Objects { fieldName: byteOffset, … }
-    // -----------------------------------------------------------------------
-
     /// Byte offsets of every field inside SharedCommands (relative to its start).
     pub fn get_commands_offsets(&self) -> JsValue {
         let base = unsafe { &(*self.ptr).commands as *const _ as usize };
@@ -117,8 +116,8 @@ impl WebSharedMemory {
         set("zoom_out",         off!(cmd.zoom_out));
         set("check",            off!(cmd.check_alignment)); // exposed as "check" to match Python interface
         set("reset",            off!(cmd.reset));
-        set("blank_screen",     off!(cmd.blank_screen));
-        set("stop_rendering",   off!(cmd.stop_rendering));
+        set("toggle_blank",     off!(cmd.toggle_blank));
+        set("toggle_stop_rendering", off!(cmd.toggle_stop_rendering));
         set("animation_door",   off!(cmd.animation_door));
         set("animation_all_door", off!(cmd.animation_all_door));
         set("animation_colored", off!(cmd.animation_colored));
@@ -284,10 +283,7 @@ impl WebSharedMemory {
     }
 }
 
-// ---------------------------------------------------------------------------
-// SharedMemoryHandle – thin wrapper for consistency with the native API
-// ---------------------------------------------------------------------------
-
+// SharedMemoryHandle, wrapper for consistency with the native API
 #[derive(Clone, Copy)]
 pub struct SharedMemoryHandle(&'static SharedMemory);
 

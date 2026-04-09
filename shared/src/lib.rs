@@ -32,8 +32,8 @@ pub struct SharedCommands {
     pub zoom_out: AtomicBool,
     pub check_alignment: AtomicBool,
     pub reset: AtomicBool,
-    pub blank_screen: AtomicBool,
-    pub stop_rendering: AtomicBool,
+    pub toggle_blank: AtomicBool,
+    pub toggle_stop_rendering: AtomicBool,
     pub animation_door: AtomicBool,
     pub animation_all_door: AtomicBool,
     pub animation_colored: AtomicBool,
@@ -48,8 +48,8 @@ impl SharedCommands {
             zoom_out: AtomicBool::new(false),
             check_alignment: AtomicBool::new(false),
             reset: AtomicBool::new(false),
-            blank_screen: AtomicBool::new(false),
-            stop_rendering: AtomicBool::new(false),
+            toggle_blank: AtomicBool::new(false),
+            toggle_stop_rendering: AtomicBool::new(false),
             animation_door: AtomicBool::new(false),
             animation_all_door: AtomicBool::new(false),
             animation_colored: AtomicBool::new(false),
@@ -523,6 +523,8 @@ impl Default for FrameRingBuffer {
 #[repr(C)]
 #[derive(Debug)]
 pub struct SharedMemory {
+    pub command_seq: AtomicU64,
+    pub command_ack: AtomicU64,
     pub commands: SharedCommands,
     pub game_structure_game: SharedGameState,
     pub game_structure_control: SharedGameState,
@@ -532,6 +534,8 @@ pub struct SharedMemory {
 impl SharedMemory {
     pub fn new() -> Self {
         Self {
+            command_seq: AtomicU64::new(0),
+            command_ack: AtomicU64::new(0),
             commands: SharedCommands::new(),
             game_structure_game: SharedGameState::new(),
             game_structure_control: SharedGameState::new(),

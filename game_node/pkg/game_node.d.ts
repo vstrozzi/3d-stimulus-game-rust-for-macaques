@@ -5,6 +5,14 @@ export class WebSharedMemory {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Pointer to command_ack (AtomicU64, Game writes)
+     */
+    get_command_ack_ptr(): number;
+    /**
+     * Pointer to command_seq (AtomicU64, Controller writes)
+     */
+    get_command_seq_ptr(): number;
+    /**
      * Byte offsets of every field inside SharedCommands (relative to its start).
      */
     get_commands_offsets(): any;
@@ -80,6 +88,8 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly wasm_main: () => void;
     readonly websharedmemory_new: (a: number) => number;
+    readonly websharedmemory_get_command_seq_ptr: (a: number) => number;
+    readonly websharedmemory_get_command_ack_ptr: (a: number) => number;
     readonly websharedmemory_get_commands_ptr: (a: number) => number;
     readonly websharedmemory_get_game_structure_game_ptr: (a: number) => number;
     readonly websharedmemory_get_game_structure_control_ptr: (a: number) => number;

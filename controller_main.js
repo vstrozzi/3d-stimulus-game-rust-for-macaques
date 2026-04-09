@@ -843,7 +843,7 @@ function handleWaitingAnimationStart(state) {
   if (state.is_animating) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
     fsmState = FSM.WAITING_ANIMATION_END;
-    writeGameStateControl(state);
+    copyGameStateGameToControl();
     writeNoCommands();
   } else {
     // Command still pending in SHM (seq gate ensures game processes it
@@ -867,7 +867,7 @@ function handleWaitingAnimationEnd(state) {
     const cmds = makeCmd({ toggle_stop_rendering: true });
     writeCommandsAckAware(cmds);
     // Sync game state to control (matches Python's self.write_game_state(state))
-    writeGameStateControl(state);
+    copyGameStateGameToControl();
     logFrame(state, cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
@@ -877,8 +877,7 @@ function handleWaitingAnimationEnd(state) {
   // Still animating – send no commands
   const cmds = writeNoCommands();
   // Sync game state to control (matches Python's self.write_game_state(state))
-  state.is_animating = true; // Ensure is_animating is true in control state
-  writeGameStateControl(state);
+  copyGameStateGameToControl();
   logFrame(state, cmds);
 }
 

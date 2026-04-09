@@ -624,10 +624,10 @@ class MonkeyGameController:
         if state.get("is_animating", False):
             print("[FSM] Animation started → WAITING_ANIMATION_END")
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
-            self.write_game_state(state)  # mirrors copyGameStateGameToControl
+            self.write_game_state(state) 
         else:
             # Command still pending in SHM (seq gate ensures game processes it
-            # exactly once). No need to re-send — just wait for next game tick.
+            # exactly once). No need to re-send, just wait for next game tick.
             pass
 
         if self.check_has_finished(state):
@@ -659,6 +659,8 @@ class MonkeyGameController:
             "toggle_stop_rendering": False, "animation_door": False,
             "animation_all_door": False, "animation_colored": False,
         })
+
+        state["is_animating"] = True
         self.write_game_state(state)
         self.log_frame(state, cmds)
 

@@ -109,9 +109,16 @@ pub fn read_shared_memory_commands(
 pub fn read_shared_memory_game_state_local(
     shm_res: Option<Res<SharedMemResource>>,
     mut local_game_struct: ResMut<GameStateLocal>,
+    last_seq: ResMut<LastCommandSeq>,
 ) {
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
+
+    // Check if there are new commands (seq != last processed)
+    let seq = shm.command_seq.load(Ordering::Acquire);
+    if seq == last_seq.0 {
+        return; // Already processed this command batch
+    }
 
     let gs_game = &shm.game_structure_control;
 

@@ -20,7 +20,6 @@ import init, {
   WebSharedMemory,
   wasm_main,
   refresh_rate_hz,
-  shared_game_state_byte_size,
 } from "./game_node/pkg/game_node.js";
 
 
@@ -333,11 +332,13 @@ function readGameStateSince() {
 
 /**
  * Write commands to SharedCommands (mirrors Python's write_commands).
+ * Does NOT increment command_seq — that is done by incrementCommandSeq()
+ * in the main loop after game state is also written.
  * @param {Object} cmds - { rotate_left, rotate_right, zoom_in, zoom_out,
  *                           check, reset, toggle_blank, toggle_stop_rendering,
  *                           animation_door, animation_all_door, animation_colored }
  */
-function writeCommands(cmds, incrementSeq = true) {
+function writeCommands(cmds) {
   const view = new Uint8Array(memory.buffer, pointers.cmd);
   const co = cmdOffsets;
   view[co.rotate_left] = cmds.rotate_left ? 1 : 0;
@@ -352,13 +353,6 @@ function writeCommands(cmds, incrementSeq = true) {
   view[co.animation_all_door] = cmds.animation_all_door ? 1 : 0;
   view[co.animation_colored] = cmds.animation_colored ? 1 : 0;
 
-  // Write command_seq so the game knows there are new commands
-  if (incrementSeq) {
-    commandSeqCounter++;
-  }
-  const seqView = new DataView(memory.buffer, pointers.commandSeq);
-  seqView.setBigUint64(0, BigInt(commandSeqCounter), true); // little-endian
-
   // Match Python's write_commands: always reset triggers after writing
   resetTriggers();
 }
@@ -370,14 +364,12 @@ function writeNoCommands() {
   return cmds;
 }
 
-/**
- * Ack-aware wrapper: write commands but don't increment seq if the game
- * hasn't acked the previous batch yet (prevents missed toggles).
- */
-function writeCommandsAckAware(cmds) {
-  const increment = !hasPendingCommands();
-  writeCommands(cmds, increment);
-  return cmds;
+/** Increment command_seq so the game knows there are new commands.
+ *  Mirrors Python's shm_wrapper.increment_command_seq(). */
+function incrementCommandSeq() {
+  commandSeqCounter++;
+  const seqView = new DataView(memory.buffer, pointers.commandSeq);
+  seqView.setBigUint64(0, BigInt(commandSeqCounter), true);
 }
 
 
@@ -441,14 +433,26 @@ function writeGameStateControl(state) {
 }
 
 /**
- * Copy raw bytes from game_structure_game to game_structure_control.
- * Uses shared_game_state_byte_size() exported from web.rs — zero per-field maintenance.
- * Mirrors Python's self.write_game_state(state) calls during animation states.
+ * Write current state (as returned by readGameStateAt, mixed format) to game_structure_control.
+ * Mirrors Python's self.write_game_state(self.current_state) in the main loop.
+ *
+ * readGameStateAt returns decoded floats for: elapsed_secs, cosine_alignment, current_angle,
+ * win_elapsed_secs. It also uses different key names than writeGameStateControl for some fields.
+ * This function bridges both by re-encoding and mapping field names.
  */
-function copyGameStateGameToControl() {
-  const size = shared_game_state_byte_size();
-  new Uint8Array(memory.buffer, pointers.gsControl, size)
-    .set(new Uint8Array(memory.buffer, pointers.gsGame, size));
+function writeCurrentStateToControl(state) {
+  const s = { ...state };
+
+  // Re-encode decoded float fields back to u32 bits
+  s.elapsed_secs = floatToU32Bits(s.elapsed_secs ?? 0);
+  s.current_alignment = floatToU32Bits(s.cosine_alignment ?? 0);
+  s.current_angle = floatToU32Bits(s.current_angle ?? 0);
+  s.win_time = floatToU32Bits(s.win_elapsed_secs ?? 0);
+
+  // Map readGameStateAt key names → writeGameStateControl key names
+  s.attempts = s.nr_attempts ?? s.attempts ?? 0;
+
+  writeGameStateControl(s);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -652,13 +656,13 @@ function checkHasFinished(state) {
 // FSM HANDLERS (1:1 mapping from controller.py)
 // ═══════════════════════════════════════════════════════════════════════════
 
-function handleInit() {
+function handleInit(state) {
   console.log("[FSM] INIT → issuing toggle_blank + toggle_stop_rendering");
 
   const trialCfg = flatTrial();
   console.log(`[FSM] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()}:`, trialCfg);
 
-  // Build fresh default state and overlay trial config
+  // Build fresh default state and overlay trial config (raw u32 format)
   const trialState = buildTrialState(trialCfg);
 
   // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS))
@@ -671,14 +675,23 @@ function handleInit() {
   // Read previous game state (to check is_blank / is_rendering_stopped)
   const stateOld = readGameState();
 
-  // Write config to game_structure_control
-  writeGameStateControl(trialState);
+  // Merge trial state into current state (mirrors Python's self.current_state.update(trial_state))
+  Object.assign(state, trialState);
+  // Re-decode dynamic float fields so state stays in readGameStateAt mixed format
+  // (buildTrialState returns raw u32 for these; the loop's writeCurrentStateToControl
+  //  expects the decoded-float format from readGameStateAt)
+  state.elapsed_secs = u32BitsToFloat(trialState.elapsed_secs ?? 0);
+  state.cosine_alignment = u32BitsToFloat(trialState.current_alignment ?? 0);
+  state.current_angle = u32BitsToFloat(trialState.current_angle ?? 0);
+  state.win_elapsed_secs = u32BitsToFloat(trialState.win_time ?? 0);
+  state.nr_attempts = trialState.attempts ?? 0;
+
   trialStartState = trialState;
 
   console.log(`[FSM] state old is_blank=${stateOld.is_blank} is_rendering_stopped=${stateOld.is_rendering_stopped}`);
 
   // Commands: reset + ensure blank + ensure stopped
-  writeCommandsAckAware(makeCmd({
+  writeCommands(makeCmd({
     reset: true,
     toggle_blank: !stateOld.is_blank,
     toggle_stop_rendering: !stateOld.is_rendering_stopped,
@@ -720,7 +733,7 @@ function handleWaitingForStart(state) {
     _start = false;
     // Turn off black screen and start rendering
     const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: true });
-    writeCommandsAckAware(cmds);
+    writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
     logFrame(state, cmds);
@@ -759,7 +772,7 @@ function handlePlaying(state) {
     console.log(`[TIME] Time to retroceed exceeded (${timeElapsed.toFixed(1)}s)`);
     _timeRetroceedExpired = true;
     const cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: false });
-    writeCommandsAckAware(cmds);
+    writeCommands(cmds);
     old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -788,7 +801,7 @@ function handlePlaying(state) {
     if ((nrAttempts + 1) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true });
-      writeCommandsAckAware(cmds);
+      writeCommands(cmds);
       old_cmds = cmds;
       fsmState = FSM.WAITING_ANIMATION_START;
       nrAttempts += 1;
@@ -817,7 +830,7 @@ function handlePlaying(state) {
     }
 
     nrAttempts += 1;
-    writeCommandsAckAware(cmds);
+    writeCommands(cmds);
     old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
@@ -834,7 +847,7 @@ function handlePlaying(state) {
     zoom_in: inputs.zoom_in || pinch.zoomIn,
     zoom_out: inputs.zoom_out || pinch.zoomOut,
   });
-  writeCommandsAckAware(cmds);
+  writeCommands(cmds);
   logFrame(state, cmds);
   old_cmds = cmds;
 }
@@ -843,17 +856,15 @@ function handleWaitingAnimationStart(state) {
   if (state.is_animating) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
     fsmState = FSM.WAITING_ANIMATION_END;
-    copyGameStateGameToControl();
-    writeNoCommands();
   } else {
     // Command still pending in SHM (seq gate ensures game processes it
     // exactly once). No need to re-send — just wait for next game tick.
   }
-  // (mirrors Python's _handle_waiting_animation_start → _handle_trial_index_update)
+
   if (checkHasFinished(state)) {
     handleTrialIndexUpdate();
   }
-  // Sync game state to control (matches Python's self.write_game_state(state))
+
   logFrame(state, old_cmds);
 }
 
@@ -865,19 +876,16 @@ function handleWaitingAnimationEnd(state) {
     console.log("[FSM] Animation finished → issuing toggle_stop_rendering (resume)");
     resetAllCommands();
     const cmds = makeCmd({ toggle_stop_rendering: true });
-    writeCommandsAckAware(cmds);
-    // Sync game state to control (matches Python's self.write_game_state(state))
-    copyGameStateGameToControl();
-    logFrame(state, cmds);
+    writeCommands(cmds);
+    logFrame(state, old_cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
     console.log("[FSM] → PLAYING");
     return;
   }
   // Still animating – send no commands
-  const cmds = writeNoCommands();
-  // Sync game state to control (matches Python's self.write_game_state(state))
-  copyGameStateGameToControl();
+  const cmds = makeCmd();
+  writeCommands(cmds);
   logFrame(state, cmds);
 }
 
@@ -976,15 +984,19 @@ function controllerLoop() {
     }
   }
 
-  // Use the latest state for FSM dispatch
+  // Use the latest state for FSM dispatch (mirrors Python's self.current_state = states[-1])
   const state = states[states.length - 1];
   currentFrame = state.frame_number;
   gameTimeUnresponsive = 0;
 
-  // Dispatch FSM
+  // Set progress bar on state (mirrors Python lines 413-414)
+  state.progress_bar_cur_size = _progressBarCur();
+  state.progress_bar_size = _progressBarSize();
+
+  // Dispatch FSM — handlers may modify state in-place
   switch (fsmState) {
     case FSM.INIT:
-      handleInit();
+      handleInit(state);
       break;
     case FSM.WAITING_FOR_START:
       handleWaitingForStart(state);
@@ -1001,6 +1013,15 @@ function controllerLoop() {
     case FSM.TRIAL_COMPLETE:
       handleTrialComplete(state);
       break;
+  }
+
+  // Write game state to control (mirrors Python's self.write_game_state(self.current_state))
+  writeCurrentStateToControl(state);
+
+  // Increment seq only when game has acked previous batch
+  // (mirrors Python's: if not self._has_pending_toggles(): self.shm_wrapper.increment_command_seq())
+  if (!hasPendingCommands()) {
+    incrementCommandSeq();
   }
 }
 

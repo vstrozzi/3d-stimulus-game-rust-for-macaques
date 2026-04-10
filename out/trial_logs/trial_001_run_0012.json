@@ -1,0 +1,6843 @@
+{
+  "level_index": 1,
+  "active_chain": 1,
+  "trial_index_in_chain": 2,
+  "trial_config": {
+    "target_door": 5,
+    "colors": [
+      [
+        0.9764705882352941,
+        0.9411764705882353,
+        0.4196078431372549,
+        1
+      ],
+      [
+        0.10196078431372549,
+        0.37254901960784315,
+        0.7058823529411765,
+        1
+      ],
+      [
+        0.10196078431372549,
+        0.37254901960784315,
+        0.7058823529411765,
+        1
+      ]
+    ],
+    "textures": [
+      11,
+      11,
+      11
+    ],
+    "decorations_seeds": [
+      69,
+      70,
+      70
+    ],
+    "decorations_count": [
+      20,
+      20,
+      20
+    ],
+    "decorations_size": [
+      0.2,
+      0.2,
+      0.2
+    ],
+    "decorations_thickness": [
+      0.05,
+      0.05,
+      0.05
+    ],
+    "decorations_texture": [
+      6,
+      6,
+      6
+    ],
+    "decorations_shape": [
+      2,
+      3,
+      3
+    ],
+    "decorations_color": [
+      [
+        0,
+        0,
+        0,
+        1
+      ],
+      [
+        0.7529411764705882,
+        0.10980392156862745,
+        0.1568627450980392,
+        1
+      ],
+      [
+        0.7529411764705882,
+        0.10980392156862745,
+        0.1568627450980392,
+        1
+      ]
+    ],
+    "start_orient": 0,
+    "base_radius": 2.5,
+    "height": 4,
+    "cosine_alignment_threshold": 0.95,
+    "door_anim_fade_out": 0.5,
+    "door_anim_stay_open": 0.5,
+    "door_anim_fade_in": 0.5,
+    "main_spotlight_intensity": 50000000,
+    "ambient_brightness": 100,
+    "max_spotlight_intensity": 50000000,
+    "nr_attempts_to_win": 3,
+    "nr_attempts_suggestion": 3,
+    "nr_attempts_to_retroceed": 10,
+    "elapsed_time_to_win": 30,
+    "elapsed_time_to_retroceed": 60
+  },
+  "outcome": "advance",
+  "nr_attempts": 2,
+  "elapsed_time": 3.8987,
+  "timestamp_start": "2026-04-10T10:38:57.411916",
+  "timestamp_end": "2026-04-10T10:39:01.310658",
+  "frames": {
+    "7": {
+      "state_read": {
+        "frame_number": 7,
+        "elapsed_secs": 0.11666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "1": {
+      "state_read": {
+        "frame_number": 1,
+        "elapsed_secs": 0.01666666753590107,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "2": {
+      "state_read": {
+        "frame_number": 2,
+        "elapsed_secs": 0.03333333507180214,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "3": {
+      "state_read": {
+        "frame_number": 3,
+        "elapsed_secs": 0.05000000074505806,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "4": {
+      "state_read": {
+        "frame_number": 4,
+        "elapsed_secs": 0.06666667014360428,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "5": {
+      "state_read": {
+        "frame_number": 5,
+        "elapsed_secs": 0.0833333358168602,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "6": {
+      "state_read": {
+        "frame_number": 6,
+        "elapsed_secs": 0.10000000149011612,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "8": {
+      "state_read": {
+        "frame_number": 8,
+        "elapsed_secs": 0.13333334028720856,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 0,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": true,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": true,
+        "animation_door": true,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "9": {
+      "state_read": {
+        "frame_number": 9,
+        "elapsed_secs": 0.13333334028720856,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 1,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": true,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": true,
+        "animation_door": true,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "10": {
+      "state_read": {
+        "frame_number": 10,
+        "elapsed_secs": 0.15000000596046448,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "11": {
+      "state_read": {
+        "frame_number": 11,
+        "elapsed_secs": 0.1666666716337204,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "12": {
+      "state_read": {
+        "frame_number": 12,
+        "elapsed_secs": 0.18333333730697632,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "13": {
+      "state_read": {
+        "frame_number": 13,
+        "elapsed_secs": 0.20000000298023224,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "14": {
+      "state_read": {
+        "frame_number": 14,
+        "elapsed_secs": 0.21666666865348816,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "15": {
+      "state_read": {
+        "frame_number": 15,
+        "elapsed_secs": 0.23333334922790527,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "16": {
+      "state_read": {
+        "frame_number": 16,
+        "elapsed_secs": 0.25,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "17": {
+      "state_read": {
+        "frame_number": 17,
+        "elapsed_secs": 0.2666666805744171,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "18": {
+      "state_read": {
+        "frame_number": 18,
+        "elapsed_secs": 0.28333333134651184,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "19": {
+      "state_read": {
+        "frame_number": 19,
+        "elapsed_secs": 0.30000001192092896,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "20": {
+      "state_read": {
+        "frame_number": 20,
+        "elapsed_secs": 0.31666669249534607,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "21": {
+      "state_read": {
+        "frame_number": 21,
+        "elapsed_secs": 0.3333333432674408,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "22": {
+      "state_read": {
+        "frame_number": 22,
+        "elapsed_secs": 0.3499999940395355,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "23": {
+      "state_read": {
+        "frame_number": 23,
+        "elapsed_secs": 0.36666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "24": {
+      "state_read": {
+        "frame_number": 24,
+        "elapsed_secs": 0.38333335518836975,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "25": {
+      "state_read": {
+        "frame_number": 25,
+        "elapsed_secs": 0.4000000059604645,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "26": {
+      "state_read": {
+        "frame_number": 26,
+        "elapsed_secs": 0.4166666865348816,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "27": {
+      "state_read": {
+        "frame_number": 27,
+        "elapsed_secs": 0.4333333373069763,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "28": {
+      "state_read": {
+        "frame_number": 28,
+        "elapsed_secs": 0.44999998807907104,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "29": {
+      "state_read": {
+        "frame_number": 29,
+        "elapsed_secs": 0.46666669845581055,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "30": {
+      "state_read": {
+        "frame_number": 30,
+        "elapsed_secs": 0.4833333492279053,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "31": {
+      "state_read": {
+        "frame_number": 31,
+        "elapsed_secs": 0.5,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "32": {
+      "state_read": {
+        "frame_number": 32,
+        "elapsed_secs": 0.5166667103767395,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "33": {
+      "state_read": {
+        "frame_number": 33,
+        "elapsed_secs": 0.5333333611488342,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "34": {
+      "state_read": {
+        "frame_number": 34,
+        "elapsed_secs": 0.550000011920929,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "35": {
+      "state_read": {
+        "frame_number": 35,
+        "elapsed_secs": 0.5666666626930237,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "36": {
+      "state_read": {
+        "frame_number": 36,
+        "elapsed_secs": 0.5833333730697632,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "37": {
+      "state_read": {
+        "frame_number": 37,
+        "elapsed_secs": 0.6000000238418579,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "38": {
+      "state_read": {
+        "frame_number": 38,
+        "elapsed_secs": 0.6166666746139526,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "39": {
+      "state_read": {
+        "frame_number": 39,
+        "elapsed_secs": 0.6333333849906921,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "40": {
+      "state_read": {
+        "frame_number": 40,
+        "elapsed_secs": 0.6499999761581421,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "41": {
+      "state_read": {
+        "frame_number": 41,
+        "elapsed_secs": 0.6666666865348816,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "42": {
+      "state_read": {
+        "frame_number": 42,
+        "elapsed_secs": 0.6833333969116211,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "43": {
+      "state_read": {
+        "frame_number": 43,
+        "elapsed_secs": 0.699999988079071,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "44": {
+      "state_read": {
+        "frame_number": 44,
+        "elapsed_secs": 0.7166666984558105,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "45": {
+      "state_read": {
+        "frame_number": 45,
+        "elapsed_secs": 0.7333333492279053,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "46": {
+      "state_read": {
+        "frame_number": 46,
+        "elapsed_secs": 0.75,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "47": {
+      "state_read": {
+        "frame_number": 47,
+        "elapsed_secs": 0.7666667103767395,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "48": {
+      "state_read": {
+        "frame_number": 48,
+        "elapsed_secs": 0.7833333611488342,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "49": {
+      "state_read": {
+        "frame_number": 49,
+        "elapsed_secs": 0.800000011920929,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "50": {
+      "state_read": {
+        "frame_number": 50,
+        "elapsed_secs": 0.8166666626930237,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "51": {
+      "state_read": {
+        "frame_number": 51,
+        "elapsed_secs": 0.8333333730697632,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "52": {
+      "state_read": {
+        "frame_number": 52,
+        "elapsed_secs": 0.8500000238418579,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "53": {
+      "state_read": {
+        "frame_number": 53,
+        "elapsed_secs": 0.8666666746139526,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "54": {
+      "state_read": {
+        "frame_number": 54,
+        "elapsed_secs": 0.8833333849906921,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "55": {
+      "state_read": {
+        "frame_number": 55,
+        "elapsed_secs": 0.8999999761581421,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "56": {
+      "state_read": {
+        "frame_number": 56,
+        "elapsed_secs": 0.9166666865348816,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "57": {
+      "state_read": {
+        "frame_number": 57,
+        "elapsed_secs": 0.9333333969116211,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "58": {
+      "state_read": {
+        "frame_number": 58,
+        "elapsed_secs": 0.949999988079071,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "59": {
+      "state_read": {
+        "frame_number": 59,
+        "elapsed_secs": 0.9666666984558105,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "60": {
+      "state_read": {
+        "frame_number": 60,
+        "elapsed_secs": 0.9833333492279053,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "61": {
+      "state_read": {
+        "frame_number": 61,
+        "elapsed_secs": 1.0,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "62": {
+      "state_read": {
+        "frame_number": 62,
+        "elapsed_secs": 1.0166666507720947,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "63": {
+      "state_read": {
+        "frame_number": 63,
+        "elapsed_secs": 1.0333333015441895,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "64": {
+      "state_read": {
+        "frame_number": 64,
+        "elapsed_secs": 1.0500000715255737,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "65": {
+      "state_read": {
+        "frame_number": 65,
+        "elapsed_secs": 1.0666667222976685,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "66": {
+      "state_read": {
+        "frame_number": 66,
+        "elapsed_secs": 1.0833333730697632,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "67": {
+      "state_read": {
+        "frame_number": 67,
+        "elapsed_secs": 1.100000023841858,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "68": {
+      "state_read": {
+        "frame_number": 68,
+        "elapsed_secs": 1.1166666746139526,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "69": {
+      "state_read": {
+        "frame_number": 69,
+        "elapsed_secs": 1.1333333253860474,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "70": {
+      "state_read": {
+        "frame_number": 70,
+        "elapsed_secs": 1.149999976158142,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "71": {
+      "state_read": {
+        "frame_number": 71,
+        "elapsed_secs": 1.1666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "72": {
+      "state_read": {
+        "frame_number": 72,
+        "elapsed_secs": 1.183333396911621,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "73": {
+      "state_read": {
+        "frame_number": 73,
+        "elapsed_secs": 1.2000000476837158,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "74": {
+      "state_read": {
+        "frame_number": 74,
+        "elapsed_secs": 1.2166666984558105,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "75": {
+      "state_read": {
+        "frame_number": 75,
+        "elapsed_secs": 1.2333333492279053,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "76": {
+      "state_read": {
+        "frame_number": 76,
+        "elapsed_secs": 1.25,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "77": {
+      "state_read": {
+        "frame_number": 77,
+        "elapsed_secs": 1.2666666507720947,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "78": {
+      "state_read": {
+        "frame_number": 78,
+        "elapsed_secs": 1.2833333015441895,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "79": {
+      "state_read": {
+        "frame_number": 79,
+        "elapsed_secs": 1.3000000715255737,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "80": {
+      "state_read": {
+        "frame_number": 80,
+        "elapsed_secs": 1.3166667222976685,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "81": {
+      "state_read": {
+        "frame_number": 81,
+        "elapsed_secs": 1.3333333730697632,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "82": {
+      "state_read": {
+        "frame_number": 82,
+        "elapsed_secs": 1.350000023841858,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "83": {
+      "state_read": {
+        "frame_number": 83,
+        "elapsed_secs": 1.3666666746139526,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "84": {
+      "state_read": {
+        "frame_number": 84,
+        "elapsed_secs": 1.383333444595337,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "85": {
+      "state_read": {
+        "frame_number": 85,
+        "elapsed_secs": 1.4000000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "86": {
+      "state_read": {
+        "frame_number": 86,
+        "elapsed_secs": 1.4166667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "87": {
+      "state_read": {
+        "frame_number": 87,
+        "elapsed_secs": 1.433333396911621,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "88": {
+      "state_read": {
+        "frame_number": 88,
+        "elapsed_secs": 1.4500000476837158,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "89": {
+      "state_read": {
+        "frame_number": 89,
+        "elapsed_secs": 1.4666666984558105,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "90": {
+      "state_read": {
+        "frame_number": 90,
+        "elapsed_secs": 1.4833333492279053,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "91": {
+      "state_read": {
+        "frame_number": 91,
+        "elapsed_secs": 1.5,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "92": {
+      "state_read": {
+        "frame_number": 92,
+        "elapsed_secs": 1.5166666507720947,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "93": {
+      "state_read": {
+        "frame_number": 93,
+        "elapsed_secs": 1.5333333015441895,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "94": {
+      "state_read": {
+        "frame_number": 94,
+        "elapsed_secs": 1.5499999523162842,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "95": {
+      "state_read": {
+        "frame_number": 95,
+        "elapsed_secs": 1.566666603088379,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "96": {
+      "state_read": {
+        "frame_number": 96,
+        "elapsed_secs": 1.5833333730697632,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "97": {
+      "state_read": {
+        "frame_number": 97,
+        "elapsed_secs": 1.600000023841858,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "98": {
+      "state_read": {
+        "frame_number": 98,
+        "elapsed_secs": 1.6166666746139526,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "99": {
+      "state_read": {
+        "frame_number": 99,
+        "elapsed_secs": 1.633333444595337,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": true,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "100": {
+      "state_read": {
+        "frame_number": 100,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": true,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": true,
+        "animation_door": true,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "101": {
+      "state_read": {
+        "frame_number": 101,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "102": {
+      "state_read": {
+        "frame_number": 102,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "103": {
+      "state_read": {
+        "frame_number": 103,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "104": {
+      "state_read": {
+        "frame_number": 104,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "105": {
+      "state_read": {
+        "frame_number": 105,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "106": {
+      "state_read": {
+        "frame_number": 106,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "107": {
+      "state_read": {
+        "frame_number": 107,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "108": {
+      "state_read": {
+        "frame_number": 108,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "109": {
+      "state_read": {
+        "frame_number": 109,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.4999999403953552,
+        "current_angle": 1.0471975803375244,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "110": {
+      "state_read": {
+        "frame_number": 110,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.5426583290100098,
+        "current_angle": 0.9971975684165955,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "111": {
+      "state_read": {
+        "frame_number": 111,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.5839602947235107,
+        "current_angle": 0.9471976161003113,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "112": {
+      "state_read": {
+        "frame_number": 112,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.6238027215003967,
+        "current_angle": 0.8971976041793823,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "113": {
+      "state_read": {
+        "frame_number": 113,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.6620858907699585,
+        "current_angle": 0.8471976518630981,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "114": {
+      "state_read": {
+        "frame_number": 114,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.6987142562866211,
+        "current_angle": 0.7971976399421692,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "115": {
+      "state_read": {
+        "frame_number": 115,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.7335962653160095,
+        "current_angle": 0.7471975088119507,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "116": {
+      "state_read": {
+        "frame_number": 116,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.7666445970535278,
+        "current_angle": 0.6971974968910217,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "117": {
+      "state_read": {
+        "frame_number": 117,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.7977765798568726,
+        "current_angle": 0.6471977233886719,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "118": {
+      "state_read": {
+        "frame_number": 118,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.8269147872924805,
+        "current_angle": 0.5971974730491638,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "119": {
+      "state_read": {
+        "frame_number": 119,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.8539860248565674,
+        "current_angle": 0.5471974611282349,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "120": {
+      "state_read": {
+        "frame_number": 120,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.8789227604866028,
+        "current_angle": 0.49719738960266113,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "121": {
+      "state_read": {
+        "frame_number": 121,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9016624689102173,
+        "current_angle": 0.44719770550727844,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "122": {
+      "state_read": {
+        "frame_number": 122,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9221487045288086,
+        "current_angle": 0.39719754457473755,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "123": {
+      "state_read": {
+        "frame_number": 123,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9403300285339355,
+        "current_angle": 0.34719738364219666,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "124": {
+      "state_read": {
+        "frame_number": 124,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9561610221862793,
+        "current_angle": 0.2971971929073334,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "125": {
+      "state_read": {
+        "frame_number": 125,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9696019887924194,
+        "current_angle": 0.24719740450382233,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "126": {
+      "state_read": {
+        "frame_number": 126,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9806195497512817,
+        "current_angle": 0.19719724357128143,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "127": {
+      "state_read": {
+        "frame_number": 127,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9891860485076904,
+        "current_angle": 0.14719712734222412,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "128": {
+      "state_read": {
+        "frame_number": 128,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9952800273895264,
+        "current_angle": 0.09719763696193695,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "129": {
+      "state_read": {
+        "frame_number": 129,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9988864064216614,
+        "current_angle": 0.04719746485352516,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "130": {
+      "state_read": {
+        "frame_number": 130,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9999961256980896,
+        "current_angle": 0.0027836323715746403,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "131": {
+      "state_read": {
+        "frame_number": 131,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9986063241958618,
+        "current_angle": 0.05280150845646858,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "132": {
+      "state_read": {
+        "frame_number": 132,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.994720458984375,
+        "current_angle": 0.10280265659093857,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": true,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "133": {
+      "state_read": {
+        "frame_number": 133,
+        "elapsed_secs": 1.6500000953674316,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 2,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": false,
+        "win_elapsed_secs": 0.0
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": true,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": true,
+        "animation_door": true,
+        "animation_all_door": false,
+        "animation_colored": true
+      }
+    },
+    "134": {
+      "state_read": {
+        "frame_number": 134,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 3,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.516666412353516
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": true,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": true,
+        "animation_door": true,
+        "animation_all_door": false,
+        "animation_colored": true
+      }
+    },
+    "135": {
+      "state_read": {
+        "frame_number": 135,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "136": {
+      "state_read": {
+        "frame_number": 136,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "137": {
+      "state_read": {
+        "frame_number": 137,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "138": {
+      "state_read": {
+        "frame_number": 138,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "139": {
+      "state_read": {
+        "frame_number": 139,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "140": {
+      "state_read": {
+        "frame_number": 140,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "141": {
+      "state_read": {
+        "frame_number": 141,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "142": {
+      "state_read": {
+        "frame_number": 142,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "143": {
+      "state_read": {
+        "frame_number": 143,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "144": {
+      "state_read": {
+        "frame_number": 144,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "145": {
+      "state_read": {
+        "frame_number": 145,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "146": {
+      "state_read": {
+        "frame_number": 146,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "147": {
+      "state_read": {
+        "frame_number": 147,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "148": {
+      "state_read": {
+        "frame_number": 148,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "149": {
+      "state_read": {
+        "frame_number": 149,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "150": {
+      "state_read": {
+        "frame_number": 150,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "151": {
+      "state_read": {
+        "frame_number": 152,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {}
+    },
+    "153": {
+      "state_read": {
+        "frame_number": 153,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "154": {
+      "state_read": {
+        "frame_number": 154,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "155": {
+      "state_read": {
+        "frame_number": 155,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "156": {
+      "state_read": {
+        "frame_number": 156,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "157": {
+      "state_read": {
+        "frame_number": 157,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "158": {
+      "state_read": {
+        "frame_number": 158,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "159": {
+      "state_read": {
+        "frame_number": 159,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "160": {
+      "state_read": {
+        "frame_number": 160,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "161": {
+      "state_read": {
+        "frame_number": 161,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "162": {
+      "state_read": {
+        "frame_number": 162,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "163": {
+      "state_read": {
+        "frame_number": 163,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "164": {
+      "state_read": {
+        "frame_number": 164,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "165": {
+      "state_read": {
+        "frame_number": 165,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "166": {
+      "state_read": {
+        "frame_number": 166,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "167": {
+      "state_read": {
+        "frame_number": 167,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "168": {
+      "state_read": {
+        "frame_number": 168,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "169": {
+      "state_read": {
+        "frame_number": 169,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "170": {
+      "state_read": {
+        "frame_number": 170,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "171": {
+      "state_read": {
+        "frame_number": 171,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "172": {
+      "state_read": {
+        "frame_number": 172,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "173": {
+      "state_read": {
+        "frame_number": 173,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "174": {
+      "state_read": {
+        "frame_number": 174,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "175": {
+      "state_read": {
+        "frame_number": 175,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "176": {
+      "state_read": {
+        "frame_number": 176,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "177": {
+      "state_read": {
+        "frame_number": 177,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "178": {
+      "state_read": {
+        "frame_number": 178,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "179": {
+      "state_read": {
+        "frame_number": 179,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "180": {
+      "state_read": {
+        "frame_number": 180,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "181": {
+      "state_read": {
+        "frame_number": 181,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "182": {
+      "state_read": {
+        "frame_number": 182,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "183": {
+      "state_read": {
+        "frame_number": 183,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "184": {
+      "state_read": {
+        "frame_number": 184,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "185": {
+      "state_read": {
+        "frame_number": 185,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "186": {
+      "state_read": {
+        "frame_number": 186,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "187": {
+      "state_read": {
+        "frame_number": 187,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "188": {
+      "state_read": {
+        "frame_number": 188,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "189": {
+      "state_read": {
+        "frame_number": 189,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "190": {
+      "state_read": {
+        "frame_number": 190,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "191": {
+      "state_read": {
+        "frame_number": 191,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "192": {
+      "state_read": {
+        "frame_number": 192,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "193": {
+      "state_read": {
+        "frame_number": 193,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "194": {
+      "state_read": {
+        "frame_number": 194,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "195": {
+      "state_read": {
+        "frame_number": 195,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "196": {
+      "state_read": {
+        "frame_number": 196,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "197": {
+      "state_read": {
+        "frame_number": 197,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "198": {
+      "state_read": {
+        "frame_number": 198,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "199": {
+      "state_read": {
+        "frame_number": 199,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "200": {
+      "state_read": {
+        "frame_number": 200,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "201": {
+      "state_read": {
+        "frame_number": 201,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "202": {
+      "state_read": {
+        "frame_number": 202,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "203": {
+      "state_read": {
+        "frame_number": 203,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "204": {
+      "state_read": {
+        "frame_number": 204,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "205": {
+      "state_read": {
+        "frame_number": 205,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "206": {
+      "state_read": {
+        "frame_number": 206,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "207": {
+      "state_read": {
+        "frame_number": 207,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "208": {
+      "state_read": {
+        "frame_number": 208,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "209": {
+      "state_read": {
+        "frame_number": 209,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "210": {
+      "state_read": {
+        "frame_number": 210,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "211": {
+      "state_read": {
+        "frame_number": 211,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "212": {
+      "state_read": {
+        "frame_number": 212,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "213": {
+      "state_read": {
+        "frame_number": 213,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "214": {
+      "state_read": {
+        "frame_number": 214,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "215": {
+      "state_read": {
+        "frame_number": 215,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "216": {
+      "state_read": {
+        "frame_number": 216,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "217": {
+      "state_read": {
+        "frame_number": 217,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "218": {
+      "state_read": {
+        "frame_number": 218,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "219": {
+      "state_read": {
+        "frame_number": 219,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "220": {
+      "state_read": {
+        "frame_number": 220,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "221": {
+      "state_read": {
+        "frame_number": 221,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "222": {
+      "state_read": {
+        "frame_number": 222,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "223": {
+      "state_read": {
+        "frame_number": 223,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "224": {
+      "state_read": {
+        "frame_number": 224,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": true,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    },
+    "225": {
+      "state_read": {
+        "frame_number": 225,
+        "elapsed_secs": 1.6666667461395264,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": false,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": true,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": true,
+        "animation_door": true,
+        "animation_all_door": false,
+        "animation_colored": true
+      }
+    },
+    "226": {
+      "state_read": {
+        "frame_number": 226,
+        "elapsed_secs": 1.683333396911621,
+        "camera_radius": 15.0,
+        "camera_position": [
+          0.0,
+          1.0,
+          15.0
+        ],
+        "nr_attempts": 4,
+        "cosine_alignment": 0.9883484840393066,
+        "current_angle": 0.15280191600322723,
+        "is_animating": false,
+        "win_elapsed_secs": 52.53333282470703
+      },
+      "commands_sent": {
+        "rotate_left": false,
+        "rotate_right": false,
+        "zoom_in": false,
+        "zoom_out": false,
+        "check": false,
+        "reset": false,
+        "toggle_blank": false,
+        "toggle_stop_rendering": false,
+        "animation_door": false,
+        "animation_all_door": false,
+        "animation_colored": false
+      }
+    }
+  }
+}

@@ -98,10 +98,6 @@ impl SharedMemoryWrapper {
     }
 
     /// Write commands to shared memory.
-    /// When `increment_seq` is true, the command sequence counter is incremented
-    /// so the game knows there are new commands to process.
-    /// When false, re-writes with the same seq (for pending toggle re-sends).
-    #[pyo3(signature = (rotate_left, rotate_right, zoom_in, zoom_out, check, reset, toggle_blank, toggle_stop_rendering, animation_door, animation_all_door, animation_colored, increment_seq=true))]
     fn write_commands(
         &mut self,
         rotate_left: bool,
@@ -114,8 +110,7 @@ impl SharedMemoryWrapper {
         toggle_stop_rendering: bool,
         animation_door: bool,
         animation_all_door: bool,
-        animation_colored: bool,
-        increment_seq: bool,
+        animation_colored: bool
     ) {
         let shm = self.inner.get();
         let cmd = &shm.commands;
@@ -131,11 +126,12 @@ impl SharedMemoryWrapper {
         cmd.animation_door.store(animation_door, Ordering::Relaxed);
         cmd.animation_all_door.store(animation_all_door, Ordering::Relaxed);
         cmd.animation_colored.store(animation_colored, Ordering::Relaxed);
+    }
 
-        if increment_seq {
-            self.command_seq_counter += 1;
-        }
-        // Release ensures all preceding Relaxed stores are visible before the game sees the new seq.
+    /// Increment the sequence
+    fn increment_command_seq(&mut self) {
+        self.command_seq_counter += 1;
+        let shm = self.inner.get();
         shm.command_seq.store(self.command_seq_counter, Ordering::Release);
     }
 

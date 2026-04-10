@@ -211,6 +211,7 @@ class MonkeyGameController:
         self.trial_start_state = None
         self.frame_log = {}
         self.trial_run_counter = 0
+        self.current_state = None
 
         # Output directory for logs
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -310,11 +311,8 @@ class MonkeyGameController:
             data_to_write = {**self.inputs, **self.triggers}
         else:
             data_to_write = commands
-        # Don't increment seq if the game hasn't acked the previous batch yet.
-        # This keeps the current command state (including toggles) in SHM with
-        # the same seq, preventing the game from missing them.
-        increment = not self._has_pending_toggles()
-        self.shm_wrapper.write_commands(**data_to_write, increment_seq=increment)
+
+        self.shm_wrapper.write_commands(**data_to_write)
         cmds_snapshot = dict(data_to_write)
         self.reset_triggers()
         return cmds_snapshot
@@ -385,6 +383,7 @@ class MonkeyGameController:
         while self._running:
             new_head, states = self.shm_wrapper.read_game_state_since(self.last_write_head)
 
+            # Game has not updated yet
             if not states:
                 self.game_time_unresponsive += POLLING_RATE_TIME_S / 1000.0
                 time.sleep(POLLING_RATE_TIME_S / 1000.0)
@@ -407,33 +406,34 @@ class MonkeyGameController:
                     self.log_frame(s, {})
 
             # Use the latest state for FSM dispatch
-            state = states[-1]
-            self.current_frame = state.get("frame_number", 0)
+            self.current_state = states[-1]
+            
+            self.current_frame = self.current_state.get("frame_number", 0)
 
-            state["progress_bar_cur_size"] = self._progress_bar_cur()
-            state["progress_bar_size"] = self._progress_bar_size()
+            self.current_state["progress_bar_cur_size"] = self._progress_bar_cur()
+            self.current_state["progress_bar_size"] = self._progress_bar_size()
 
+            # This modify the current state
             if self.fsm_state == ControllerState.INIT:
-                self._handle_init(state)
+                self._handle_init()
             elif self.fsm_state == ControllerState.WAITING_FOR_START:
-                self._handle_waiting_for_start(state)
+                self._handle_waiting_for_start()
             elif self.fsm_state == ControllerState.PLAYING:
-                self._handle_playing(state)
+                self._handle_playing()
             elif self.fsm_state == ControllerState.WAITING_ANIMATION_START:
-                self._handle_waiting_animation_start(state)
+                self._handle_waiting_animation_start()
             elif self.fsm_state == ControllerState.WAITING_ANIMATION_END:
-                self._handle_waiting_animation_end(state)
+                self._handle_waiting_animation_end()
             elif self.fsm_state == ControllerState.TRIAL_COMPLETE:
-                self._handle_trial_complete(state)
+                self._handle_trial_complete()
+   
+            # Write the game state
+            self.write_game_state(self.current_state)
 
-            # During animation states, copy game→control to preserve the
-            # game's is_animating flag (mirrors JS copyGameStateGameToControl).
-            # In all other states, write the controller's view of state.
-            if self.fsm_state in (ControllerState.WAITING_ANIMATION_START,
-                                  ControllerState.WAITING_ANIMATION_END):
-                self.write_game_state(states[-1])
-            else:
-                self.write_game_state(state)
+            # Update the sequence number if there are no pending toggles,
+            # allowing the game to process the new commands
+            if not self._has_pending_toggles():
+                self.shm_wrapper.increment_command_seq()
 
             time.sleep(POLLING_RATE_TIME_S / 1000.0)
             self.game_time_unresponsive = 0.0
@@ -442,7 +442,7 @@ class MonkeyGameController:
         print("[FSM] Controller stopped.")
 
     # FSM handlers (command logic unchanged)
-    def _handle_init(self, state):
+    def _handle_init(self):
         print("[FSM] INIT → issuing blank_screen + stop_rendering")
         flat = self.flat_trial
         print(f"[FSM] Level {self.current_level_index} chain {self.active_chain} "
@@ -457,12 +457,8 @@ class MonkeyGameController:
 
         state_old = self.shm_wrapper.read_game_state()
 
-        state.update(trial_state)
+        self.current_state.update(trial_state)
         self.trial_start_state = trial_state
-
-        # Write trial config to shared memory BEFORE the reset command,
-        # so the game always reads the new config when it processes reset.
-        self.write_game_state(state)
 
         print(f"state old {state_old.get('is_blank', False)} and stop {state_old.get('is_rendering_stopped', False)}")
         self.write_commands({
@@ -489,8 +485,8 @@ class MonkeyGameController:
         self.fsm_state = ControllerState.WAITING_FOR_START
         print("[FSM] → WAITING_FOR_START  (press 'r' to begin)")
 
-    def _handle_waiting_for_start(self, state):
-        if not state.get("is_scene_ready", False):
+    def _handle_waiting_for_start(self):
+        if not self.current_state.get("is_scene_ready", False):
             print("[FSM] Waiting for scene to be ready...")
             return
         if self._start:
@@ -508,13 +504,16 @@ class MonkeyGameController:
                 "animation_colored": False,
             })
             self.fsm_state = ControllerState.PLAYING
-            self.log_frame(state, cmds)
+            self.log_frame(self.current_state, cmds)
             print(f"[FSM] R pressed → PLAYING (level {self.current_level_index} chain {self.active_chain} trial {self._trial_idx()})")
             return
+        
+        self.reset_commands()
+        self.write_commands()
 
-    def _handle_playing(self, state):
+    def _handle_playing(self):
         flat = self.flat_trial
-        time_elapsed = state.get("elapsed_secs", 0.0)
+        time_elapsed = self.current_state.get("elapsed_secs", 0.0)
 
         is_win = (
             time_elapsed < flat.get("elapsed_time_to_win", 0.0)
@@ -547,12 +546,12 @@ class MonkeyGameController:
             self.old_cmds = cmds
             self.fsm_state = ControllerState.WAITING_ANIMATION_START
             print("[FSM] → WAITING_ANIMATION_START")
-            self.log_frame(state, cmds)
+            self.log_frame(self.current_state, cmds)
             return
 
-        if self.check_has_finished(state):
+        if self.check_has_finished(self.current_state):
             print(f"[FSM] Check finished with outcome {self.trial_proceeding.name} → TRIAL_COMPLETE")
-            self.log_frame(state, {**self.inputs, **self.triggers})
+            self.log_frame(self.current_state, {**self.inputs, **self.triggers})
             self.fsm_state = ControllerState.TRIAL_COMPLETE
             return
 
@@ -560,7 +559,7 @@ class MonkeyGameController:
         if self.triggers["check"]:
             suggestion_threshold = flat.get("nr_attempts_suggestion", 0)
             retroceeds_threshold = flat.get("nr_attempts_to_retroceed", 0)
-            cosine_current = state.get("cosine_alignment", 0.0)
+            cosine_current = self.current_state.get("cosine_alignment", 0.0)
             cosine_threshold = flat.get("cosine_alignment_threshold", 0.0)
 
             # Exceeded number of attempt: animate red light and retroceed
@@ -577,7 +576,7 @@ class MonkeyGameController:
                 self.fsm_state = ControllerState.WAITING_ANIMATION_START
                 self.nr_attempts += 1
                 print("[FSM] → WAITING_ANIMATION_START")
-                self.log_frame(state, cmds)
+                self.log_frame(self.current_state, cmds)
                 return
             # Suggestion available and can play: animate depending on cosine alignment
             elif (self.nr_attempts < suggestion_threshold and cosine_current < cosine_threshold) or \
@@ -613,30 +612,28 @@ class MonkeyGameController:
             self.nr_attempts += 1
             self.fsm_state = ControllerState.WAITING_ANIMATION_START
             print("[FSM] → WAITING_ANIMATION_START")
-            self.write_game_state(state)
-            self.log_frame(state, cmds)
+            self.log_frame(self.current_state, cmds)
             return
 
         cmds = self.write_commands()
-        self.log_frame(state, cmds)
+        self.log_frame(self.current_state, cmds)
 
-    def _handle_waiting_animation_start(self, state):
-        if state.get("is_animating", False):
+    def _handle_waiting_animation_start(self):
+        if self.current_state.get("is_animating", False):
             print("[FSM] Animation started → WAITING_ANIMATION_END")
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
-            self.write_game_state(state) 
         else:
             # Command still pending in SHM (seq gate ensures game processes it
             # exactly once). No need to re-send, just wait for next game tick.
             pass
 
-        if self.check_has_finished(state):
+        if self.check_has_finished(self.current_state):
             self._handle_trial_index_update()
 
-        self.log_frame(state, self.old_cmds)
+        self.log_frame(self.current_state, self.old_cmds)
 
-    def _handle_waiting_animation_end(self, state):
-        if not state.get("is_animating", True):
+    def _handle_waiting_animation_end(self):
+        if not self.current_state.get("is_animating", True):
             print("[FSM] Animation finished → issuing toggle_stop_rendering (resume)")
             self.reset_commands()
             cmds = self.write_commands({
@@ -646,8 +643,7 @@ class MonkeyGameController:
                 "toggle_stop_rendering": True, "animation_door": False,
                 "animation_all_door": False, "animation_colored": False,
             })
-            self.write_game_state(state)
-            self.log_frame(state, self.old_cmds)
+            self.log_frame(self.current_state, self.old_cmds)
             self.fsm_state = ControllerState.PLAYING
             print("[FSM] → PLAYING")
             return
@@ -660,13 +656,11 @@ class MonkeyGameController:
             "animation_all_door": False, "animation_colored": False,
         })
 
-        state["is_animating"] = True
-        self.write_game_state(state)
-        self.log_frame(state, cmds)
+        self.log_frame(self.current_state, cmds)
 
-    def _handle_trial_complete(self, state):
+    def _handle_trial_complete(self):
         flat = self.flat_trial
-        elapsed = state.get("elapsed_secs", 0.0)
+        elapsed = self.current_state.get("elapsed_secs", 0.0)
         nr_to_win = flat.get("nr_attempts_to_win", 999)
         nr_to_retro = flat.get("nr_attempts_to_retroceed", 999)
         time_to_win = flat.get("elapsed_time_to_win", 9999.0)

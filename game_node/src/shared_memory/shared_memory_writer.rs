@@ -2,7 +2,7 @@
 
 use bevy::{prelude::*};
 use crate::shared_memory::shared_memory_reader::{SharedMemResource};
-use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameConditions};
+use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameConditions, BlankScreen};
 
 // Count frames since beginning of game
 #[derive(Resource, Default)]
@@ -45,8 +45,9 @@ pub fn update_shared_memory_local(
     camera_query: Query<&Transform, With<Camera3d>>,
     door_query: Query<(&BaseDoor, &Transform)>,
     game_conditions: ResMut<GameConditions>,
+    black_screen_query: Query<Entity, With<BlankScreen>>,
 ) {
-    game_state_local.0.is_blank = game_conditions.blank_screen;
+    game_state_local.0.is_blank = !black_screen_query.is_empty();
     game_state_local.0.is_rendering_stopped = game_conditions.stop_rendering;
     game_state_local.0.is_scene_ready = game_conditions.is_scene_ready;
     game_state_local.0.frame_number = frame_counter.0;

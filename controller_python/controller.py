@@ -380,11 +380,13 @@ class MonkeyGameController:
     # Main loop
     def loop(self):
         print("[FSM] Controller loop started")
+        self._resync_with_game()
         while self._running:
             new_head, states = self.shm_wrapper.read_game_state_since(self.last_write_head)
-
-            # Game has not updated yet
-            if not states:
+            ack_nr = self.shm_wrapper.read_command_ack()
+            seq_nr = self.shm_wrapper.command_seq()
+            # Game has not updated yet, sleep
+            if not states or ack_nr < seq_nr:
                 self.game_time_unresponsive += POLLING_RATE_TIME_S / 1000.0
                 time.sleep(POLLING_RATE_TIME_S / 1000.0)
                 if self.game_time_unresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S or self.current_frame == 0:
@@ -408,10 +410,14 @@ class MonkeyGameController:
             # Use the latest state for FSM dispatch
             self.current_state = states[-1]
             
+            
             self.current_frame = self.current_state.get("frame_number", 0)
 
             self.current_state["progress_bar_cur_size"] = self._progress_bar_cur()
             self.current_state["progress_bar_size"] = self._progress_bar_size()
+            
+            # Clear commands    
+            self.write_no_commands()
 
             # This modify the current state
             if self.fsm_state == ControllerState.INIT:
@@ -430,12 +436,9 @@ class MonkeyGameController:
             # Write the game state
             self.write_game_state(self.current_state)
 
-            # Update the sequence number if there are no pending toggles,
-            # allowing the game to process the new commands
-            if not self._has_pending_toggles():
-                self.shm_wrapper.increment_command_seq()
+            # Update the sequence number to indicate to the game that new commands/state written
+            self.shm_wrapper.increment_command_seq()
 
-            time.sleep(POLLING_RATE_TIME_S / 1000.0)
             self.game_time_unresponsive = 0.0
 
         self.listener.stop()
@@ -443,7 +446,7 @@ class MonkeyGameController:
 
     # FSM handlers (command logic unchanged)
     def _handle_init(self):
-        print("[FSM] INIT → issuing blank_screen + stop_rendering")
+        print("[FSM] INIT → issuing blank_screen + stop_rendering + load trial")
         flat = self.flat_trial
         print(f"[FSM] Level {self.current_level_index} chain {self.active_chain} "
               f"trial {self._trial_idx()}: {self.game_state_fields(flat)}")
@@ -457,10 +460,6 @@ class MonkeyGameController:
 
         state_old = self.shm_wrapper.read_game_state()
 
-        self.current_state.update(trial_state)
-        self.trial_start_state = trial_state
-
-        print(f"state old {state_old.get('is_blank', False)} and stop {state_old.get('is_rendering_stopped', False)}")
         self.write_commands({
             "rotate_left": False,
             "rotate_right": False,
@@ -475,6 +474,9 @@ class MonkeyGameController:
             "animation_colored": False,
         })
 
+        self.current_state.update(trial_state)
+        self.trial_start_state = trial_state
+
         self.nr_attempts = 0
         self.trial_start_time = time.time()
         self.frame_log = {}
@@ -486,9 +488,10 @@ class MonkeyGameController:
         print("[FSM] → WAITING_FOR_START  (press 'r' to begin)")
 
     def _handle_waiting_for_start(self):
+        # Waiting for textures to be loaded
         if not self.current_state.get("is_scene_ready", False):
-            print("[FSM] Waiting for scene to be ready...")
             return
+        # Game is stopped and blank
         if self._start:
             cmds = self.write_commands({
                 "rotate_left": False,
@@ -507,9 +510,6 @@ class MonkeyGameController:
             self.log_frame(self.current_state, cmds)
             print(f"[FSM] R pressed → PLAYING (level {self.current_level_index} chain {self.active_chain} trial {self._trial_idx()})")
             return
-        
-        self.reset_commands()
-        self.write_commands()
 
     def _handle_playing(self):
         flat = self.flat_trial

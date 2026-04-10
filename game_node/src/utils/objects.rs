@@ -36,7 +36,6 @@ pub struct DecorationSet {
 #[derive(Resource)]
 pub struct GameConditions{
     pub stop_rendering: bool,
-    pub blank_screen: bool,
     /// True once all texture assets for the current trial are fully loaded on the GPU.
     /// Reset to false on every reset command; the controller gates space-to-start on this.
     pub is_scene_ready: bool,
@@ -46,7 +45,6 @@ impl Default for GameConditions {
     fn default() -> Self {
         GameConditions {
             stop_rendering: false,
-            blank_screen: false,
             is_scene_ready: false,
         }
     }

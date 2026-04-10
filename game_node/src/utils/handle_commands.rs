@@ -14,7 +14,7 @@ use shared::constants::camera_3d_constants::{
 };
 
 /// Reset state
-pub fn handle_reset_command(
+pub fn  handle_reset_command(
     pending: ResMut<PendingCommands>,
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
@@ -194,14 +194,12 @@ pub fn handle_blank_screen(
     mut commands: Commands,
     pending: Res<PendingCommands>,
     overlay_query: Query<Entity, With<BlankScreen>>,
-    mut game_conditions: ResMut<GameConditions>,
 
 ) {
     if !pending.toggle_blank {
         return;
     }
 
-    game_conditions.blank_screen = !game_conditions.blank_screen;
     // Modulo through blank screen state
     if overlay_query.is_empty() {
         // Spawn black fullscreen overlay

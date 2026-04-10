@@ -45,6 +45,12 @@ impl SharedMemoryWrapper {
         self.command_seq_counter
     }
 
+    /// Read the current command_seq directly from SHM (written by the controller).
+    fn read_command_seq(&self) -> u64 {
+        let shm = self.inner.get();
+        shm.command_seq.load(Ordering::Acquire)
+    }
+
     /// Reset the seq counter to the current ack value in SHM.
     /// Call this when resyncing with a (re)started game.
     fn resync_seq(&mut self) {

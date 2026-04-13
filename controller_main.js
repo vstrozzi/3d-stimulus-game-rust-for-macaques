@@ -287,6 +287,7 @@ function readGameStateAt(basePtr) {
     ambient_brightness: v.getUint32(o.ambient_brightness, true),
     max_spotlight_intensity: v.getUint32(o.max_spotlight_intensity, true),
     frame_number: readU64(v, o.frame_number),
+    render_frame_number: readU64(v, o.render_frame_number),
     elapsed_secs: u32BitsToFloat(v.getUint32(o.elapsed_secs, true)),
     camera_radius: v.getUint32(o.camera_radius, true),
     camera_x: v.getUint32(o.camera_x, true),
@@ -596,7 +597,7 @@ function resyncSeq() {
 // LOGGING
 // ═══════════════════════════════════════════════════════════════════════════
 const LOGGED_STATE_FIELDS = new Set([
-  "frame_number", "elapsed_secs", "camera_radius",
+  "frame_number", "render_frame_number", "elapsed_secs", "camera_radius",
   "nr_attempts", "cosine_alignment", "current_angle",
   "is_animating", "win_elapsed_secs",
 ]);

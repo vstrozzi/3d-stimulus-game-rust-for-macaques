@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local};
-use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local};
+use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local, increment_render_frame_counter};
 use crate::utils::camera::{spawn_persistent_camera};
 use crate::utils::ui::{update_ui_scale};
 use crate::utils::game_functions::{
@@ -38,6 +38,8 @@ impl Plugin for SystemsLogicPlugin {
             .add_systems(Update, update_ui_scale)
             // Check texture readiness each frame
             .add_systems(Update, check_scene_ready)
+            // Render frame counter (once per actual render frame)
+            .add_systems(Update, increment_render_frame_counter)
             // Command driven
             .add_systems(
                 FixedUpdate,

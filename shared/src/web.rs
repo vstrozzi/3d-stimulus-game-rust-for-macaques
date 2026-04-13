@@ -176,6 +176,7 @@ impl WebSharedMemory {
 
         // Dynamic fields
         set("frame_number",       off!(gs.frame_number));
+        set("render_frame_number", off!(gs.render_frame_number));
         set("elapsed_secs",       off!(gs.elapsed_secs));
         set("camera_radius",      off!(gs.camera_radius));
         set("camera_x",           off!(gs.camera_x));
@@ -265,6 +266,7 @@ impl WebSharedMemory {
         set_u32("progress_bar_cur_size", def.progress_bar_cur_size.load(Relaxed));
 
         set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
+        set_f64("render_frame_number", def.render_frame_number.load(Relaxed) as f64);
         set_u32("elapsed_secs", def.elapsed_secs.load(Relaxed));
         set_u32("camera_radius", def.camera_radius.load(Relaxed));
         set_u32("camera_x", def.camera_x.load(Relaxed));

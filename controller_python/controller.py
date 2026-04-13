@@ -334,11 +334,16 @@ class MonkeyGameController:
         self.shm_wrapper.write_commands(**cmds)
         return cmds
 
+    # Fields that are game→controller only (written by the game, not the controller)
+    READ_ONLY_FIELDS = {"render_frame_number"}
+
     def write_game_state(self, state):
-        self.shm_wrapper.write_game_state(**state)
+        filtered = {k: v for k, v in state.items() if k not in self.READ_ONLY_FIELDS}
+        self.shm_wrapper.write_game_state(**filtered)
 
     LOGGED_STATE_FIELDS = {
         "frame_number",
+        "render_frame_number",
         "elapsed_secs",
         "camera_radius",
         "camera_position",

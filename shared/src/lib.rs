@@ -160,6 +160,7 @@ macro_rules! shared_game_state {
 
             // Dynamic trials fields
             pub frame_number: $U64,
+            pub render_frame_number: $U64,
             pub elapsed_secs: $U32,
             pub camera_radius: $U32,
             pub camera_x: $U32,
@@ -279,6 +280,7 @@ impl SharedGameState {
 
             // Dynamic trials fields
             frame_number: AtomicU64::new(0),
+            render_frame_number: AtomicU64::new(0),
             elapsed_secs: AtomicU32::new(0),
             camera_radius: AtomicU32::new(CAMERA_3D_INITIAL_RADIUS.to_bits()),
             camera_x: AtomicU32::new(CAMERA_3D_INITIAL_X.to_bits()),
@@ -329,6 +331,7 @@ impl SharedGameState {
         self.progress_bar_size.store(other.progress_bar_size.load(Ordering::Relaxed), Ordering::Relaxed);
 
         self.frame_number.store(other.frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.render_frame_number.store(other.render_frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.elapsed_secs.store(other.elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_radius.store(other.camera_radius.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_x.store(other.camera_x.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -417,6 +420,7 @@ impl SharedGameState {
             progress_bar_size: self.progress_bar_size.load(Ordering::Relaxed),
             progress_bar_cur_size: self.progress_bar_cur_size.load(Ordering::Relaxed),
             frame_number: self.frame_number.load(Ordering::Relaxed),
+            render_frame_number: self.render_frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
             camera_radius: self.camera_radius.load(Ordering::Relaxed),
             camera_x: self.camera_x.load(Ordering::Relaxed),
@@ -461,6 +465,7 @@ impl SharedGameState {
         self.progress_bar_size.store(state.progress_bar_size, Ordering::Relaxed);
         self.progress_bar_cur_size.store(state.progress_bar_cur_size, Ordering::Relaxed);
         self.frame_number.store(state.frame_number, Ordering::Relaxed);
+        self.render_frame_number.store(state.render_frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);
         self.camera_radius.store(state.camera_radius, Ordering::Relaxed);
         self.camera_x.store(state.camera_x, Ordering::Relaxed);

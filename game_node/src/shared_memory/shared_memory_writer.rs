@@ -4,16 +4,21 @@ use bevy::{prelude::*};
 use crate::shared_memory::shared_memory_reader::{SharedMemResource};
 use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameConditions, BlankScreen};
 
-// Count frames since beginning of game
+// Count FixedUpdate ticks since beginning of game
 #[derive(Resource, Default)]
 pub struct FrameCounterResource(pub u64);
+
+// Count render frames (Update ticks) since beginning of game
+#[derive(Resource, Default)]
+pub struct RenderFrameCounterResource(pub u64);
 
 // Update the shared memory game state after every game loop update
 pub struct StateEmitterPlugin;
 
 impl Plugin for StateEmitterPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<FrameCounterResource>();
+        app.init_resource::<FrameCounterResource>()
+           .init_resource::<RenderFrameCounterResource>();
     }
 }
 
@@ -76,6 +81,20 @@ pub fn update_shared_memory_local(
             game_state_local.0.current_angle = alignment.clamp(-1.0, 1.0).acos().to_bits();
             break;
         }
+    }
+}
+
+/// Increment render frame counter and write it directly to SHM.
+/// Runs in Update (once per render frame), not FixedUpdate.
+pub fn increment_render_frame_counter(
+    mut counter: ResMut<RenderFrameCounterResource>,
+    shm_res: Option<Res<SharedMemResource>>,
+) {
+    counter.0 += 1;
+    if let Some(shm_res) = shm_res {
+        let shm = shm_res.0.get();
+        shm.game_structure_game.render_frame_number
+            .store(counter.0, std::sync::atomic::Ordering::Relaxed);
     }
 }
 

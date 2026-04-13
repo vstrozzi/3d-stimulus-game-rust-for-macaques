@@ -1,7 +1,7 @@
 //! Functions to handle commands received by the Controller
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
-use crate::shared_memory::shared_memory_writer::FrameCounterResource;
+use crate::shared_memory::shared_memory_writer::{FrameCounterResource, RenderFrameCounterResource};
 use crate::utils::objects::{
     DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions,
     UIEntity, BlankScreen, GameEntity, GameStateLocal};
@@ -20,7 +20,7 @@ pub fn  handle_reset_command(
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
     preloaded: Res<crate::utils::objects::PreloadedTextures>,
-    mut frame_counter: ResMut<FrameCounterResource>,
+    mut counters: (ResMut<FrameCounterResource>, ResMut<RenderFrameCounterResource>),
     camera_query: Query<&mut Transform, With<PersistentCamera>>,
     game_entities: Query<Entity, With<GameEntity>>,
     ambient_light: Option<ResMut<GlobalAmbientLight>>,
@@ -37,7 +37,8 @@ pub fn  handle_reset_command(
     }
 
     // Reset commands received
-    frame_counter.0 = 0;
+    counters.0 .0 = 0;
+    counters.1 .0 = 0;
 
     // Clear animation state to avoid stale entity references after despawn
     door_win_entities.winning_light = None;

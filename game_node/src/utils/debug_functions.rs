@@ -3,7 +3,7 @@ use bevy::{prelude::*, window::*};
 
 /// Marker for the photodiode square UI element.
 #[derive(Component)]
-struct PhotodiodeMarker;
+pub struct PhotodiodeMarker;
 
 pub struct DebugFunctionsPlugin;
 

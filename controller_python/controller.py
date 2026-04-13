@@ -335,7 +335,7 @@ class MonkeyGameController:
         return cmds
 
     # Fields that are game→controller only (written by the game, not the controller)
-    READ_ONLY_FIELDS = {"render_frame_number"}
+    READ_ONLY_FIELDS = {"render_frame_number", "render_elapsed_secs", "photodiode_white"}
 
     def write_game_state(self, state):
         filtered = {k: v for k, v in state.items() if k not in self.READ_ONLY_FIELDS}
@@ -345,6 +345,8 @@ class MonkeyGameController:
         "frame_number",
         "render_frame_number",
         "elapsed_secs",
+        "render_elapsed_secs",
+        "photodiode_white",
         "camera_radius",
         "camera_position",
         "nr_attempts",

@@ -339,6 +339,8 @@ impl SharedMemoryWrapper {
             dict.set_item("frame_number", gs.frame_number.load(Ordering::Relaxed))?;
             dict.set_item("render_frame_number", gs.render_frame_number.load(Ordering::Relaxed))?;
             dict.set_item("elapsed_secs", f32::from_bits(gs.elapsed_secs.load(Ordering::Relaxed)))?;
+            dict.set_item("render_elapsed_secs", f32::from_bits(gs.render_elapsed_secs.load(Ordering::Relaxed)))?;
+            dict.set_item("photodiode_white", gs.photodiode_white.load(Ordering::Relaxed))?;
             dict.set_item("camera_radius", f32::from_bits(gs.camera_radius.load(Ordering::Relaxed)))?;
             dict.set_item("camera_position", vec![
                 f32::from_bits(gs.camera_x.load(Ordering::Relaxed)),

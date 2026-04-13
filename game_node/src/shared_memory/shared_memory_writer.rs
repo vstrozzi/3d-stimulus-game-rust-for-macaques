@@ -84,17 +84,33 @@ pub fn update_shared_memory_local(
     }
 }
 
-/// Increment render frame counter and write it directly to SHM.
+/// Increment render frame counter and write render-scoped fields directly to SHM.
 /// Runs in Update (once per render frame), not FixedUpdate.
+/// Writes: render_frame_number, render_elapsed_secs, photodiode_white.
 pub fn increment_render_frame_counter(
     mut counter: ResMut<RenderFrameCounterResource>,
     shm_res: Option<Res<SharedMemResource>>,
+    round_start: Res<RoundStartTimestamp>,
+    photodiode_query: Query<(&Visibility, &BackgroundColor), With<crate::utils::debug_functions::PhotodiodeMarker>>,
 ) {
+    use std::sync::atomic::Ordering::Relaxed;
     counter.0 += 1;
     if let Some(shm_res) = shm_res {
         let shm = shm_res.0.get();
-        shm.game_structure_game.render_frame_number
-            .store(counter.0, std::sync::atomic::Ordering::Relaxed);
+        let gs = &shm.game_structure_game;
+        gs.render_frame_number.store(counter.0, Relaxed);
+
+        // Render-frame timestamp (same clock as elapsed_secs but sampled in Update)
+        let render_secs = round_start.0
+            .map(|t| t.as_secs_f32().to_bits())
+            .unwrap_or(0.0_f32.to_bits());
+        gs.render_elapsed_secs.store(render_secs, Relaxed);
+
+        // Photodiode state: true when visible AND white
+        let is_white = photodiode_query.iter().any(|(vis, bg)| {
+            *vis != Visibility::Hidden && bg.0 == Color::WHITE
+        });
+        gs.photodiode_white.store(is_white, Relaxed);
     }
 }
 

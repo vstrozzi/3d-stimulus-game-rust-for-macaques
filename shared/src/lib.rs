@@ -162,6 +162,8 @@ macro_rules! shared_game_state {
             pub frame_number: $U64,
             pub render_frame_number: $U64,
             pub elapsed_secs: $U32,
+            pub render_elapsed_secs: $U32,
+            pub photodiode_white: $B,
             pub camera_radius: $U32,
             pub camera_x: $U32,
             pub camera_y: $U32,
@@ -282,6 +284,8 @@ impl SharedGameState {
             frame_number: AtomicU64::new(0),
             render_frame_number: AtomicU64::new(0),
             elapsed_secs: AtomicU32::new(0),
+            render_elapsed_secs: AtomicU32::new(0),
+            photodiode_white: AtomicBool::new(false),
             camera_radius: AtomicU32::new(CAMERA_3D_INITIAL_RADIUS.to_bits()),
             camera_x: AtomicU32::new(CAMERA_3D_INITIAL_X.to_bits()),
             camera_y: AtomicU32::new(CAMERA_3D_INITIAL_Y.to_bits()),
@@ -333,6 +337,8 @@ impl SharedGameState {
         self.frame_number.store(other.frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.render_frame_number.store(other.render_frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.elapsed_secs.store(other.elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.render_elapsed_secs.store(other.render_elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.photodiode_white.store(other.photodiode_white.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_radius.store(other.camera_radius.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_x.store(other.camera_x.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_y.store(other.camera_y.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -422,6 +428,8 @@ impl SharedGameState {
             frame_number: self.frame_number.load(Ordering::Relaxed),
             render_frame_number: self.render_frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
+            render_elapsed_secs: self.render_elapsed_secs.load(Ordering::Relaxed),
+            photodiode_white: self.photodiode_white.load(Ordering::Relaxed),
             camera_radius: self.camera_radius.load(Ordering::Relaxed),
             camera_x: self.camera_x.load(Ordering::Relaxed),
             camera_y: self.camera_y.load(Ordering::Relaxed),
@@ -467,6 +475,8 @@ impl SharedGameState {
         self.frame_number.store(state.frame_number, Ordering::Relaxed);
         self.render_frame_number.store(state.render_frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);
+        self.render_elapsed_secs.store(state.render_elapsed_secs, Ordering::Relaxed);
+        self.photodiode_white.store(state.photodiode_white, Ordering::Relaxed);
         self.camera_radius.store(state.camera_radius, Ordering::Relaxed);
         self.camera_x.store(state.camera_x, Ordering::Relaxed);
         self.camera_y.store(state.camera_y, Ordering::Relaxed);

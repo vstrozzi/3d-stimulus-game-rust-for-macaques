@@ -59,6 +59,8 @@ Column reference:
     p99dt    99th percentile of g_dt over the last 1000 frames
     FPS      Instantaneous game FPS (1 / g_dt)
     avgFPS   Running average game FPS since monitor start
+    r_dt     Render-frame delta in ms (render_elapsed_secs difference between snapshots)
+    pdi      Photodiode square state: W=white, B=black, -=hidden/off
     gaps     Cumulative skipped frame_numbers (frame_number jumped by >1)
     dups     Cumulative duplicate frame_numbers
     out%     Percentage of game deltas outside [8.33ms, 33.33ms] (0.5×–2× of 16.67ms)
@@ -66,7 +68,7 @@ Column reference:
              outside of animation
 """,
     )
-    parser.add_argument("--hz", type=float, default=50, help="Monitor sampling rate in Hz (default: 50)")
+    parser.add_argument("--hz", type=float, default=60, help="Monitor sampling rate in Hz (default: 60)")
     args = parser.parse_args()
     interval = 1.0 / args.hz
 
@@ -79,7 +81,7 @@ Column reference:
     HEADER_LINE = (
         f"{'time_s':>8}  {'seq':>6}  {'ack':>6}  {'pend':>4}  {'head':>8}  {'Δhead':>5}  {'frame#':>8}  {'rnd#':>8}  "
         f"{'dt_ms':>6}  {'rtt_ms':>7}  {'p99rt':>6}  │  "
-        f"{'g_dt':>6}  {'p99dt':>6}  {'FPS':>5}  {'avgFPS':>6}  {'gaps':>4}  {'dups':>4}  {'out%':>5}  {'frz':>3}"
+        f"{'g_dt':>6}  {'p99dt':>6}  {'FPS':>5}  {'avgFPS':>6}  {'r_dt':>6}  {'pdi':>3}  {'gaps':>4}  {'dups':>4}  {'out%':>5}  {'frz':>3}"
     )
     SEP_LINE = "-" * len(HEADER_LINE)
 
@@ -125,6 +127,9 @@ Column reference:
     freeze_count = 0
     last_game_dt = None
     latest_frame_number = 0
+    prev_render_elapsed = None
+    last_render_dt = None
+    latest_photodiode = None
 
     t0 = time.perf_counter()
 
@@ -139,6 +144,18 @@ Column reference:
             head = shm.frame_write_head()
             snapshot = shm.read_game_state()
             render_frame = snapshot.get("render_frame_number", 0) if snapshot else 0
+            render_es = snapshot.get("render_elapsed_secs", 0.0) if snapshot else 0.0
+            pdi_white = snapshot.get("photodiode_white", None) if snapshot else None
+            latest_photodiode = pdi_white
+
+            # Render-frame dt
+            if prev_render_elapsed is not None and render_es > 0:
+                r_dt = render_es - prev_render_elapsed
+                if r_dt > 0:
+                    last_render_dt = r_dt
+            if render_es > 0:
+                prev_render_elapsed = render_es
+
             pending = seq - ack
             d_head = head - prev_head
 
@@ -211,6 +228,8 @@ Column reference:
             fps_display = f"{1.0 / last_game_dt:5.1f}" if last_game_dt else "    -"
             avg_fps_display = f"{1.0 / (game_dt_sum / game_dt_count):6.1f}" if game_dt_count > 0 else "     -"
             outlier_pct = (100.0 * outlier_count / game_dt_count) if game_dt_count > 0 else 0.0
+            r_dt_display = f"{last_render_dt * 1000:6.2f}" if last_render_dt else "     -"
+            pdi_display = ("  W" if latest_photodiode else "  B") if latest_photodiode is not None else "  -"
 
             elapsed = now - t0
             dt_ms = dt * 1000
@@ -218,7 +237,7 @@ Column reference:
             print(
                 f"{elapsed:8.2f}  {seq:6d}  {ack:6d}  {pending:4d}  {head:8d}  {d_head:5d}  {latest_frame_number:8d}  {render_frame:8d}  "
                 f"{dt_ms:6.2f}  {rtt_display}  {p99_rtt_display}  │  "
-                f"{game_dt_display}  {p99_dt_display}  {fps_display}  {avg_fps_display}  {total_gaps:4d}  {total_dups:4d}  {outlier_pct:4.1f}%  {freeze_count:3d}"
+                f"{game_dt_display}  {p99_dt_display}  {fps_display}  {avg_fps_display}  {r_dt_display}  {pdi_display}  {total_gaps:4d}  {total_dups:4d}  {outlier_pct:4.1f}%  {freeze_count:3d}"
             )
 
             prev_seq = seq

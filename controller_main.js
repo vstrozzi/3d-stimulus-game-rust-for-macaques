@@ -289,6 +289,8 @@ function readGameStateAt(basePtr) {
     frame_number: readU64(v, o.frame_number),
     render_frame_number: readU64(v, o.render_frame_number),
     elapsed_secs: u32BitsToFloat(v.getUint32(o.elapsed_secs, true)),
+    render_elapsed_secs: u32BitsToFloat(v.getUint32(o.render_elapsed_secs, true)),
+    photodiode_white: v.getUint8(o.photodiode_white) !== 0,
     camera_radius: v.getUint32(o.camera_radius, true),
     camera_x: v.getUint32(o.camera_x, true),
     camera_y: v.getUint32(o.camera_y, true),
@@ -597,7 +599,8 @@ function resyncSeq() {
 // LOGGING
 // ═══════════════════════════════════════════════════════════════════════════
 const LOGGED_STATE_FIELDS = new Set([
-  "frame_number", "render_frame_number", "elapsed_secs", "camera_radius",
+  "frame_number", "render_frame_number", "elapsed_secs", "render_elapsed_secs",
+  "photodiode_white", "camera_radius",
   "nr_attempts", "cosine_alignment", "current_angle",
   "is_animating", "win_elapsed_secs",
 ]);

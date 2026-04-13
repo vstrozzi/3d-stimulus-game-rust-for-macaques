@@ -178,6 +178,8 @@ impl WebSharedMemory {
         set("frame_number",       off!(gs.frame_number));
         set("render_frame_number", off!(gs.render_frame_number));
         set("elapsed_secs",       off!(gs.elapsed_secs));
+        set("render_elapsed_secs", off!(gs.render_elapsed_secs));
+        set("photodiode_white",   off!(gs.photodiode_white));
         set("camera_radius",      off!(gs.camera_radius));
         set("camera_x",           off!(gs.camera_x));
         set("camera_y",           off!(gs.camera_y));
@@ -268,6 +270,8 @@ impl WebSharedMemory {
         set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
         set_f64("render_frame_number", def.render_frame_number.load(Relaxed) as f64);
         set_u32("elapsed_secs", def.elapsed_secs.load(Relaxed));
+        set_u32("render_elapsed_secs", def.render_elapsed_secs.load(Relaxed));
+        set_bool("photodiode_white", def.photodiode_white.load(Relaxed));
         set_u32("camera_radius", def.camera_radius.load(Relaxed));
         set_u32("camera_x", def.camera_x.load(Relaxed));
         set_u32("camera_y", def.camera_y.load(Relaxed));

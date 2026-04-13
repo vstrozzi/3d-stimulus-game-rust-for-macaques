@@ -202,7 +202,6 @@ class MonkeyGameController:
         # Special commands
         self._start = False
         self._time_win_expired = False
-        self._time_retroceed_expired = False
 
         # Per-trial tracking
         self.nr_attempts = 0
@@ -489,7 +488,6 @@ class MonkeyGameController:
         self.frame_log = {}
         self.trial_run_counter += 1
         self._time_win_expired = False
-        self._time_retroceed_expired = False
 
         self.fsm_state = ControllerState.WAITING_FOR_START
         print("[FSM] → WAITING_FOR_START  (press 'r' to begin)")
@@ -519,6 +517,7 @@ class MonkeyGameController:
             return
 
     def _handle_playing(self):
+        # Check at which state are we
         flat = self.flat_trial
         time_elapsed = self.current_state.get("elapsed_secs", 0.0)
 
@@ -538,23 +537,6 @@ class MonkeyGameController:
             self.trial_proceeding = TrialProceeding.STAY
         else:
             self.trial_proceeding = TrialProceeding.RETROCEED
-
-        # One-time: time-to-retroceed exceeded -> animate correct light in red
-        if time_elapsed > flat.get("elapsed_time_to_retroceed", 0.0) and not self._time_retroceed_expired:
-            print(f"[TIME] Time to retroceed exceeded ({time_elapsed:.1f}s), triggering animation")
-            self._time_retroceed_expired = True
-            cmds = self.write_commands({
-                "rotate_left": False, "rotate_right": False,
-                "zoom_in": False, "zoom_out": False,
-                "check": True, "reset": False, "toggle_blank": False,
-                "toggle_stop_rendering": True, "animation_door": True,
-                "animation_all_door": False, "animation_colored": False,
-            })
-            self.old_cmds = cmds
-            self.fsm_state = ControllerState.WAITING_ANIMATION_START
-            print("[FSM] → WAITING_ANIMATION_START")
-            self.log_frame(self.current_state, cmds)
-            return
 
         if self.check_has_finished(self.current_state):
             print(f"[FSM] Check finished with outcome {self.trial_proceeding.name} → TRIAL_COMPLETE")
@@ -576,7 +558,7 @@ class MonkeyGameController:
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
                     "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": True, "animation_door": True,
+                    "toggle_stop_rendering": False, "animation_door": True,
                     "animation_all_door": False, "animation_colored": False,
                 })
                 self.old_cmds = cmds
@@ -593,7 +575,7 @@ class MonkeyGameController:
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
                     "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": True, "animation_door": True,
+                    "toggle_stop_rendering": False, "animation_door": True,
                     "animation_all_door": False, "animation_colored": colored_light,
                 })
             # Won: animate green light
@@ -602,7 +584,7 @@ class MonkeyGameController:
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
                     "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": True, "animation_door": True,
+                    "toggle_stop_rendering": False, "animation_door": True,
                     "animation_all_door": False, "animation_colored": True,
                 })
             # No suggestions available but can still play: animate all lights with red
@@ -611,7 +593,7 @@ class MonkeyGameController:
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
                     "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": True, "animation_door": True,
+                    "toggle_stop_rendering": False, "animation_door": True,
                     "animation_all_door": True, "animation_colored": False,
                 })
 
@@ -629,10 +611,6 @@ class MonkeyGameController:
         if self.current_state.get("is_animating", False):
             print("[FSM] Animation started → WAITING_ANIMATION_END")
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
-        else:
-            # Command still pending in SHM (seq gate ensures game processes it
-            # exactly once). No need to re-send, just wait for next game tick.
-            pass
 
         if self.check_has_finished(self.current_state):
             self._handle_trial_index_update()
@@ -647,7 +625,7 @@ class MonkeyGameController:
                 "rotate_left": False, "rotate_right": False,
                 "zoom_in": False, "zoom_out": False,
                 "check": False, "reset": False, "toggle_blank": False,
-                "toggle_stop_rendering": True, "animation_door": False,
+                "toggle_stop_rendering": False, "animation_door": False,
                 "animation_all_door": False, "animation_colored": False,
             })
             self.log_frame(self.current_state, self.old_cmds)

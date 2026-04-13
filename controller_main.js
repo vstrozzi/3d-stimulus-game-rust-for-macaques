@@ -123,7 +123,6 @@ let old_cmds = {}; // for change detection in logFrame
 // Special flags
 let _start = false;
 let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
-let _timeRetroceedExpired = false;
 let _running = false;
 let _sceneReadyPromptShown = false;
 
@@ -706,7 +705,6 @@ function handleInit(state) {
   trialStartTime = Date.now();
   frameLog = {};
   trialRunCounter += 1;
-  _timeRetroceedExpired = false;
 
   fsmState = FSM.WAITING_FOR_START;
   resetAllCommands();
@@ -768,22 +766,6 @@ function handlePlaying(state) {
   else if (isStay) trialProceeding = PROCEEDING.STAY;
   else trialProceeding = PROCEEDING.RETROCEED;
 
-  // ── Time-to-win expired — no-op, mirrors Python's string-literal (commented-out) block ──
-  // _timeWinExpired is intentionally never set, matching Python where _time_win_expired stays False.
-
-  // ── Time-to-retroceed expired (one-shot) ──
-  if (timeElapsed > (trial.elapsed_time_to_retroceed ?? 0) && !_timeRetroceedExpired) {
-    console.log(`[TIME] Time to retroceed exceeded (${timeElapsed.toFixed(1)}s)`);
-    _timeRetroceedExpired = true;
-    const cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: false });
-    writeCommands(cmds);
-    old_cmds = cmds;
-    fsmState = FSM.WAITING_ANIMATION_START;
-    console.log("[FSM] → WAITING_ANIMATION_START");
-    logFrame(state, cmds);
-    return;
-  }
-
   // ── Terminate if finished ──
   if (checkHasFinished(state)) {
     console.log(`[FSM] Finished with outcome ${trialProceeding} → TRIAL_COMPLETE`);
@@ -804,7 +786,7 @@ function handlePlaying(state) {
     // Branch 1: Last attempt AND fail → single door (no all-door, no colored), mirrors Python
     if ((nrAttempts + 1) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true });
       writeCommands(cmds);
       old_cmds = cmds;
       fsmState = FSM.WAITING_ANIMATION_START;
@@ -820,17 +802,17 @@ function handlePlaying(state) {
     ) {
       const coloredLight = cosineAlignment > COLOR_SUGGESTION_COS_SIM;
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: coloredLight });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_colored: coloredLight });
     }
     // Branch 3: Single green (isWin & correct & below suggestion)
     else if (isWin && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_colored: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_colored: true });
     }
     // Branch 4: All doors white
     else {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → check (all white)`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: true, animation_door: true, animation_all_door: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_all_door: true });
     }
 
     nrAttempts += 1;
@@ -860,9 +842,6 @@ function handleWaitingAnimationStart(state) {
   if (state.is_animating) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
     fsmState = FSM.WAITING_ANIMATION_END;
-  } else {
-    // Command still pending in SHM (seq gate ensures game processes it
-    // exactly once). No need to re-send — just wait for next game tick.
   }
 
   if (checkHasFinished(state)) {

@@ -156,6 +156,7 @@
   }
   .type-1 { background: rgba(74,143,212,0.25); color: var(--chain-a); }
   .type-2 { background: rgba(212,136,74,0.25); color: var(--chain-b); }
+  .type-desc { font-size: 11px; color: var(--text-dim); font-weight: 400; margin-left: 4px; }
 
   /* ── Face table ── */
   .face-table-wrap { overflow-x: auto; }
@@ -213,7 +214,12 @@
   }
   .num-sm { width: 56px; }
   .num-xs { width: 44px; }
-  select.tex-sel { width: 100%; font-size: 11px; padding: 2px 4px; }
+  select.tex-sel { flex: 1; font-size: 11px; padding: 2px 4px; min-width: 0; }
+  .tex-wrap { display: flex; align-items: center; gap: 4px; width: 100%; }
+  .tex-thumb {
+    width: 24px; height: 24px; border-radius: 3px; border: 1px solid var(--border);
+    object-fit: cover; flex-shrink: 0; background: var(--surface2);
+  }
 
   /* ── Color input ── */
   .color-wrap { display: flex; align-items: center; gap: 3px; }
@@ -316,12 +322,17 @@
 
 <script>
 // ================================================================
-// Constants — mirror shared/src/lib.rs
+// Constants — parsed from shared/src/lib.rs (single source of truth)
 // ================================================================
+// To regenerate: open shared/src/lib.rs, find `pub enum Texture` and
+// `pub enum DecorationShape`, copy the variant names in order.
+//
+// Texture previews load from game_node/assets/textures/{name}-JPG/bevy_ready/color.png
+// If opening this file from disk (file://), browser security may block
+// image loading. Serve via a local HTTP server for previews to work:
+//   python -m http.server 8000   (from repo root)
 
-// Texture enum variants (index = u32 value in shared memory).
-// Variant names match on-disk folder names (without -JPG suffix).
-// Source of truth: shared/src/lib.rs enum Texture
+// Source of truth: shared/src/lib.rs  enum Texture  (repr(u32), 0-indexed)
 const TEXTURES = [
   "Bark001_1K",                  // 0
   "ChristmasTreeOrnament021_1K", // 1
@@ -337,10 +348,12 @@ const TEXTURES = [
   "WoodFloor057_1K",             // 11
 ];
 
-// DecorationShape enum variants (index = u32 value in shared memory).
-// Source of truth: shared/src/lib.rs enum DecorationShape
+// Source of truth: shared/src/lib.rs  enum DecorationShape  (repr(u32), 0-indexed)
 const SHAPES = ["Circle", "Square", "Star", "Triangle"];
 const SHAPE_ICONS = ["●", "■", "★", "▲"];
+
+// Relative path from this HTML file to texture assets
+const TEXTURE_ASSET_BASE = "../game_node/assets/textures";
 
 // Six evenly-spaced start orientations (one per door of the hexagonal base).
 // These are valid values for start_orient in fixed; the controller samples randomly.
@@ -449,11 +462,18 @@ function hexToRgba(hex, a) {
   ];
 }
 
+function texThumbUrl(idx) {
+  return `${TEXTURE_ASSET_BASE}/${TEXTURES[idx]}-JPG/bevy_ready/color.png`;
+}
+
 function texSelectHtml(id, val) {
   const opts = TEXTURES.map((t, i) =>
     `<option value="${i}"${i === val ? ' selected' : ''}>${i}: ${t}</option>`
   ).join('');
-  return `<select class="tex-sel" data-id="${id}">${opts}</select>`;
+  return `<span class="tex-wrap">
+    <img class="tex-thumb" src="${texThumbUrl(val)}" alt="" onerror="this.style.display='none'">
+    <select class="tex-sel" data-id="${id}">${opts}</select>
+  </span>`;
 }
 
 function colorInputHtml(id, rgba) {
@@ -533,13 +553,13 @@ function renderObject(obj, ci) {
   const type   = ci === 0 ? 'Type 1'  : 'Type 2';
   const tClass = ci === 0 ? 'type-1'  : 'type-2';
   const cls    = ci === 0 ? 'chain-a' : 'chain-b';
+  const desc   = ci === 0 ? '1 shared, 2 different' : '1 shared, 2 same';
   return `
   <div class="obj-card ${cls}">
     <div class="obj-header ${cls}">
       <span>${label}</span>
       <span class="type-badge ${tClass}">${type}</span>
-      <label>target_door</label>
-      <input type="number" class="obj-door" data-chain="${ci}" value="${obj.target_door}" min="0" max="5" step="1">
+      <span class="type-desc">${desc}</span>
     </div>
     <div class="face-table-wrap">
       <table class="face-table">
@@ -728,14 +748,6 @@ function syncLockedFaceRerender() {
 function attachEvents() {
   const editor = document.getElementById('levelEditor');
 
-  // target_door
-  editor.querySelectorAll('.obj-door').forEach(el => {
-    el.addEventListener('input', e => {
-      levels[sel].objects[+e.target.dataset.chain].target_door = +e.target.value;
-      renderLevelList();
-    });
-  });
-
   // Per-face numeric fields
   editor.querySelectorAll('.face-in').forEach(el => {
     el.addEventListener('input', e => {
@@ -767,6 +779,9 @@ function attachEvents() {
   editor.querySelectorAll('.tex-sel').forEach(el => {
     el.addEventListener('change', e => {
       applyTexture(e.target.dataset.id, +e.target.value);
+      // Update thumbnail preview
+      const thumb = e.target.closest('.tex-wrap')?.querySelector('.tex-thumb');
+      if (thumb) { thumb.src = texThumbUrl(+e.target.value); thumb.style.display = ''; }
     });
   });
 
@@ -957,9 +972,29 @@ document.getElementById('levelList').addEventListener('click', e => {
 });
 
 // ================================================================
-// Init
+// Init — auto-load trials.jsonl on page open
 // ================================================================
-renderAll();
+(async function init() {
+  try {
+    const resp = await fetch('./trials.jsonl');
+    if (resp.ok) {
+      const text = await resp.text();
+      levels = text.split('\n')
+        .map(l => l.trim()).filter(Boolean)
+        .map(l => {
+          const lv = JSON.parse(l);
+          enforceLevel(lv);
+          return lv;
+        });
+      sel = levels.length > 0 ? 0 : -1;
+      fileName = 'trials.jsonl';
+      console.log(`Auto-loaded ${levels.length} levels from trials.jsonl`);
+    }
+  } catch (e) {
+    console.log('No trials.jsonl found, starting empty.', e);
+  }
+  renderAll();
+})();
 </script>
 </body>
 </html>

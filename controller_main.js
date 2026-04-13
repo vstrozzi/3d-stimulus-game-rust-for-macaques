@@ -1334,8 +1334,17 @@ function setupInput() {
 
 async function loadLevels() {
   try {
-    const resp = await fetch(TRIALS_PATH);
-    const text = await resp.text();
+    // Check sessionStorage for custom trials loaded from the landing page
+    const customTrials = sessionStorage.getItem('custom_trials_jsonl');
+    const customName = sessionStorage.getItem('custom_trials_name');
+    let text;
+    if (customTrials) {
+      text = customTrials;
+      console.log(`Using custom trials from sessionStorage: ${customName}`);
+    } else {
+      const resp = await fetch(TRIALS_PATH);
+      text = await resp.text();
+    }
     const lines = text.trim().split("\n").filter((l) => l.trim());
     levels = [];
     for (let i = 0; i < lines.length; i++) {
@@ -1350,9 +1359,10 @@ async function loadLevels() {
       }
       levels.push(level);
     }
-    console.log(`Loaded ${levels.length} levels from trials.jsonl`);
+    const source = customTrials ? `custom (${customName})` : 'trials.jsonl';
+    console.log(`Loaded ${levels.length} levels from ${source}`);
   } catch (e) {
-    console.error("Failed to load trials.jsonl:", e);
+    console.error("Failed to load trials:", e);
     levels = [];
   }
 }

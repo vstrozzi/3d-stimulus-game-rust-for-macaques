@@ -77,12 +77,11 @@ let offsets = {}; // field offsets within SharedGameState
 let cmdOffsets = {}; // field offsets within SharedCommands
 let defaultGameState = null; // default SharedGameState values (from Rust)
 
-// Levels / chains (mirrors Python's multi-level two-chain model)
+// Levels / chains (mirrors Python's multi-level multi-chain model)
 let levels = [];
 let currentLevelIndex = 0;
-let chainAIdx = 0;
-let chainBIdx = 0;
-let activeChain = 0; // 0 = chain A (object[0]), 1 = chain B (object[1])
+let chainIdxs = [];      // one entry per object (chain)
+let activeChain = 0;
 
 // FSM
 let fsmState = FSM.INIT;
@@ -294,6 +293,7 @@ function readGameStateAt(basePtr) {
     camera_x: v.getUint32(o.camera_x, true),
     camera_y: v.getUint32(o.camera_y, true),
     camera_z: v.getUint32(o.camera_z, true),
+    camera_speed_rotate: v.getUint32(o.camera_speed_rotate, true),
     attempts: v.getUint32(o.attempts, true),
     cosine_alignment: u32BitsToFloat(v.getUint32(o.current_alignment, true)),
     current_angle: u32BitsToFloat(v.getUint32(o.current_angle, true)),
@@ -420,6 +420,7 @@ function writeGameStateControl(state) {
   v.setUint32(o.camera_x, state.camera_x, true);
   v.setUint32(o.camera_y, state.camera_y, true);
   v.setUint32(o.camera_z, state.camera_z, true);
+  v.setUint32(o.camera_speed_rotate, state.camera_speed_rotate ?? 0, true);
   v.setUint32(o.attempts, state.attempts ?? 0, true);
   v.setUint32(o.current_alignment, state.current_alignment ?? 0, true);
   v.setUint32(o.current_angle, state.current_angle ?? 0, true);
@@ -472,45 +473,54 @@ function currentLevel() {
 function flatTrial() {
   const level = currentLevel();
   const obj = level.objects[activeChain];
-  const trialIdx = Math.min(
-    activeChain === 0 ? chainAIdx : chainBIdx,
-    level.trials.length - 1
-  );
+  const trialIdx = Math.min(chainIdxs[activeChain], level.trials.length - 1);
   const trialCfg = level.trials[trialIdx];
   const fixed = level.fixed;
   const flat = {};
   for (const [k, v] of Object.entries(obj)) flat[k] = v;
-  for (const [k, v] of Object.entries(fixed)) { if (k !== "pr_switching_chain") flat[k] = v; }
+  for (const [k, v] of Object.entries(fixed)) {
+    if (k !== "pr_switching_chain") flat[k] = v;
+  }
   for (const [k, v] of Object.entries(trialCfg)) flat[k] = v;
   return flat;
 }
 
 function _trialIdx() {
-  return activeChain === 0 ? chainAIdx : chainBIdx;
+  return chainIdxs[activeChain];
 }
-
 function _setTrialIdx(val) {
-  if (activeChain === 0) chainAIdx = val;
-  else chainBIdx = val;
+  chainIdxs[activeChain] = val;
 }
 
 function _levelComplete() {
   const n = currentLevel().trials.length;
-  return chainAIdx >= n && chainBIdx >= n;
+  return chainIdxs.every(idx => idx >= n);
 }
 
 function _maybeSwitch() {
   const level = currentLevel();
-  const pr = level.fixed.pr_switching_chain ?? 0.5;
-  const other = 1 - activeChain;
-  const otherIdx = activeChain === 0 ? chainBIdx : chainAIdx;
-  if (otherIdx < level.trials.length && Math.random() < pr) {
-    activeChain = other;
+  const nObjects = level.objects.length;
+  if (nObjects <= 1) return;
+  const pr = level.fixed.pr_switching_chain ?? (1.0 / nObjects);
+  if (Math.random() >= pr) return;
+  const nTrials = level.trials.length;
+  const candidates = [];
+  for (let i = 0; i < nObjects; i++) {
+    if (i !== activeChain && chainIdxs[i] < nTrials) candidates.push(i);
+  }
+  if (candidates.length > 0) {
+    const rand = Math.floor(Math.random() * candidates.length);
+    activeChain = candidates[rand];
   }
 }
 
-function _progressBarCur() { return chainAIdx + chainBIdx; }
-function _progressBarSize() { return currentLevel().trials.length * currentLevel().objects.length; }
+function _progressBarCur() {
+  return chainIdxs.reduce((sum, v) => sum + v, 0);
+}
+function _progressBarSize() {
+  const level = currentLevel();
+  return level.trials.length * level.objects.length;
+}
 
 // Mirrors Python's state_schema — drives buildTrialState conversion without a switch.
 // "f32"     → floatToU32Bits(value)
@@ -532,6 +542,9 @@ const FIELD_SCHEMA = {
   decorations_shape: "u32[]",
   decorations_texture: "u32[]",
   decorations_seeds: "u64[]",
+  camera_radius: "f32",
+  camera_y: "f32",
+  camera_speed_rotate: "f32",
 };
 
 /** Build a game-state object from default + trial config overlay.
@@ -670,6 +683,11 @@ function handleInit(state) {
 
   // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS))
   trialState.start_orient = floatToU32Bits(START_ORIENTS[Math.floor(Math.random() * START_ORIENTS.length)]);
+
+  // Camera_y from fixed (Python equivalent)
+  const level = currentLevel();
+  const camY = level.fixed.camera_y ?? 1.0;
+  trialState.camera_y = floatToU32Bits(camY);
 
   // Progress bar
   trialState.progress_bar_cur_size = _progressBarCur();
@@ -870,7 +888,8 @@ function handleWaitingAnimationEnd(state) {
 }
 
 function handleTrialIndexUpdate() {
-  const n = currentLevel().trials.length;
+  const level = currentLevel();
+  const n = level.trials.length;
   const idx = _trialIdx();
 
   let newIdx;
@@ -880,19 +899,26 @@ function handleTrialIndexUpdate() {
 
   _setTrialIdx(newIdx);
 
-  // Both chains exhausted → advance to next level
   if (_levelComplete()) {
     currentLevelIndex = (currentLevelIndex + 1) % levels.length;
-    chainAIdx = 0;
-    chainBIdx = 0;
+    const newLevel = currentLevel();
+    const start = newLevel.fixed.start_trial ?? 0;
+    chainIdxs = new Array(newLevel.objects.length).fill(start);
     activeChain = 0;
     console.log(`[LEVEL] Level complete → level ${currentLevelIndex}`);
     return;
   }
 
-  // If active chain is done, force-switch to the other
+  // If active chain is exhausted, switch to a random non‑exhausted chain
   if (_trialIdx() >= n) {
-    activeChain = 1 - activeChain;
+    const candidates = [];
+    for (let i = 0; i < level.objects.length; i++) {
+      if (chainIdxs[i] < n) candidates.push(i);
+    }
+    if (candidates.length > 0) {
+      const rand = Math.floor(Math.random() * candidates.length);
+      activeChain = candidates[rand];
+    }
     console.log(`[CHAIN] Chain exhausted, switching to chain ${activeChain}`);
   } else {
     _maybeSwitch();
@@ -1330,7 +1356,7 @@ async function loadLevels() {
         console.warn(`Line ${i + 1} missing objects/trials/fixed, skipping`);
         continue;
       }
-      if (level.objects.length < 2) {
+      if (level.objects.length < 1) {
         console.warn(`Line ${i + 1} needs at least 2 objects, skipping`);
         continue;
       }
@@ -1385,6 +1411,11 @@ async function start() {
   setLoadingProgress(-1);
   updateStatusBar("Loading levels...");
   await loadLevels();
+
+  if (levels.length > 0) {
+    const startIdx = levels[0].fixed.start_trial ?? 0;
+    chainIdxs = new Array(levels[0].objects.length).fill(startIdx);
+  }
 
   if (levels.length === 0) {
     setLoadingStep("ERROR: No levels loaded");

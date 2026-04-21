@@ -157,6 +157,7 @@ impl WebSharedMemory {
         set("decorations_thickness", off!(gs.decorations_thickness));
         set("decorations_color", off!(gs.decorations_color));
         set("textures", off!(gs.textures));
+        set("camera_speed_rotate", off!(gs.camera_speed_rotate));
 
         set("cosine_alignment_threshold", off!(gs.cosine_alignment_threshold));
 
@@ -192,6 +193,8 @@ impl WebSharedMemory {
         set("is_rendering_stopped", off!(gs.is_rendering_stopped));
         set("is_scene_ready",     off!(gs.is_scene_ready));
         set("win_time",           off!(gs.win_time));
+
+        
 
         obj.into()
     }
@@ -276,6 +279,7 @@ impl WebSharedMemory {
         set_u32("camera_x", def.camera_x.load(Relaxed));
         set_u32("camera_y", def.camera_y.load(Relaxed));
         set_u32("camera_z", def.camera_z.load(Relaxed));
+        set_u32("camera_speed_rotate", def.camera_speed_rotate.load(Relaxed));
         set_u32("attempts", def.attempts.load(Relaxed));
         set_u32("current_alignment", def.current_alignment.load(Relaxed));
         set_u32("current_angle", def.current_angle.load(Relaxed));

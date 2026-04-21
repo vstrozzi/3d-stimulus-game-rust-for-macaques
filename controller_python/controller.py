@@ -32,6 +32,8 @@ CONTROLLER_META_FIELDS = {
     "nr_attempts_to_retroceed",
     "elapsed_time_to_win",
     "elapsed_time_to_retroceed",
+    "start_trial",
+    "camera_y",
 }
 
 # Game-state schema (fields written to shared memory) — matches SharedGameState in shared/src/lib.rs
@@ -56,6 +58,8 @@ state_schema = {
     "main_spotlight_intensity": float,
     "ambient_brightness": float,
     "max_spotlight_intensity": float,
+    "camera_radius": float,
+    "camera_speed_rotate": float,
 }
 
 # Fields present in level["fixed"] that are shared across all trials in a level
@@ -70,6 +74,9 @@ FIXED_FIELDS = {
     "main_spotlight_intensity",
     "ambient_brightness",
     "max_spotlight_intensity",
+    "camera_radius",
+    "camera_speed_rotate",
+    "camera_y",
 }
 
 
@@ -92,9 +99,9 @@ def expand_flat_trial(obj, trial_cfg, fixed):
     # Object visual fields
     for k, v in obj.items():
         flat[k] = v
-    # Fixed fields (base_radius, height, start_orient, lighting, animation)
+    # Fixed fields (base_radius, height, start_orient, lighting, animation, camera)
     for k, v in fixed.items():
-        if k != "pr_switching_chain":
+        if k not in ("pr_switching_chain", "start_trial"):
             flat[k] = v
     # Controller meta fields
     for k, v in trial_cfg.items():
@@ -120,8 +127,8 @@ def load_levels(trials_path="trials_config/trials.jsonl"):
                 if "objects" not in level or "trials" not in level or "fixed" not in level:
                     print(f"Warning: line {line_num} missing objects/trials/fixed, skipping")
                     continue
-                if len(level["objects"]) < 2:
-                    print(f"Warning: line {line_num} needs at least 2 objects, skipping")
+                if len(level["objects"]) < 1:
+                    print(f"Warning: line {line_num} needs at least 1 object, skipping")
                     continue
                 ok = all(validate_object_schema(o) for o in level["objects"])
                 if not ok:
@@ -186,10 +193,11 @@ class MonkeyGameController:
 
         # Current level state
         self.current_level_index = 0
-        self.chain_indices = [0] * self.total_levels
-        self.chain_a_idx = 0   # position in trials list for chain A (object[0])
-        self.chain_b_idx = 0   # position in trials list for chain B (object[1])
-        self.active_chain = 0  # 0 = chain A, 1 = chain B
+        self.chain_idxs = []
+        self.active_chain = 0
+        if self.levels:
+            start = self.levels[0]["fixed"].get("start_trial", 0)
+            self.chain_idxs = [start] * len(self.levels[0]["objects"])
 
         # Frame tracking
         self.current_frame = -1
@@ -237,31 +245,32 @@ class MonkeyGameController:
     def flat_trial(self):
         """Current flat trial dict (object + fixed + trial_cfg)."""
         obj = self.level["objects"][self.active_chain]
-        trial_idx = self.chain_a_idx if self.active_chain == 0 else self.chain_b_idx
-        trial_idx = min(trial_idx, len(self.level["trials"]) - 1)
+        trial_idx = min(self.chain_idxs[self.active_chain], len(self.level["trials"]) - 1)
         trial_cfg = self.level["trials"][trial_idx]
         return expand_flat_trial(obj, trial_cfg, self.level["fixed"])
 
     def _trial_idx(self):
-        return self.chain_a_idx if self.active_chain == 0 else self.chain_b_idx
+        return self.chain_idxs[self.active_chain]
 
     def _set_trial_idx(self, val):
-        if self.active_chain == 0:
-            self.chain_a_idx = val
-        else:
-            self.chain_b_idx = val
+        self.chain_idxs[self.active_chain] = val
 
     def _level_complete(self):
         n = len(self.level["trials"])
-        return self.chain_a_idx >= n and self.chain_b_idx >= n
+        return all(idx >= n for idx in self.chain_idxs)
 
     def _maybe_switch_chain(self):
-        pr = self.level["fixed"].get("pr_switching_chain", 0.5)
-        # Only switch to the other chain if it still has trials remaining
-        other = 1 - self.active_chain
-        other_idx = self.chain_b_idx if self.active_chain == 0 else self.chain_a_idx
-        if other_idx < len(self.level["trials"]) and random.random() < pr:
-            self.active_chain = other
+        """With probability pr, switch to a random other non-exhausted chain."""
+        n_objects = len(self.level["objects"])
+        if n_objects <= 1:
+            return
+        pr = self.level["fixed"].get("pr_switching_chain", 1.0 / n_objects)
+        if random.random() >= pr:
+            return
+        n = len(self.level["trials"])
+        candidates = [i for i in range(n_objects) if i != self.active_chain and self.chain_idxs[i] < n]
+        if candidates:
+            self.active_chain = random.choice(candidates)
 
     def game_state_fields(self, flat):
         """Return only the game-state keys (no controller meta)."""
@@ -277,7 +286,7 @@ class MonkeyGameController:
     # Progress bar: sum of trial indices across all objects in the current level.
     # Size = trials_per_level × number_of_objects. Resets to 0 on level change.
     def _progress_bar_cur(self):
-        return self.chain_a_idx + self.chain_b_idx
+        return sum(self.chain_idxs)
 
     def _progress_bar_size(self):
         return len(self.level["trials"]) * len(self.level["objects"])
@@ -290,8 +299,8 @@ class MonkeyGameController:
         elapsed_time_to_retroceed = trial.get("elapsed_time_to_retroceed", 0.0)
         return (
             state.get("win_elapsed_secs", 0.0) != 0.0
-            or self.nr_attempts >= nr_attempts_to_retroceed
-            or time_elapsed >= elapsed_time_to_retroceed
+            or self.nr_attempts > nr_attempts_to_retroceed
+            or time_elapsed > elapsed_time_to_retroceed
         )
 
     def reset_commands(self):
@@ -439,6 +448,7 @@ class MonkeyGameController:
             elif self.fsm_state == ControllerState.TRIAL_COMPLETE:
                 self._handle_trial_complete()
    
+
             # Write the game state
             self.write_game_state(self.current_state)
 
@@ -463,6 +473,12 @@ class MonkeyGameController:
         trial_state["start_orient"] = random.choice(START_ORIENTS)
         trial_state["progress_bar_cur_size"] = self._progress_bar_cur()
         trial_state["progress_bar_size"] = self._progress_bar_size()
+
+        # Position camera using fixed camera_y and camera_radius
+        cam_y = self.level["fixed"].get("camera_y", 1.0)
+        cam_r = trial_state.get("camera_radius", 15.0)
+
+        trial_state["camera_position"] = [0.0, cam_y, cam_r]
 
         state_old = self.shm_wrapper.read_game_state()
 
@@ -679,18 +695,20 @@ class MonkeyGameController:
 
         self._set_trial_idx(new_idx)
 
-        # Advance to next level if both chains exhausted
+        # Advance to next level if all chains exhausted
         if self._level_complete():
             self.current_level_index = (self.current_level_index + 1) % self.total_levels
-            self.chain_a_idx = 0
-            self.chain_b_idx = 0
+            start = self.level["fixed"].get("start_trial", 0)
+            self.chain_idxs = [start] * len(self.level["objects"])
             self.active_chain = 0
             print(f"[LEVEL] Level complete → level {self.current_level_index}")
             return
 
-        # If current chain is done, force switch to the other
+        # If current chain is done, force switch to a non-exhausted one
         if self._trial_idx() >= n:
-            self.active_chain = 1 - self.active_chain
+            candidates = [i for i in range(len(self.level["objects"])) if self.chain_idxs[i] < n]
+            if candidates:
+                self.active_chain = candidates[0]
             print(f"[CHAIN] Chain exhausted, switching to chain {self.active_chain}")
         else:
             self._maybe_switch_chain()

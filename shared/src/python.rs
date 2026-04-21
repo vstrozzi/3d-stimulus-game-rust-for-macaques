@@ -178,6 +178,7 @@ impl SharedMemoryWrapper {
         is_rendering_stopped: bool,
         is_scene_ready: bool,
         win_elapsed_secs: f32,
+        camera_speed_rotate: f32,
     ) -> PyResult<()> {
         if colors.len() != 3 || colors.iter().any(|face| face.len() != 4) {
             return Err(PyErr::new::<PyValueError, _>(format!(
@@ -252,6 +253,7 @@ impl SharedMemoryWrapper {
         gs.is_rendering_stopped.store(is_rendering_stopped, Ordering::Relaxed);
         gs.is_scene_ready.store(is_scene_ready, Ordering::Relaxed);
         gs.win_time.store(win_elapsed_secs.to_bits(), Ordering::Relaxed);
+        gs.camera_speed_rotate.store(camera_speed_rotate.to_bits(), Ordering::Relaxed);
 
         Ok(())
     }
@@ -355,6 +357,7 @@ impl SharedMemoryWrapper {
             dict.set_item("is_rendering_stopped", gs.is_rendering_stopped.load(Ordering::Relaxed))?;
             dict.set_item("is_scene_ready", gs.is_scene_ready.load(Ordering::Relaxed))?;
             dict.set_item("win_elapsed_secs", f32::from_bits(gs.win_time.load(Ordering::Relaxed)))?;
+            dict.set_item("camera_speed_rotate", f32::from_bits(gs.camera_speed_rotate.load(Ordering::Relaxed)))?;
 
             Ok(dict.into())
         })

@@ -41,7 +41,7 @@ pub mod camera_3d_constants {
 
     // Radius range for the camera's orbit.
     pub const CAMERA_3D_MIN_RADIUS: f32 = 15.0;
-    pub const CAMERA_3D_MAX_RADIUS: f32 = 15.0;
+    pub const CAMERA_3D_MAX_RADIUS: f32 = 40.0;
 }
 
 /// Game objects

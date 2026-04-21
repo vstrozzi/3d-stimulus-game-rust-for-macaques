@@ -1,13 +1,13 @@
 //! Command handler
 //! This module reads from Shared Memory and updates the game resources (`PendingRotation`, etc.).
 
+use crate::utils::objects::{GameStateLocal, PersistentCamera};
 use bevy::prelude::*;
 use core::sync::atomic::Ordering;
+use shared::constants::camera_3d_constants::CAMERA_3D_SPEED_ZOOM;
 #[cfg(not(target_arch = "wasm32"))]
 use shared::create_shared_memory;
-use shared::constants::camera_3d_constants::{CAMERA_3D_SPEED_ROTATE, CAMERA_3D_SPEED_ZOOM};
 use shared::SharedMemoryHandle;
-use crate::utils::objects::GameStateLocal;
 
 /// Wrapper to access shared memory as a bevy resource
 #[derive(Resource)]
@@ -67,6 +67,7 @@ pub fn read_shared_memory_commands(
     shm_res: Option<Res<SharedMemResource>>,
     mut pending_commands: ResMut<PendingCommands>,
     mut last_seq: ResMut<LastCommandSeq>,
+    mut camera_query: Query<&mut Transform, With<PersistentCamera>>,
 ) {
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
@@ -77,12 +78,17 @@ pub fn read_shared_memory_commands(
         return; // Already processed this command batch
     }
 
-    // New commands available — read ALL command bools
+    let speed_rotate = f32::from_bits(
+        shm.game_structure_control
+            .camera_speed_rotate
+            .load(Ordering::Relaxed),
+    );
+
     if shm.commands.rotate_left.load(Ordering::Relaxed) {
-        pending_commands.rotation -= CAMERA_3D_SPEED_ROTATE;
+        pending_commands.rotation -= speed_rotate;
     }
     if shm.commands.rotate_right.load(Ordering::Relaxed) {
-        pending_commands.rotation += CAMERA_3D_SPEED_ROTATE;
+        pending_commands.rotation += speed_rotate;
     }
     if shm.commands.zoom_in.load(Ordering::Relaxed) {
         pending_commands.zoom -= CAMERA_3D_SPEED_ZOOM;
@@ -99,6 +105,24 @@ pub fn read_shared_memory_commands(
     pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
     pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
 
+
+    // Camera update
+    if let Ok(mut cam_transform) = camera_query.single_mut() {
+        let cam_y = f32::from_bits(
+            shm.game_structure_control
+                .camera_y
+                .load(Ordering::Relaxed),
+        );
+        let cam_z = f32::from_bits(
+            shm.game_structure_control
+                .camera_z
+                .load(Ordering::Relaxed),
+        );
+
+        cam_transform.translation.y = cam_y;
+        cam_transform.translation.z = cam_z;
+    }
+    
     // Acknowledge: tell the controller we processed this batch.
     // Release ensures all reads above are complete before the controller sees the ack.
     shm.command_ack.store(seq, Ordering::Release);

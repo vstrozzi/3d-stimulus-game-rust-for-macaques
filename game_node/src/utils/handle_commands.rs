@@ -9,8 +9,7 @@ use crate::utils::ui::{spawn_score_bar};
 use crate::utils::utils::{spawn_blank_screen, despawn_all_game_and_ui};
 use crate::utils::ui::despawn_ui;
 use crate::utils::setup::{setup_round};
-use shared::constants::camera_3d_constants::{
-    CAMERA_3D_INITIAL_Y, CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
+use shared::constants::camera_3d_constants::{CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
 
 /// Reset state
@@ -240,7 +239,7 @@ pub fn handle_zoom(
     radius += pending.zoom;
     radius = radius.clamp(CAMERA_3D_MIN_RADIUS, CAMERA_3D_MAX_RADIUS);
 
-    transform.translation = Vec3::new(radius * yaw.sin(), CAMERA_3D_INITIAL_Y, radius * yaw.cos());
+    transform.translation = Vec3::new(radius * yaw.sin(), transform.translation.y, radius * yaw.cos());
     transform.look_at(Vec3::ZERO, Vec3::Y);
 }
 

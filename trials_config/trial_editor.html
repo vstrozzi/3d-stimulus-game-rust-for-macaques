@@ -121,7 +121,22 @@
   .section { margin-bottom: 24px; }
 
   /* ── Chains grid ── */
-  .chains-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .chains-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 14px; }
+
+  /* ── Object add/remove buttons ── */
+  .obj-actions { display: flex; gap: 6px; margin-left: auto; }
+  .obj-actions button {
+    padding: 3px 10px; border: 1px solid var(--border); border-radius: 5px;
+    background: var(--surface2); color: var(--text-dim); cursor: pointer;
+    font-size: 12px; transition: background .15s;
+  }
+  .obj-actions button:hover { background: var(--accent-dim); color: var(--text); }
+  .obj-actions .remove-obj:hover { background: rgba(224,85,85,.2); color: var(--danger); }
+
+  /* ── Target door selector ── */
+  .target-door-wrap { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+  .target-door-wrap select { font-size: 11px; padding: 2px 6px; }
+  .target-door-wrap input[type=number] { width: 40px; font-size: 11px; padding: 2px 4px; }
 
   /* ── Object card ── */
   .obj-card {
@@ -157,6 +172,13 @@
   .type-1 { background: rgba(74,143,212,0.25); color: var(--chain-a); }
   .type-2 { background: rgba(212,136,74,0.25); color: var(--chain-b); }
   .type-desc { font-size: 11px; color: var(--text-dim); font-weight: 400; margin-left: 4px; }
+
+  /* ── Read-only span for computed values ── */
+  .readonly-val {
+    font-size: 11px; color: var(--text); background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 3px 6px; font-family: monospace;
+  }
 
   /* ── Face table ── */
   .face-table-wrap { overflow-x: auto; }
@@ -291,8 +313,7 @@
     border-radius: 4px; padding: 3px 6px;
   }
 
-  @media (max-width: 1200px) {
-    .chains-grid { grid-template-columns: 1fr; }
+  @media (max-width: 900px) {
     .fixed-grid { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
@@ -387,13 +408,16 @@ function defaultTrial() {
   };
 }
 
-function defaultLevel() {
+function defaultLevel(nObjects = 2) {
+  const objs = [];
+  for (let i = 0; i < nObjects; i++) objs.push(defaultObject(i));
   const lv = {
-    objects: [defaultObject(0), defaultObject(1)],
+    objects: objs,
     trials: [defaultTrial()],
     fixed: {
-      pr_switching_chain: 0.5,
+      pr_switching_chain: 1 / nObjects,
       start_orient: 0.0,
+      start_trial: 0,
       base_radius: 2.5,
       height: 4.0,
       cosine_alignment_threshold: 0.95,
@@ -403,6 +427,9 @@ function defaultLevel() {
       main_spotlight_intensity: 50000000,
       ambient_brightness: 100,
       max_spotlight_intensity: 50000000,
+      camera_radius: 15.0,
+      camera_y: 1.0,
+      camera_speed_rotate: 0.05,
     },
   };
   enforceLevel(lv);
@@ -437,9 +464,23 @@ function copyFace(srcObj, dstObj, srcFi, dstFi) {
 //   Type 1 (chain A) face 0 → Type 2 (chain B) face 0  (shared central face)
 //   Type 2 (chain B) face 1 → Type 2 (chain B) face 2  (mirror non-shared faces)
 function enforceLevel(lv) {
-  if (!lv.objects || lv.objects.length < 2) return;
-  copyFace(lv.objects[0], lv.objects[1], 0, 0); // shared face: A.f0 → B.f0
-  copyFace(lv.objects[1], lv.objects[1], 1, 2);  // mirrored: B.f1 → B.f2
+  if (!lv.objects || lv.objects.length < 1) return;
+  // Back-compat: fill missing fixed fields
+  const f = lv.fixed;
+  if (f.start_trial == null) f.start_trial = 0;
+  if (f.camera_radius == null) f.camera_radius = 15.0;
+  if (f.camera_y == null) f.camera_y = 1.0;
+  if (f.camera_speed_rotate == null) f.camera_speed_rotate = 0.05;
+  // Compute pr_switching_chain = 1/N
+  f.pr_switching_chain = 1 / lv.objects.length;
+  // Clamp start_trial
+  f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));
+  // Constraints: for every object i>0, face 0 is copied from obj 0 face 0,
+  // and face 2 is mirrored from its own face 1.
+  for (let i = 1; i < lv.objects.length; i++) {
+    copyFace(lv.objects[0], lv.objects[i], 0, 0);
+    copyFace(lv.objects[i], lv.objects[i], 1, 2);
+  }
 }
 
 // ================================================================
@@ -524,21 +565,27 @@ function renderLevelEditor() {
   editor.style.display = 'block';
 
   const lv = levels[sel];
+  const N = lv.objects.length;
   editor.innerHTML = `
     <div class="section">
-      <div class="sec-title">Objects — Chain A (Type 1) &amp; Chain B (Type 2)</div>
+      <div class="sec-title" style="display:flex;align-items:center;gap:10px;">
+        <span>Objects (${N})</span>
+        <span class="obj-actions">
+          <button id="addObjBtn">＋ Object</button>
+          ${N > 1 ? '<button id="removeObjBtn" class="remove-obj">✕ Object</button>' : ''}
+        </span>
+      </div>
       <div class="chains-grid">
-        ${renderObject(lv.objects[0], 0)}
-        ${renderObject(lv.objects[1], 1)}
+        ${lv.objects.map((obj, ci) => renderObject(obj, ci, N)).join('')}
       </div>
     </div>
     <div class="section">
-      <div class="sec-title">Trials (shared across both chains · ${lv.trials.length} step${lv.trials.length !== 1 ? 's' : ''})</div>
+      <div class="sec-title">Trials (shared across all chains · ${lv.trials.length} step${lv.trials.length !== 1 ? 's' : ''})</div>
       ${renderTrials(lv.trials)}
     </div>
     <div class="section">
-      <div class="sec-title">Fixed Settings</div>
-      ${renderFixed(lv.fixed)}
+      <div class="sec-title">Settings</div>
+      ${renderFixed(lv.fixed, lv)}
     </div>
   `;
 
@@ -548,18 +595,31 @@ function renderLevelEditor() {
 // ================================================================
 // Render — object (one chain)
 // ================================================================
-function renderObject(obj, ci) {
-  const label  = ci === 0 ? 'Chain A' : 'Chain B';
-  const type   = ci === 0 ? 'Type 1'  : 'Type 2';
-  const tClass = ci === 0 ? 'type-1'  : 'type-2';
+function renderObject(obj, ci, N) {
+  const CHAIN_COLORS = ['var(--chain-a)', 'var(--chain-b)', '#a06cd5', '#5cc9a7', '#e8a735', '#e05555'];
+  const colorVar = CHAIN_COLORS[ci % CHAIN_COLORS.length];
   const cls    = ci === 0 ? 'chain-a' : 'chain-b';
   const desc   = ci === 0 ? '1 shared, 2 different' : '1 shared, 2 same';
+
+  // Target door selector
+  const td = obj.target_door;
+  const isType1 = td === 2, isType2 = td === 5, isCustom = !isType1 && !isType2;
+  const doorSelVal = isType1 ? 'type1' : isType2 ? 'type2' : 'custom';
+  const doorSelect = `<span class="target-door-wrap">
+    <select class="door-sel" data-ci="${ci}">
+      <option value="type1"${doorSelVal === 'type1' ? ' selected' : ''}>Type 1 (door 2)</option>
+      <option value="type2"${doorSelVal === 'type2' ? ' selected' : ''}>Type 2 (door 5)</option>
+      <option value="custom"${doorSelVal === 'custom' ? ' selected' : ''}>Custom…</option>
+    </select>
+    <input type="number" class="door-custom-in" data-ci="${ci}" min="0" max="5" value="${td}"
+      style="display:${isCustom ? 'inline-block' : 'none'}">
+  </span>`;
+
   return `
-  <div class="obj-card ${cls}">
-    <div class="obj-header ${cls}">
-      <span>${label}</span>
-      <span class="type-badge ${tClass}">${type}</span>
-      <span class="type-desc">${desc}</span>
+  <div class="obj-card ${cls}" style="border-color:${colorVar}">
+    <div class="obj-header ${cls}" style="background:color-mix(in srgb, ${colorVar} 15%, transparent);color:${colorVar}">
+      <span>Object ${ci}</span>
+      ${doorSelect}
     </div>
     <div class="face-table-wrap">
       <table class="face-table">
@@ -587,7 +647,7 @@ function renderObject(obj, ci) {
 //   Chain B face 0 — shared from Chain A face 0
 //   Chain B face 2 — mirrored from Chain B face 1
 function isLocked(ci, fi) {
-  return (ci === 1 && fi === 0) || (ci === 1 && fi === 2);
+  return (ci > 0 && fi === 0) || (ci > 0 && fi === 2);
 }
 
 function renderFaceRow(obj, ci, fi) {
@@ -663,14 +723,18 @@ function renderTrials(trials) {
 }
 
 // ================================================================
-// Render — fixed settings
+// Render — settings (was "Fixed Settings")
 // ================================================================
-function renderFixed(fixed) {
+function renderFixed(fixed, lv) {
   // start_orient: display the 6 valid door angles as read-only info (not editable).
   // The controller randomises orientation at runtime from this set.
   const orientDisplay = START_ORIENTS.map((rad, k) =>
     `${k * 60}°`
   ).join(' · ');
+
+  const N = lv ? lv.objects.length : 2;
+  const prVal = (1 / N);
+  const maxTrial = lv ? Math.max(0, lv.trials.length - 1) : 0;
 
   const numRow = (label, field, val, step, min = '') =>
     `<div class="fixed-row">
@@ -680,8 +744,18 @@ function renderFixed(fixed) {
 
   return `<div class="fixed-grid">
     <div class="fixed-group">
-      <div class="fixed-group-title">Chain</div>
-      ${numRow('pr_switch', 'pr_switching_chain', fixed.pr_switching_chain, '0.05', '0')}
+      <div class="fixed-group-title">Camera</div>
+      ${numRow('camera_radius', 'camera_radius', fixed.camera_radius, '0.5', '0')}
+      ${numRow('camera_y', 'camera_y', fixed.camera_y, '0.1')}
+      ${numRow('camera_speed_rotate', 'camera_speed_rotate', fixed.camera_speed_rotate, '0.01', '0')}
+    </div>
+    <div class="fixed-group">
+      <div class="fixed-group-title">Trials</div>
+      ${numRow('start_trial', 'start_trial', fixed.start_trial || 0, '1', '0')}
+      <div class="fixed-row">
+        <label>pr_switch</label>
+        <span class="readonly-val">1 / ${N} = ${prVal.toFixed(4)}</span>
+      </div>
       <div class="fixed-row">
         <label>start_orient</label>
         <span class="orient-info">${orientDisplay}</span>
@@ -720,20 +794,21 @@ function renderAll() {
 // DOM sync helpers (update locked face inputs without full re-render)
 // ================================================================
 
-// After chain A face 0 numeric field changed: push same value to chain B face 0 DOM input.
-// After chain B face 1 numeric field changed: push same value to chain B face 2 DOM input.
+// After obj 0 face 0 changed: push to all objects[i>0] face 0.
+// After any obj[ci>0] face 1 changed: push to its own face 2.
 function syncLockedNumericDOM(srcCi, srcFi, field, v) {
-  let tgtCi, tgtFi;
+  const lv = levels[sel];
   if (srcCi === 0 && srcFi === 0) {
-    tgtCi = 1; tgtFi = 0;
-  } else if (srcCi === 1 && srcFi === 1) {
-    tgtCi = 1; tgtFi = 2;
-  } else {
-    return;
+    for (let i = 1; i < lv.objects.length; i++) {
+      const sel2 = `.face-in[data-chain="${i}"][data-face="0"][data-field="${field}"]`;
+      const el = document.querySelector(sel2);
+      if (el) el.value = v;
+    }
+  } else if (srcCi > 0 && srcFi === 1) {
+    const sel2 = `.face-in[data-chain="${srcCi}"][data-face="2"][data-field="${field}"]`;
+    const el = document.querySelector(sel2);
+    if (el) el.value = v;
   }
-  const sel2 = `.face-in[data-chain="${tgtCi}"][data-face="${tgtFi}"][data-field="${field}"]`;
-  const el = document.querySelector(sel2);
-  if (el) el.value = v;
 }
 
 // After chain A face 0 or chain B face 1 color/texture/shape changed:
@@ -758,13 +833,14 @@ function attachEvents() {
       if (isLocked(ci, fi)) return;
       const v = field === 'decorations_seeds' ? Math.round(+e.target.value) : +e.target.value;
       levels[sel].objects[ci][field][fi] = v;
-      // Enforce constraint: sync to locked counterpart in data model and DOM
-      if ((ci === 0 && fi === 0) || (ci === 1 && fi === 1)) {
-        if (ci === 0 && fi === 0) {
-          levels[sel].objects[1][field][0] = v;
-        } else {
-          levels[sel].objects[1][field][2] = v;
+      // Enforce constraint: sync to locked counterparts
+      if (ci === 0 && fi === 0) {
+        for (let i = 1; i < levels[sel].objects.length; i++) {
+          levels[sel].objects[i][field][0] = v;
         }
+        syncLockedNumericDOM(ci, fi, field, v);
+      } else if (ci > 0 && fi === 1) {
+        levels[sel].objects[ci][field][2] = v;
         syncLockedNumericDOM(ci, fi, field, v);
       }
     });
@@ -789,9 +865,54 @@ function attachEvents() {
   editor.querySelectorAll('.shape-btn').forEach(el => {
     el.addEventListener('click', e => {
       applyShape(e.target.dataset.sid, +e.target.dataset.sv);
-      renderLevelEditor(); // re-render to update active state
+      renderLevelEditor();
     });
   });
+
+  // Door selector
+  editor.querySelectorAll('.door-sel').forEach(el => {
+    el.addEventListener('change', e => {
+      const ci = +e.target.dataset.ci;
+      const val = e.target.value;
+      const customIn = editor.querySelector(`.door-custom-in[data-ci="${ci}"]`);
+      if (val === 'type1') {
+        levels[sel].objects[ci].target_door = 2;
+        if (customIn) customIn.style.display = 'none';
+      } else if (val === 'type2') {
+        levels[sel].objects[ci].target_door = 5;
+        if (customIn) customIn.style.display = 'none';
+      } else {
+        if (customIn) customIn.style.display = 'inline-block';
+      }
+    });
+  });
+  editor.querySelectorAll('.door-custom-in').forEach(el => {
+    el.addEventListener('input', e => {
+      const ci = +e.target.dataset.ci;
+      levels[sel].objects[ci].target_door = Math.max(0, Math.min(5, Math.round(+e.target.value)));
+    });
+  });
+
+  // Add / remove object buttons
+  const addObjBtn = editor.querySelector('#addObjBtn');
+  if (addObjBtn) {
+    addObjBtn.addEventListener('click', () => {
+      const ci = levels[sel].objects.length;
+      levels[sel].objects.push(defaultObject(ci));
+      enforceLevel(levels[sel]);
+      renderAll();
+    });
+  }
+  const removeObjBtn = editor.querySelector('#removeObjBtn');
+  if (removeObjBtn) {
+    removeObjBtn.addEventListener('click', () => {
+      if (levels[sel].objects.length > 1) {
+        levels[sel].objects.pop();
+        enforceLevel(levels[sel]);
+        renderAll();
+      }
+    });
+  }
 
   // Trial field inputs
   editor.querySelectorAll('.trial-in').forEach(el => {
@@ -809,6 +930,7 @@ function attachEvents() {
   editor.querySelectorAll('[data-tdel]').forEach(el => {
     el.addEventListener('click', e => {
       levels[sel].trials.splice(+e.target.dataset.tdel, 1);
+      enforceLevel(levels[sel]); // clamp start_trial
       renderAll();
     });
   });
@@ -839,7 +961,13 @@ function attachEvents() {
   // Fixed inputs & selects
   editor.querySelectorAll('.fixed-in').forEach(el => {
     el.addEventListener('change', e => {
-      levels[sel].fixed[e.target.dataset.ff] = +e.target.value;
+      const field = e.target.dataset.ff;
+      let val = +e.target.value;
+      if (field === 'start_trial') {
+        val = Math.max(0, Math.min(Math.round(val), levels[sel].trials.length - 1));
+        e.target.value = val;
+      }
+      levels[sel].fixed[field] = val;
     });
   });
 }
@@ -863,7 +991,7 @@ function applyColorFromId(cid) {
     levels[sel].objects[ci].decorations_color[fi] = rgba;
   }
   // Enforce: if editing a face that drives a locked face, sync and re-render
-  if ((ci === 0 && fi === 0) || (ci === 1 && fi === 1)) {
+  if ((ci === 0 && fi === 0) || (ci > 0 && fi === 1)) {
     enforceLevel(levels[sel]);
     syncLockedFaceRerender();
   }
@@ -880,7 +1008,7 @@ function applyTexture(id, val) {
   } else {
     levels[sel].objects[ci].decorations_texture[fi] = val;
   }
-  if ((ci === 0 && fi === 0) || (ci === 1 && fi === 1)) {
+  if ((ci === 0 && fi === 0) || (ci > 0 && fi === 1)) {
     enforceLevel(levels[sel]);
     syncLockedFaceRerender();
   }
@@ -893,7 +1021,7 @@ function applyShape(id, val) {
   const ci = +m[1], fi = +m[2];
   if (isLocked(ci, fi)) return;
   levels[sel].objects[ci].decorations_shape[fi] = val;
-  if ((ci === 0 && fi === 0) || (ci === 1 && fi === 1)) {
+  if ((ci === 0 && fi === 0) || (ci > 0 && fi === 1)) {
     enforceLevel(levels[sel]);
     // renderLevelEditor is called by the shape-btn click handler after this
   }

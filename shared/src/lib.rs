@@ -176,6 +176,7 @@ macro_rules! shared_game_state {
             pub is_rendering_stopped: $B,
             pub is_scene_ready: $B,
             pub win_time: $U32,
+            pub camera_speed_rotate: $U32,
         }
     };
 }
@@ -203,6 +204,7 @@ impl SharedGameState {
                 CAMERA_3D_INITIAL_Y,
                 CAMERA_3D_INITIAL_Z,
                 CAMERA_3D_INITIAL_RADIUS,
+                CAMERA_3D_SPEED_ROTATE,
             }
         };
             
@@ -299,6 +301,7 @@ impl SharedGameState {
             is_scene_ready: AtomicBool::new(false),
 
             win_time: AtomicU32::new(0),
+            camera_speed_rotate: AtomicU32::new(CAMERA_3D_SPEED_ROTATE.to_bits()),
         }
     }
 
@@ -351,6 +354,7 @@ impl SharedGameState {
         self.is_rendering_stopped.store(other.is_rendering_stopped.load(Ordering::Relaxed), Ordering::Relaxed);
         self.is_scene_ready.store(other.is_scene_ready.load(Ordering::Relaxed), Ordering::Relaxed);
         self.win_time.store(other.win_time.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.camera_speed_rotate.store(other.camera_speed_rotate.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
     pub fn reset_all_fields_to_default(&self) {
@@ -442,6 +446,7 @@ impl SharedGameState {
             is_rendering_stopped: self.is_rendering_stopped.load(Ordering::Relaxed),
             is_scene_ready: self.is_scene_ready.load(Ordering::Relaxed),
             win_time: self.win_time.load(Ordering::Relaxed),
+            camera_speed_rotate: self.camera_speed_rotate.load(Ordering::Relaxed),
         }
     }
 
@@ -489,6 +494,7 @@ impl SharedGameState {
         self.is_rendering_stopped.store(state.is_rendering_stopped, Ordering::Relaxed);
         self.is_scene_ready.store(state.is_scene_ready, Ordering::Relaxed);
         self.win_time.store(state.win_time, Ordering::Relaxed);
+        self.camera_speed_rotate.store(state.camera_speed_rotate, Ordering::Relaxed);
     }
 
 }

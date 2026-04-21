@@ -186,6 +186,7 @@ class MonkeyGameController:
 
         # Current level state
         self.current_level_index = 0
+        self.chain_indices = [0] * self.total_levels
         self.chain_a_idx = 0   # position in trials list for chain A (object[0])
         self.chain_b_idx = 0   # position in trials list for chain B (object[1])
         self.active_chain = 0  # 0 = chain A, 1 = chain B
@@ -284,13 +285,12 @@ class MonkeyGameController:
     # Command helpers
     def check_has_finished(self, state):
         trial = self.flat_trial
-        nr_attempts = state.get("nr_attempts", 0)
         nr_attempts_to_retroceed = trial.get("nr_attempts_to_retroceed", 0)
         time_elapsed = state.get("elapsed_secs", 0.0)
         elapsed_time_to_retroceed = trial.get("elapsed_time_to_retroceed", 0.0)
         return (
             state.get("win_elapsed_secs", 0.0) != 0.0
-            or nr_attempts >= nr_attempts_to_retroceed
+            or self.nr_attempts >= nr_attempts_to_retroceed
             or time_elapsed >= elapsed_time_to_retroceed
         )
 
@@ -520,20 +520,23 @@ class MonkeyGameController:
         # Check at which state are we
         flat = self.flat_trial
         time_elapsed = self.current_state.get("elapsed_secs", 0.0)
+        has_won = self.current_state.get("win_elapsed_secs", 0.0) != 0.0
 
-        is_win = (
-            time_elapsed < flat.get("elapsed_time_to_win", 0.0)
-            and self.nr_attempts < flat.get("nr_attempts_to_win", 0)
+        # Budget flags drive the in-play animation selection below
+        in_win_budget = (
+            time_elapsed <= flat.get("elapsed_time_to_win", 0.0)
+            and self.nr_attempts <= flat.get("nr_attempts_to_win", 0)
         )
-        is_stay = (
-            not is_win
-            and time_elapsed < flat.get("elapsed_time_to_retroceed", 0.0)
-            and self.nr_attempts < flat.get("nr_attempts_to_retroceed", 0)
+        in_stay_budget = (
+            not in_win_budget
+            and time_elapsed <= flat.get("elapsed_time_to_retroceed", 0.0)
+            and self.nr_attempts <= flat.get("nr_attempts_to_retroceed", 0)
         )
 
-        if is_win:
+        # Trial outcome: game's win signal is ground truth; budget decides ADVANCE vs STAY
+        if has_won and in_win_budget:
             self.trial_proceeding = TrialProceeding.ADVANCE
-        elif is_stay:
+        elif has_won:
             self.trial_proceeding = TrialProceeding.STAY
         else:
             self.trial_proceeding = TrialProceeding.RETROCEED
@@ -552,7 +555,7 @@ class MonkeyGameController:
             cosine_threshold = flat.get("cosine_alignment_threshold", 0.0)
 
             # Exceeded number of attempt: animate red light and retroceed
-            if (self.nr_attempts + 1) == retroceeds_threshold and cosine_current < cosine_threshold:
+            if (self.nr_attempts) == retroceeds_threshold and cosine_current < cosine_threshold:
                 print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
@@ -569,7 +572,7 @@ class MonkeyGameController:
                 return
             # Suggestion available and can play: animate depending on cosine alignment
             elif (self.nr_attempts < suggestion_threshold and cosine_current < cosine_threshold) or \
-                 (self.trial_proceeding == TrialProceeding.STAY and cosine_current > cosine_threshold):
+                 (in_stay_budget and cosine_current > cosine_threshold):
                 colored_light = cosine_current > COLOR_SUGGESTION_COS_SIM
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
@@ -579,7 +582,7 @@ class MonkeyGameController:
                     "animation_all_door": False, "animation_colored": colored_light,
                 })
             # Won: animate green light
-            elif is_win and cosine_current > cosine_threshold and self.nr_attempts < suggestion_threshold:
+            elif in_win_budget and cosine_current > cosine_threshold and self.nr_attempts < suggestion_threshold:
                 cmds = self.write_commands({
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
@@ -611,9 +614,6 @@ class MonkeyGameController:
         if self.current_state.get("is_animating", False):
             print("[FSM] Animation started → WAITING_ANIMATION_END")
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
-
-        if self.check_has_finished(self.current_state):
-            self._handle_trial_index_update()
 
         self.log_frame(self.current_state, self.old_cmds)
 
@@ -662,6 +662,7 @@ class MonkeyGameController:
         print(f"[EVAL] {outcome.upper()} → level {self.current_level_index} chain {self.active_chain} trial {self._trial_idx()}")
 
         self.save_trial_log(outcome)
+        self._handle_trial_index_update()
         self._resync_with_game()
 
     def _handle_trial_index_update(self):

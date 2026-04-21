@@ -650,8 +650,8 @@ function checkHasFinished(state) {
   // Use game state nr_attempts (mirrors Python's state.get("nr_attempts", 0))
   return (
     state.win_elapsed_secs !== 0.0 ||
-    state.nr_attempts >= nrAttemptsToRetroceed ||
-    state.elapsed_secs >= elapsedTimeToRetroceed
+    nrAttempts > nrAttemptsToRetroceed ||
+    state.elapsed_secs > elapsedTimeToRetroceed
   );
 }
 
@@ -751,19 +751,20 @@ function handleWaitingForStart(state) {
 function handlePlaying(state) {
   const trial = flatTrial();
   const timeElapsed = state.elapsed_secs;
+  const hasWon = (state.win_elapsed_secs ?? 0) !== 0;
 
-  const isWin =
-    timeElapsed < (trial.elapsed_time_to_win ?? 0) &&
-    nrAttempts < (trial.nr_attempts_to_win ?? 0);
+  const inWinBudget =
+    timeElapsed <= (trial.elapsed_time_to_win ?? 0) &&
+    nrAttempts <= (trial.nr_attempts_to_win ?? 0);
 
-  const isStay =
-    !isWin &&
-    timeElapsed < (trial.elapsed_time_to_retroceed ?? 0) &&
-    nrAttempts < (trial.nr_attempts_to_retroceed ?? 0);
+  const inStayBudget =
+    !inWinBudget &&
+    timeElapsed <= (trial.elapsed_time_to_retroceed ?? 0) &&
+    nrAttempts <= (trial.nr_attempts_to_retroceed ?? 0);
 
-  // Set advancement state
-  if (isWin) trialProceeding = PROCEEDING.ADVANCE;
-  else if (isStay) trialProceeding = PROCEEDING.STAY;
+  // Set advancement state from ground-truth win signal
+  if (hasWon && inWinBudget) trialProceeding = PROCEEDING.ADVANCE;
+  else if (hasWon) trialProceeding = PROCEEDING.STAY;
   else trialProceeding = PROCEEDING.RETROCEED;
 
   // ── Terminate if finished ──
@@ -784,7 +785,7 @@ function handlePlaying(state) {
     let cmds;
 
     // Branch 1: Last attempt AND fail → single door (no all-door, no colored), mirrors Python
-    if ((nrAttempts + 1) === retroceedThreshold && cosineAlignment < cosineThreshold) {
+    if ((nrAttempts) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true });
       writeCommands(cmds);
@@ -798,14 +799,14 @@ function handlePlaying(state) {
     // colored if close enough (cosine > cos(π/6)), white otherwise
     else if (
       (nrAttempts < suggestionThreshold && cosineAlignment < cosineThreshold) ||
-      (trialProceeding === PROCEEDING.STAY && cosineAlignment > cosineThreshold)
+      (inStayBudget && cosineAlignment > cosineThreshold)
     ) {
       const coloredLight = cosineAlignment > COLOR_SUGGESTION_COS_SIM;
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_colored: coloredLight });
     }
-    // Branch 3: Single green (isWin & correct & below suggestion)
-    else if (isWin && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
+    // Branch 3: Single green (in win budget & correct & below suggestion)
+    else if (inWinBudget && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_colored: true });
     }
@@ -842,10 +843,6 @@ function handleWaitingAnimationStart(state) {
   if (state.is_animating) {
     console.log("[FSM] Animation started → WAITING_ANIMATION_END");
     fsmState = FSM.WAITING_ANIMATION_END;
-  }
-
-  if (checkHasFinished(state)) {
-    handleTrialIndexUpdate();
   }
 
   logFrame(state, old_cmds);
@@ -920,6 +917,7 @@ function handleTrialComplete(state) {
   console.log(`[EVAL] ${outcome.toUpperCase()} → level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()}`);
 
   saveTrialLog(outcome);
+  handleTrialIndexUpdate();
   resyncWithGame();
 }
 

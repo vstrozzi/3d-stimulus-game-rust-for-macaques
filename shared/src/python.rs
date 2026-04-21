@@ -170,7 +170,7 @@ impl SharedMemoryWrapper {
         elapsed_secs: f32,
         camera_radius: f32,
         camera_position: [f32; 3],
-        nr_attempts: u32,
+        attempts: u32,
         cosine_alignment: f32,
         current_angle: f32,
         is_animating: bool,
@@ -244,7 +244,7 @@ impl SharedMemoryWrapper {
         gs.camera_x.store(camera_position[0].to_bits(), Ordering::Relaxed);
         gs.camera_y.store(camera_position[1].to_bits(), Ordering::Relaxed);
         gs.camera_z.store(camera_position[2].to_bits(), Ordering::Relaxed);
-        gs.attempts.store(nr_attempts, Ordering::Relaxed);
+        gs.attempts.store(attempts, Ordering::Relaxed);
         gs.current_alignment.store(cosine_alignment.to_bits(), Ordering::Relaxed);
         gs.current_angle.store(current_angle.to_bits(), Ordering::Relaxed);
         gs.is_animating.store(is_animating, Ordering::Relaxed);
@@ -347,7 +347,7 @@ impl SharedMemoryWrapper {
                 f32::from_bits(gs.camera_y.load(Ordering::Relaxed)),
                 f32::from_bits(gs.camera_z.load(Ordering::Relaxed)),
             ])?;
-            dict.set_item("nr_attempts", gs.attempts.load(Ordering::Relaxed))?;
+            dict.set_item("attempts", gs.attempts.load(Ordering::Relaxed))?;
             dict.set_item("cosine_alignment", f32::from_bits(gs.current_alignment.load(Ordering::Relaxed)))?;
             dict.set_item("current_angle", f32::from_bits(gs.current_angle.load(Ordering::Relaxed)))?;
             dict.set_item("is_animating", gs.is_animating.load(Ordering::Relaxed))?;

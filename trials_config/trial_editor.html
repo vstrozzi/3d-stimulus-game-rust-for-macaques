@@ -588,12 +588,12 @@ function pushFace0ToShared(sourceCi) {
  */
 function getDoorStyle(doorIdx) {
   const coords = [
-        { x: '-18px', y: '26px' },   // Door 3 (Bottom-Left Vertex)
-    { x: '-9px',  y: '15px' }, // Door 4 (Mid-Left Edge)
-    { x: '0px',   y: '0px' },     // Door 5 (Top Vertex)
-    { x: '9px',   y: '15px' }, // Door 0 (Mid-Right Edge)
-    { x: '18px',  y: '26px' },   // Door 1 (Bottom-Right Vertex)
-    { x: '0px',   y: '26px' },   // Door 2 (Bottom-Mid Edge)
+    { x: '18px',  y: '26px' },   // Door 0 (Bottom-Right Vertex)
+    { x: '9px',   y: '15px' },   // Door 1 (Mid-Right Edge)
+    { x: '0px',   y: '0px' },    // Door 2 (Top Vertex)
+    { x: '-9px',  y: '15px' },   // Door 3 (Mid-Left Edge)
+    { x: '-18px', y: '26px' },   // Door 4 (Bottom-Left Vertex)
+    { x: '0px',   y: '26px' },   // Door 5 (Bottom-Mid Edge)
   ];
   const pos = coords[doorIdx] || { x: '0px', y: '15px' };
   return `left: ${pos.x}; top: ${pos.y};`;
@@ -659,7 +659,7 @@ function renderLevelList() {
   }
   el.innerHTML = levels.map((lv, i) => `
     <div class="lv-item${i === sel ? ' selected' : ''}" data-i="${i}">
-      <span class="lv-name">Level ${i + 1}</span>
+      <span class="lv-name">Level ${i}</span>
       <span class="lv-meta">${lv.trials.length}t</span>
       <span class="lv-btns">
         ${i > 0 ? `<button class="lv-btn" data-lmove="${i}" data-dir="-1" title="Move Up">↑</button>` : ''}
@@ -832,7 +832,7 @@ function renderFaceRow(obj, ci, fi) {
 function renderTrials(trials) {
   const rows = trials.map((t, ti) => `
     <div class="trial-row">
-      <span class="trial-num">${ti + 1}</span>
+      <span class="trial-num">${ti}</span>
       <span class="trial-field"><span>Win ≤</span>
         <input type="number" class="num-xs trial-in" data-ti="${ti}" data-tf="nr_attempts_to_win" value="${t.nr_attempts_to_win}" min="1" step="1">
         <span>att</span>

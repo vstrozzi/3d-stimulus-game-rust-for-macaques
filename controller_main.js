@@ -100,7 +100,7 @@ let triggers = {
   check: false,
   reset: false,
   toggle_blank: false,
-  toggle_toggle_stop_rendering: false,
+  toggle_stop_rendering: false,
   animation_door: false,
   animation_all_door: false,
   animation_colored: false,
@@ -117,7 +117,6 @@ let frameLog = {};
 let trialRunCounter = 0;
 let currentFrame = -1;
 let gameTimeUnresponsive = 0;
-let old_cmds = {}; // for change detection in logFrame
 
 // Special flags
 let _start = false;
@@ -359,11 +358,42 @@ function writeCommands(cmds) {
   resetTriggers();
 }
 
-/** Write all-false commands (Python's write_no_commands). */
+/* Write all-false commands (Python's write_no_commands).*/
 function writeNoCommands() {
-  const cmds = makeCmd();
-  writeCommands(cmds);
-  return cmds;
+  const view = new Uint8Array(memory.buffer, pointers.cmd);
+  const co = cmdOffsets;
+  view[co.rotate_left] = 0;
+  view[co.rotate_right] = 0;
+  view[co.zoom_in] = 0;
+  view[co.zoom_out] = 0;
+  view[co.check] = 0;
+  view[co.reset] = 0;
+  view[co.toggle_blank] = 0;
+  view[co.toggle_stop_rendering] = 0;
+  view[co.animation_door] = 0;
+  view[co.animation_all_door] = 0;
+  view[co.animation_colored] = 0;
+  return { ...CMD_DEFAULTS };
+}
+
+/** Read current commands from SHM (mirrors Python's shm_wrapper.read_commands).
+ *  Returns a dict with the same keys as makeCmd so logs stay schema-consistent. */
+function readCommands() {
+  const view = new Uint8Array(memory.buffer, pointers.cmd);
+  const co = cmdOffsets;
+  return {
+    rotate_left: view[co.rotate_left] !== 0,
+    rotate_right: view[co.rotate_right] !== 0,
+    zoom_in: view[co.zoom_in] !== 0,
+    zoom_out: view[co.zoom_out] !== 0,
+    check: view[co.check] !== 0,
+    reset: view[co.reset] !== 0,
+    toggle_blank: view[co.toggle_blank] !== 0,
+    toggle_stop_rendering: view[co.toggle_stop_rendering] !== 0,
+    animation_door: view[co.animation_door] !== 0,
+    animation_all_door: view[co.animation_all_door] !== 0,
+    animation_colored: view[co.animation_colored] !== 0,
+  };
 }
 
 /** Increment command_seq so the game knows there are new commands.
@@ -373,7 +403,6 @@ function incrementCommandSeq() {
   const seqView = new DataView(memory.buffer, pointers.commandSeq);
   seqView.setBigUint64(0, BigInt(commandSeqCounter), true);
 }
-
 
 /**
  * Write game state config to game_structure_control.
@@ -573,7 +602,7 @@ function buildTrialState(trialCfg) {
 // Add new command fields here; FSM handlers pick them up automatically via makeCmd().
 const CMD_DEFAULTS = Object.freeze({
   rotate_left: false, rotate_right: false, zoom_in: false, zoom_out: false,
-  check: false, reset: false, toggle_blank: false, toggle_toggle_stop_rendering: false,
+  check: false, reset: false, toggle_blank: false, toggle_stop_rendering: false,
   animation_door: false, animation_all_door: false, animation_colored: false,
 });
 
@@ -660,6 +689,7 @@ function checkHasFinished(state) {
   const trial = flatTrial();
   const nrAttemptsToRetroceed = trial.nr_attempts_to_retroceed ?? 0;
   const elapsedTimeToRetroceed = trial.elapsed_time_to_retroceed ?? 0;
+  console.log(`[CHECK] win_elapsed_secs=${state.win_elapsed_secs} nr_attempts=${state.nr_attempts} elapsed_secs=${state.elapsed_secs} | thresholds: win_time=${trial.elapsed_time_to_win} nr_attempts_to_win=${trial.nr_attempts_to_win} nr_attempts_to_retroceed=${nrAttemptsToRetroceed} elapsed_time_to_retroceed=${elapsedTimeToRetroceed}`);
   // Use game state nr_attempts (mirrors Python's state.get("nr_attempts", 0))
   return (
     state.win_elapsed_secs !== 0.0 ||
@@ -684,10 +714,14 @@ function handleInit(state) {
   // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS))
   trialState.start_orient = floatToU32Bits(START_ORIENTS[Math.floor(Math.random() * START_ORIENTS.length)]);
 
-  // Camera_y from fixed (Python equivalent)
+  // Camera position from fixed (mirrors Python's trial_state["camera_position"] = [0, cam_y, cam_r],
+  // which the SHM wrapper splits into camera_x/y/z)
   const level = currentLevel();
   const camY = level.fixed.camera_y ?? 1.0;
+  const camR = level.fixed.camera_radius ?? 15.0;
+  trialState.camera_x = floatToU32Bits(0.0);
   trialState.camera_y = floatToU32Bits(camY);
+  trialState.camera_z = floatToU32Bits(camR);
 
   // Progress bar
   trialState.progress_bar_cur_size = _progressBarCur();
@@ -751,8 +785,8 @@ function handleWaitingForStart(state) {
 
   if (_start) {
     _start = false;
-    // Turn off black screen and start rendering
-    const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: true });
+    // Turn off black screen and resume rendering (only toggle if currently stopped)
+    const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
@@ -802,12 +836,14 @@ function handlePlaying(state) {
 
     let cmds;
 
+    // Stop rendering for the duration of the animation (only toggle if currently running)
+    const stopRenderForAnim = !state.is_rendering_stopped;
+
     // Branch 1: Last attempt AND fail → single door (no all-door, no colored), mirrors Python
     if ((nrAttempts) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true });
       writeCommands(cmds);
-      old_cmds = cmds;
       fsmState = FSM.WAITING_ANIMATION_START;
       nrAttempts += 1;
       logFrame(state, cmds);
@@ -821,22 +857,21 @@ function handlePlaying(state) {
     ) {
       const coloredLight = cosineAlignment > COLOR_SUGGESTION_COS_SIM;
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_colored: coloredLight });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: coloredLight });
     }
     // Branch 3: Single green (in win budget & correct & below suggestion)
     else if (inWinBudget && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_colored: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: true });
     }
     // Branch 4: All doors white
     else {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → check (all white)`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: false, animation_door: true, animation_all_door: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true });
     }
 
     nrAttempts += 1;
     writeCommands(cmds);
-    old_cmds = cmds;
     fsmState = FSM.WAITING_ANIMATION_START;
     console.log("[FSM] → WAITING_ANIMATION_START");
     logFrame(state, cmds);
@@ -854,7 +889,6 @@ function handlePlaying(state) {
   });
   writeCommands(cmds);
   logFrame(state, cmds);
-  old_cmds = cmds;
 }
 
 function handleWaitingAnimationStart(state) {
@@ -863,19 +897,18 @@ function handleWaitingAnimationStart(state) {
     fsmState = FSM.WAITING_ANIMATION_END;
   }
 
-  logFrame(state, old_cmds);
+  logFrame(state, readCommands());
 }
 
 function handleWaitingAnimationEnd(state) {
   // Default to true (still animating) if field is missing, matching Python's
   // state.get("is_animating", True) — avoids premature exit on undefined.
   if (!(state.is_animating ?? true)) {
-    // Animation done → resume rendering
+    // Animation done → resume rendering (only toggle if currently stopped)
     console.log("[FSM] Animation finished → issuing toggle_stop_rendering (resume)");
     resetAllCommands();
-    const cmds = makeCmd({ toggle_stop_rendering: true });
-    writeCommands(cmds);
-    logFrame(state, old_cmds);
+    writeCommands(makeCmd({ toggle_stop_rendering: state.is_rendering_stopped }));
+    logFrame(state, readCommands());
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
     console.log("[FSM] → PLAYING");
@@ -996,9 +1029,13 @@ function controllerLoop() {
   currentFrame = state.frame_number;
   gameTimeUnresponsive = 0;
 
+  console.log(`[DEBUG] elapsed_secs=${state.elapsed_secs}, nrAttempts=${nrAttempts}, retroThreshold=${flatTrial().elapsed_time_to_retroceed}`);
+  
   // Set progress bar on state (mirrors Python lines 413-414)
   state.progress_bar_cur_size = _progressBarCur();
   state.progress_bar_size = _progressBarSize();
+
+  writeNoCommands();
 
   // Dispatch FSM — handlers may modify state in-place
   switch (fsmState) {

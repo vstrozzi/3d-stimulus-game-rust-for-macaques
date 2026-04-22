@@ -134,6 +134,29 @@ impl SharedMemoryWrapper {
         cmd.animation_colored.store(animation_colored, Ordering::Relaxed);
     }
 
+    /// Read cmds
+    fn read_commands(&self) -> PyResult<Py<PyAny>> {
+        let shm = self.inner.get();
+        let cmd = &shm.commands;
+
+        Python::attach(|py| {
+            let dict = pyo3::types::PyDict::new(py);
+            dict.set_item("rotate_left", cmd.rotate_left.load(Ordering::Relaxed))?;
+            dict.set_item("rotate_right", cmd.rotate_right.load(Ordering::Relaxed))?;
+            dict.set_item("zoom_in", cmd.zoom_in.load(Ordering::Relaxed))?;
+            dict.set_item("zoom_out", cmd.zoom_out.load(Ordering::Relaxed))?;
+            dict.set_item("check", cmd.check_alignment.load(Ordering::Relaxed))?;
+            dict.set_item("reset", cmd.reset.load(Ordering::Relaxed))?;
+            dict.set_item("toggle_blank", cmd.toggle_blank.load(Ordering::Relaxed))?;
+            dict.set_item("toggle_stop_rendering", cmd.toggle_stop_rendering.load(Ordering::Relaxed))?;
+            dict.set_item("animation_door", cmd.animation_door.load(Ordering::Relaxed))?;
+            dict.set_item("animation_all_door", cmd.animation_all_door.load(Ordering::Relaxed))?;
+            dict.set_item("animation_colored", cmd.animation_colored.load(Ordering::Relaxed))?;
+
+            Ok(dict.into())
+        })
+    }
+
     /// Increment the sequence
     fn increment_command_seq(&mut self) {
         self.command_seq_counter += 1;

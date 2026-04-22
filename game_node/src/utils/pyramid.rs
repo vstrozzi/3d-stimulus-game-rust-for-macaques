@@ -312,20 +312,18 @@ pub fn spawn_pyramid(
     let top_mesh = build_mesh(
         vec![
             top_corners[0].to_array(),
-            top_corners[1].to_array(),
             top_corners[2].to_array(),
+            top_corners[1].to_array(),
         ],
         vec![[0.0, 1.0, 0.0]; 3],
         vec![[0.5, 0.0], [0.0, 1.0], [1.0, 1.0]],
         vec![],
     );
+    let top_wood = preloaded.get(Texture::Metal061B_1K);
     commands.spawn((
         Mesh3d(meshes.add(top_mesh)),
         MeshMaterial3d(materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            cull_mode: None,
-            double_sided: true,
-            ..default()
+            ..tinted_material(top_wood, Color::WHITE)
         })),
         Transform::default(),
         Pyramid,

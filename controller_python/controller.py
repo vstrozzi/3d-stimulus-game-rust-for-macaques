@@ -206,7 +206,6 @@ class MonkeyGameController:
         # FSM
         self.fsm_state = ControllerState.INIT
         self.trial_proceeding = TrialProceeding.ADVANCE
-        self.old_cmds = {}
 
         # Special commands
         self._start = False
@@ -297,6 +296,7 @@ class MonkeyGameController:
         nr_attempts_to_retroceed = trial.get("nr_attempts_to_retroceed", 0)
         time_elapsed = state.get("elapsed_secs", 0.0)
         elapsed_time_to_retroceed = trial.get("elapsed_time_to_retroceed", 0.0)
+
         return (
             state.get("win_elapsed_secs", 0.0) != 0.0
             or self.nr_attempts > nr_attempts_to_retroceed
@@ -324,7 +324,7 @@ class MonkeyGameController:
         cmds_snapshot = dict(data_to_write)
         self.reset_triggers()
         return cmds_snapshot
-
+    
     def write_no_commands(self):
         cmds = {
             "rotate_left": False,
@@ -522,7 +522,7 @@ class MonkeyGameController:
                 "check": False,
                 "reset": True,
                 "toggle_blank": True,
-                "toggle_stop_rendering": True,
+                "toggle_stop_rendering": self.current_state.get("is_rendering_stopped", False), # resume rendering
                 "animation_door": False,
                 "animation_all_door": False,
                 "animation_colored": False,
@@ -570,17 +570,18 @@ class MonkeyGameController:
             cosine_current = self.current_state.get("cosine_alignment", 0.0)
             cosine_threshold = flat.get("cosine_alignment_threshold", 0.0)
 
-            # Exceeded number of attempt: animate red light and retroceed
-            if (self.nr_attempts) == retroceeds_threshold and cosine_current < cosine_threshold:
-                print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")
-                cmds = self.write_commands({
+            # Since animating stop rendering
+            cmds =  {
                     "rotate_left": False, "rotate_right": False,
                     "zoom_in": False, "zoom_out": False,
                     "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": False, "animation_door": True,
+                    "toggle_stop_rendering": not self.current_state.get("is_rendering_stopped", False),
+                    "animation_door": True,
                     "animation_all_door": False, "animation_colored": False,
-                })
-                self.old_cmds = cmds
+                }
+            if (self.nr_attempts) == retroceeds_threshold and cosine_current < cosine_threshold:
+                print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")
+                cmds = self.write_commands(cmds)
                 self.fsm_state = ControllerState.WAITING_ANIMATION_START
                 self.nr_attempts += 1
                 print("[FSM] → WAITING_ANIMATION_START")
@@ -590,33 +591,17 @@ class MonkeyGameController:
             elif (self.nr_attempts < suggestion_threshold and cosine_current < cosine_threshold) or \
                  (in_stay_budget and cosine_current > cosine_threshold):
                 colored_light = cosine_current > COLOR_SUGGESTION_COS_SIM
-                cmds = self.write_commands({
-                    "rotate_left": False, "rotate_right": False,
-                    "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": False, "animation_door": True,
-                    "animation_all_door": False, "animation_colored": colored_light,
-                })
+                cmds["animation_colored"] = colored_light
+                cmds = self.write_commands(cmds)
             # Won: animate green light
             elif in_win_budget and cosine_current > cosine_threshold and self.nr_attempts < suggestion_threshold:
-                cmds = self.write_commands({
-                    "rotate_left": False, "rotate_right": False,
-                    "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": False, "animation_door": True,
-                    "animation_all_door": False, "animation_colored": True,
-                })
+                cmds["animation_colored"] = True
+                cmds = self.write_commands(cmds)
             # No suggestions available but can still play: animate all lights with red
             else:
-                cmds = self.write_commands({
-                    "rotate_left": False, "rotate_right": False,
-                    "zoom_in": False, "zoom_out": False,
-                    "check": True, "reset": False, "toggle_blank": False,
-                    "toggle_stop_rendering": False, "animation_door": True,
-                    "animation_all_door": True, "animation_colored": False,
-                })
+                cmds["animation_all_door"] = True
+                cmds = self.write_commands(cmds)
 
-            self.old_cmds = cmds
             self.nr_attempts += 1
             self.fsm_state = ControllerState.WAITING_ANIMATION_START
             print("[FSM] → WAITING_ANIMATION_START")
@@ -631,24 +616,25 @@ class MonkeyGameController:
             print("[FSM] Animation started → WAITING_ANIMATION_END")
             self.fsm_state = ControllerState.WAITING_ANIMATION_END
 
-        self.log_frame(self.current_state, self.old_cmds)
+        self.log_frame(self.current_state, self.shm_wrapper.read_commands())
 
     def _handle_waiting_animation_end(self):
         if not self.current_state.get("is_animating", True):
             print("[FSM] Animation finished → issuing toggle_stop_rendering (resume)")
             self.reset_commands()
-            cmds = self.write_commands({
+            self.write_commands({
                 "rotate_left": False, "rotate_right": False,
                 "zoom_in": False, "zoom_out": False,
                 "check": False, "reset": False, "toggle_blank": False,
-                "toggle_stop_rendering": False, "animation_door": False,
+                "toggle_stop_rendering": self.current_state.get("is_rendering_stopped", False), "animation_door": False,
                 "animation_all_door": False, "animation_colored": False,
             })
-            self.log_frame(self.current_state, self.old_cmds)
+            self.log_frame(self.current_state, self.shm_wrapper.read_commands())
             self.fsm_state = ControllerState.PLAYING
             print("[FSM] → PLAYING")
             return
 
+        # Resume rendering
         cmds = self.write_commands({
             "rotate_left": False, "rotate_right": False,
             "zoom_in": False, "zoom_out": False,

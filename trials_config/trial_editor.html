@@ -749,7 +749,7 @@ function renderObject(obj, ci, N) {
           <th>Face Color</th>
           <th>Door</th>
           <th>Face Texture</th>
-          <th>Seed</th>
+          <th title="Seed for the Poisson-disk random placement. Set to 0 for a deterministic uniform-grid layout (max spacing in every direction, horizontal split preferred — e.g. n=1 center, n=2 halves, n=4 quadrants).">Seed <span style="color:var(--accent);font-weight:700;" title="0 = deterministic grid (max-spacing) layout">(0 = grid)</span></th>
           <th>Count</th>
           <th>Size</th>
           <th>Thick</th>
@@ -817,7 +817,7 @@ function renderFaceRow(obj, ci, fi) {
     <td>${doorIndicator}</td>
 
     <td>${texSelectHtml(`${p}ft`, obj.textures[fi])}</td>
-    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_seeds" value="${obj.decorations_seeds[fi]}"></td>
+    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_seeds" value="${obj.decorations_seeds[fi]}" min="0" step="1" title="Seed for random Poisson-disk placement. Seed = 0 ⇒ deterministic uniform-grid layout (max spacing, horizontal split preferred)."></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_count" value="${obj.decorations_count[fi]}"></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_size" value="${obj.decorations_size[fi]}"></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_thickness" value="${obj.decorations_thickness[fi]}"></td>

@@ -5,7 +5,9 @@ use crate::utils::objects::{
     BaseDoor, BaseFrame, DecorationSet, GameEntity, HoleEmissive, HoleLight, Pyramid,
     PyramidConfig, RotableComponent, PreloadedTextures,
 };
-use crate::utils::decorations::{generate_decoration_set, spawn_decorations_from_set};
+use crate::utils::decorations::{
+    generate_decoration_set, generate_grid_decoration_set, spawn_decorations_from_set,
+};
 use crate::utils::utils::build_mesh;
 use bevy::prelude::*;
 use shared::{Texture};
@@ -331,25 +333,30 @@ pub fn spawn_pyramid(
         GameEntity,
     ));
 
-    // Generate decoration sets for all 3 faces (2 triangles each = 6 sets total)
-    let mut dec_sets: Vec<Option<DecorationSet>> = Vec::with_capacity(6);
+    // Generate one decoration set per face by sampling over the full quad.
+    // Seed == 0 is a sentinel for a deterministic uniform-grid layout.
+    let mut dec_sets: Vec<Option<DecorationSet>> = Vec::with_capacity(3);
     for i in 0..3 {
-        let mut face_rng = ChaCha8Rng::seed_from_u64(config.decoration_seeds[i]);
         let next = (i + 1) % 3;
         let (tl, tr, bl, br) = (top_corners[i], top_corners[next], base_corners[i], base_corners[next]);
 
-        dec_sets.push(Some(generate_decoration_set(
-            &mut face_rng, tl, bl, br,
-            config.decoration_counts[i], config.decoration_sizes[i],
-            config.decoration_shapes[i], config.decoration_colors[i],
-            config.decoration_thicknesses[i],
-        )));
-        dec_sets.push(Some(generate_decoration_set(
-            &mut face_rng, tl, br, tr,
-            config.decoration_counts[i], config.decoration_sizes[i],
-            config.decoration_shapes[i], config.decoration_colors[i],
-            config.decoration_thicknesses[i],
-        )));
+        let seed = config.decoration_seeds[i];
+        let set = if seed == 0 {
+            generate_grid_decoration_set(
+                config.decoration_counts[i], config.decoration_sizes[i],
+                config.decoration_shapes[i], config.decoration_colors[i],
+                config.decoration_thicknesses[i],
+            )
+        } else {
+            let mut face_rng = ChaCha8Rng::seed_from_u64(seed);
+            generate_decoration_set(
+                &mut face_rng, tl, tr, bl, br,
+                config.decoration_counts[i], config.decoration_sizes[i],
+                config.decoration_shapes[i], config.decoration_colors[i],
+                config.decoration_thicknesses[i],
+            )
+        };
+        dec_sets.push(Some(set));
     }
 
     // Spawn faces and attach decorations
@@ -379,16 +386,10 @@ pub fn spawn_pyramid(
             ))
             .id();
 
-        if let Some(ref set_a) = dec_sets[i * 2] {
+        if let Some(ref set) = dec_sets[i] {
             spawn_decorations_from_set(
-                commands, meshes, materials, face_entity, set_a, preloaded,
-                tl, bl, br, normal, config.decoration_textures[i],
-            );
-        }
-        if let Some(ref set_b) = dec_sets[i * 2 + 1] {
-            spawn_decorations_from_set(
-                commands, meshes, materials, face_entity, set_b, preloaded,
-                tl, br, tr, normal, config.decoration_textures[i],
+                commands, meshes, materials, face_entity, set, preloaded,
+                tl, tr, bl, br, normal, config.decoration_textures[i],
             );
         }
     }

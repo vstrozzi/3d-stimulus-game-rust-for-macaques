@@ -52,13 +52,65 @@ fn create_triangle_mesh(size: f32) -> Mesh {
     )
 }
 
-/// Generates a decoration set for a pyramid face using Poisson-like sampling.
-/// Decorations are stored using barycentric coordinates relative to the triangle vertices.
+/// Bilinear interpolation inside the (tl, tr, bl, br) quad.
+/// u=0 -> left edge, u=1 -> right edge, v=0 -> top edge, v=1 -> bottom edge.
+fn bilerp_quad(tl: Vec3, tr: Vec3, bl: Vec3, br: Vec3, u: f32, v: f32) -> Vec3 {
+    let top = tl.lerp(tr, u);
+    let bot = bl.lerp(br, u);
+    top.lerp(bot, v)
+}
+
+/// Deterministic "max-space" decoration layout: items are placed at the
+/// centers of a uniform grid over the face in UV space. Grid dimensions are
+/// `cols = ceil(sqrt(n))`, `rows = ceil(n / cols)`, which biases toward
+/// horizontal splits (e.g. n=2 → 2×1, n=4 → 2×2). A partial last row is
+/// horizontally centered.
+///
+/// Used when the decoration seed equals 0 (sentinel).
+pub fn generate_grid_decoration_set(
+    count: u32,
+    size: f32,
+    decoration_shape: DecorationShape,
+    color: Color,
+    thickness: f32,
+) -> DecorationSet {
+    let n = count as usize;
+    let mut decorations: Vec<Decoration> = Vec::with_capacity(n);
+    if n == 0 {
+        return DecorationSet { shape: decoration_shape, color, decorations };
+    }
+
+    let cols = (n as f32).sqrt().ceil() as usize;
+    let rows = ((n as f32) / (cols as f32)).ceil() as usize;
+
+    let mut placed = 0usize;
+    for r in 0..rows {
+        let items_this_row = if r + 1 == rows { n - placed } else { cols };
+        let row_offset = (cols - items_this_row) as f32 * 0.5;
+        for c in 0..items_this_row {
+            let u = (row_offset + c as f32 + 0.5) / cols as f32;
+            let v = (r as f32 + 0.5) / rows as f32;
+            decorations.push(Decoration {
+                uv: Vec2::new(u, v),
+                size,
+                thickness,
+            });
+            placed += 1;
+        }
+    }
+
+    DecorationSet { shape: decoration_shape, color, decorations }
+}
+
+/// Generates a decoration set for a pyramid face using Poisson-like sampling
+/// over the whole quadrilateral face. Decorations are stored as bilinear
+/// (u, v) coordinates in the (tl, tr, bl, br) quad.
 pub fn generate_decoration_set(
     rng: &mut ChaCha8Rng,
-    top: Vec3,
-    corner1: Vec3,
-    corner2: Vec3,
+    tl: Vec3,
+    tr: Vec3,
+    bl: Vec3,
+    br: Vec3,
     count: u32,
     size: f32,
     decoration_shape: DecorationShape,
@@ -79,28 +131,14 @@ pub fn generate_decoration_set(
     {
         total_attempts += 1;
 
-        let (world_position, is_valid) =
-            sample_point_in_triangle(rng, top, corner1, corner2, size, &decorations_world);
+        let (u, v, world_position, is_valid) =
+            sample_point_in_quad(rng, tl, tr, bl, br, size, &decorations_world);
         if !is_valid {
             continue;
         }
 
-        // Convert world position to barycentric coordinates
-        let v0 = corner1 - top;
-        let v1 = corner2 - top;
-        let v2 = world_position - top;
-        let d00 = v0.dot(v0);
-        let d01 = v0.dot(v1);
-        let d11 = v1.dot(v1);
-        let d20 = v2.dot(v0);
-        let d21 = v2.dot(v1);
-        let denom = d00 * d11 - d01 * d01;
-        let w1 = (d11 * d20 - d01 * d21) / denom;
-        let w2 = (d00 * d21 - d01 * d20) / denom;
-        let w0 = 1.0 - w1 - w2;
-
         decorations.push(Decoration {
-            barycentric: Vec3::new(w0, w2, w1),
+            uv: Vec2::new(u, v),
             size,
             thickness,
         });
@@ -116,7 +154,7 @@ pub fn generate_decoration_set(
 }
 
 /// Spawns decorations from a decoration set onto a face.
-/// Reconstructs world positions from barycentric coordinates relative to the given triangle.
+/// Reconstructs world positions via bilinear interpolation over the quad.
 pub fn spawn_decorations_from_set(
     commands: &mut Commands,
     meshes: &mut ResMut<Assets<Mesh>>,
@@ -124,18 +162,17 @@ pub fn spawn_decorations_from_set(
     parent_face: Entity,
     decoration_set: &DecorationSet,
     preloaded: &PreloadedTextures,
-    top: Vec3,
-    corner1: Vec3,
-    corner2: Vec3,
+    tl: Vec3,
+    tr: Vec3,
+    bl: Vec3,
+    br: Vec3,
     face_normal: Vec3,
     texture_id: u32,
 ) {
     let dec_tex = preloaded.get(Texture::from_u32(texture_id));
 
     for decoration in &decoration_set.decorations {
-        let position = decoration.barycentric.x * top
-            + decoration.barycentric.y * corner1
-            + decoration.barycentric.z * corner2;
+        let position = bilerp_quad(tl, tr, bl, br, decoration.uv.x, decoration.uv.y);
 
         let mesh = create_decoration_mesh(decoration_set.shape, decoration.size, decoration.thickness);
 
@@ -163,39 +200,39 @@ pub fn spawn_decorations_from_set(
     }
 }
 
-/// Samples a random point inside a triangle with edge-margin and Poisson-disk constraints.
-fn sample_point_in_triangle(
+/// Samples a random point inside the quad with edge-margin and Poisson-disk constraints.
+/// Returns `(u, v, world_position, is_valid)`.
+fn sample_point_in_quad(
     rng: &mut ChaCha8Rng,
-    v0: Vec3,
-    v1: Vec3,
-    v2: Vec3,
+    tl: Vec3,
+    tr: Vec3,
+    bl: Vec3,
+    br: Vec3,
     size: f32,
     existing_decorations: &[(Vec3, f32)],
-) -> (Vec3, bool) {
-    let r1 = rng.random_range(0.0..1.0_f32).sqrt();
-    let r2 = rng.random_range(0.0..1.0_f32);
-    let w0 = 1.0 - r1;
-    let w1 = r1 * (1.0 - r2);
-    let w2 = r1 * r2;
-    let position = v0 * w0 + v1 * w1 + v2 * w2;
+) -> (f32, f32, Vec3, bool) {
+    let u = rng.random_range(0.0..1.0_f32);
+    let v = rng.random_range(0.0..1.0_f32);
+    let position = bilerp_quad(tl, tr, bl, br, u, v);
 
     let edge_margin = size * 1.5;
-    if point_to_line_segment_distance(position, v0, v1) < edge_margin
-        || point_to_line_segment_distance(position, v1, v2) < edge_margin
-        || point_to_line_segment_distance(position, v2, v0) < edge_margin
+    if point_to_line_segment_distance(position, tl, tr) < edge_margin
+        || point_to_line_segment_distance(position, tr, br) < edge_margin
+        || point_to_line_segment_distance(position, br, bl) < edge_margin
+        || point_to_line_segment_distance(position, bl, tl) < edge_margin
     {
-        return (position, false);
+        return (u, v, position, false);
     }
 
     let min_spacing = size * 2.0;
     for (existing_pos, existing_size) in existing_decorations {
         let required_distance = (size + existing_size) * 1.2;
         if position.distance(*existing_pos) < required_distance.max(min_spacing) {
-            return (position, false);
+            return (u, v, position, false);
         }
     }
 
-    (position, true)
+    (u, v, position, true)
 }
 
 /// Minimum distance from a point to a line segment.

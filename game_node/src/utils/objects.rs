@@ -16,10 +16,11 @@ impl PreloadedTextures {
     }
 }
 
-/// Single decoration on a pyramid face with barycentric coordinates relative to the triangle vertices (top, corner1, corner2)
+/// Single decoration on a pyramid face. `uv` is the bilinear coordinate in
+/// the (tl, tr, bl, br) quad: u=0 left, u=1 right, v=0 top, v=1 bottom.
 #[derive(Clone, Debug)]
 pub struct Decoration {
-    pub barycentric: Vec3,
+    pub uv: Vec2,
     pub size: f32,
     pub thickness: f32,
 }

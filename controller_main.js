@@ -132,25 +132,24 @@ let pressedKeys = new Set();
 
 // ── Touch tuning ────────────────────────────────────────────────────────────
 const SWIPE = {
-  smoothing: 0.65,      // EMA alpha during drag (higher = more responsive)
-  reverseSnap: 0.95,    // alpha when flipping direction (instant reversal)
-  maxEnergy: 900,       // px/s → maps to duty cycle 1.0 (full speed)
-  minEnergy: 40,        // px/s → below this, stop cleanly
-  frictionLow: 0.78,    // friction at low energy → clean quick stop after gentle swipe
-  frictionHigh: 0.997,  // friction at full energy → long satisfying spin after hard swipe
-  coastCutoff: 0.02,    // duty cycle below which coast-down snaps to zero
+  velocityWindow: 100,  // ms — sliding window for velocity from recent samples (replaces EMA)
+  maxEnergy: 2000,      // px/s — cap for stored coast energy (hard flicks bank long spin-time)
+  dutyMaxEnergy: 600,   // px/s — velocity at which duty saturates to 1.0 (responsive drag)
+  friction: 0.993,      // fixed per-frame @ 60fps → half-life ~100 frames (~1.6s of decay)
+  minEnergy: 15,        // px/s → below this, snap to zero cleanly
+  coastCutoff: 0.08,    // duty below this during coast → snap off (avoids low-duty PWM stutter)
   tapMaxMove: 10,
   tapMaxTime: 300,
-  referenceFPS: 60,     // friction exponents are calibrated to this rate
+  referenceFPS: 60,     // friction exponent is calibrated to this rate
 };
 
 // ── Swipe state (single finger → rotation) ──────────────────────────────────
 let swipe = {
   active: false,
   startX: 0, startY: 0,
-  lastX: 0, lastY: 0, lastTime: 0,
   startTime: 0,
-  velocity: 0,      // px/s during drag (EMA)
+  samples: [],      // ring of {v: clientX, t: ms} within velocityWindow
+  velocity: 0,      // windowed px/s during drag (computed from samples)
   energy: 0,        // px/s after release (decays via friction)
   accumulator: 0,
   rotateLeft: false,
@@ -161,7 +160,7 @@ let swipe = {
 let pinch = {
   active: false,
   wasPinching: false,   // suppresses false tap after zoom gesture
-  lastDist: 0, lastTime: 0,
+  samples: [],          // ring of {v: dist, t: ms} within velocityWindow
   velocity: 0,
   energy: 0,
   accumulator: 0,
@@ -1078,6 +1077,17 @@ function touchDist(t1, t2) {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+/** Velocity from a position-sample ring, over the most recent `windowMs`.
+ *  Trims samples older than the window in-place, then returns (last.v - first.v) / dt. */
+function windowedVel(samples, now, windowMs) {
+  while (samples.length > 0 && now - samples[0].t > windowMs) samples.shift();
+  if (samples.length < 2) return 0;
+  const first = samples[0], last = samples[samples.length - 1];
+  const dt = (last.t - first.t) / 1000;
+  if (dt <= 0) return 0;
+  return (last.v - first.v) / dt;
+}
+
 /** Decay energy when fingers are up, dispatch velocity/energy → PWM booleans. */
 function processTouchInput() {
   const now = performance.now();
@@ -1089,24 +1099,23 @@ function processTouchInput() {
   // Frames-equivalent for this dt (friction^frames keeps feel identical at any fps)
   const frames = dt * SWIPE.referenceFPS;
 
+  // Fixed exponential decay — consistent half-life at any energy level.
   if (!swipe.active) {
-    const t = Math.abs(swipe.energy) / SWIPE.maxEnergy;
-    const friction = SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
-    swipe.energy *= Math.pow(friction, frames);
+    swipe.energy *= Math.pow(SWIPE.friction, frames);
     if (Math.abs(swipe.energy) < SWIPE.minEnergy) swipe.energy = 0;
   }
   if (!pinch.active) {
-    const t = Math.abs(pinch.energy) / SWIPE.maxEnergy;
-    const friction = SWIPE.frictionLow + (SWIPE.frictionHigh - SWIPE.frictionLow) * t;
-    pinch.energy *= Math.pow(friction, frames);
+    pinch.energy *= Math.pow(SWIPE.friction, frames);
     if (Math.abs(pinch.energy) < SWIPE.minEnergy) pinch.energy = 0;
   }
 
-  // Rotation: active drag uses live velocity; inertia uses decaying energy
+  // Rotation: active drag uses live velocity; inertia uses decaying energy.
+  // dutyMaxEnergy < maxEnergy on purpose — duty saturates early for snappy drag,
+  // while the higher energy cap lets hard flicks bank extra spin-time.
   swipe.rotateLeft = false;
   swipe.rotateRight = false;
   const rv = swipe.active ? swipe.velocity : swipe.energy;
-  const rDuty = Math.min(1, Math.abs(rv) / SWIPE.maxEnergy);
+  const rDuty = Math.min(1, Math.abs(rv) / SWIPE.dutyMaxEnergy);
   if (!swipe.active && rDuty > 0 && rDuty < SWIPE.coastCutoff) {
     swipe.energy = 0;
     swipe.accumulator = 0;
@@ -1121,16 +1130,21 @@ function processTouchInput() {
   setKeyUI("left", inputs.rotate_left || swipe.rotateLeft);
   setKeyUI("right", inputs.rotate_right || swipe.rotateRight);
 
-  // Zoom
+  // Zoom — same duty/coast model as rotation.
   pinch.zoomIn = false;
   pinch.zoomOut = false;
   const pv = pinch.active ? pinch.velocity : pinch.energy;
-  const pDuty = Math.min(1, Math.abs(pv) / SWIPE.maxEnergy);
-  pinch.accumulator += pDuty;
-  if (pinch.accumulator >= 1) {
-    pinch.accumulator -= 1;
-    pinch.zoomIn = pv > 0;
-    pinch.zoomOut = pv < 0;
+  const pDuty = Math.min(1, Math.abs(pv) / SWIPE.dutyMaxEnergy);
+  if (!pinch.active && pDuty > 0 && pDuty < SWIPE.coastCutoff) {
+    pinch.energy = 0;
+    pinch.accumulator = 0;
+  } else {
+    pinch.accumulator += pDuty;
+    if (pinch.accumulator >= 1) {
+      pinch.accumulator -= 1;
+      pinch.zoomIn = pv > 0;
+      pinch.zoomOut = pv < 0;
+    }
   }
   setKeyUI("up", inputs.zoom_in || pinch.zoomIn);
   setKeyUI("down", inputs.zoom_out || pinch.zoomOut);
@@ -1175,20 +1189,20 @@ function setupInput() {
   window.addEventListener("touchstart", (e) => {
     e.preventDefault();
     if (fsmState !== FSM.PLAYING) return;
+    const now = performance.now();
     if (e.touches.length >= 2) {
       swipe.active = false;
       pinch.active = true;
       pinch.wasPinching = true;
-      pinch.lastDist = touchDist(e.touches[0], e.touches[1]);
-      pinch.lastTime = performance.now();
+      pinch.samples = [{ v: touchDist(e.touches[0], e.touches[1]), t: now }];
       pinch.velocity = 0;
     } else {
       const t = e.touches[0];
       swipe.active = true;
-      swipe.startX = swipe.lastX = t.clientX;
-      swipe.startY = swipe.lastY = t.clientY;
+      swipe.startX = t.clientX;
+      swipe.startY = t.clientY;
       swipe.startTime = Date.now();
-      swipe.lastTime = performance.now();
+      swipe.samples = [{ v: t.clientX, t: now }];
       swipe.velocity = 0;
       swipe.energy = 0; // kill lingering inertia on fresh touch
     }
@@ -1200,41 +1214,27 @@ function setupInput() {
     const now = performance.now();
 
     if (e.touches.length >= 2 && pinch.active) {
-      const dist = touchDist(e.touches[0], e.touches[1]);
-      const dt = (now - pinch.lastTime) / 1000;
-      if (dt > 0 && dt < 0.15) {
-        const inst = (dist - pinch.lastDist) / dt;
-        pinch.velocity = pinch.velocity * (1 - SWIPE.smoothing) + inst * SWIPE.smoothing;
-      }
-      pinch.lastDist = dist;
-      pinch.lastTime = now;
+      pinch.samples.push({ v: touchDist(e.touches[0], e.touches[1]), t: now });
+      pinch.velocity = windowedVel(pinch.samples, now, SWIPE.velocityWindow);
     } else if (e.touches.length === 1) {
       const t = e.touches[0];
       // Recovery: touch started before PLAYING (e.g. on start overlay) — adopt it now
       if (!swipe.active) {
         swipe.active = true;
-        swipe.startX = swipe.lastX = t.clientX;
-        swipe.startY = swipe.lastY = t.clientY;
+        swipe.startX = t.clientX;
+        swipe.startY = t.clientY;
         swipe.startTime = Date.now();
-        swipe.lastTime = now;
+        swipe.samples = [];
         swipe.velocity = 0;
       }
-      const dt = (now - swipe.lastTime) / 1000;
-      if (dt > 0 && dt < 0.15) {
-        const inst = (t.clientX - swipe.lastX) / dt;
-        // Snap alpha on direction reversal → instant feel
-        const alpha = Math.sign(inst) !== Math.sign(swipe.velocity) && Math.abs(inst) > 20
-          ? SWIPE.reverseSnap : SWIPE.smoothing;
-        swipe.velocity = swipe.velocity * (1 - alpha) + inst * alpha;
-      }
-      swipe.lastX = t.clientX;
-      swipe.lastY = t.clientY;
-      swipe.lastTime = now;
+      swipe.samples.push({ v: t.clientX, t: now });
+      swipe.velocity = windowedVel(swipe.samples, now, SWIPE.velocityWindow);
     }
   }, { passive: false });
 
   window.addEventListener("touchend", (e) => {
     e.preventDefault();
+    const now = performance.now();
     if (e.touches.length === 0) {
       // Tap detection (suppress after pinch, suppress in tap grace period)
       const tapGraceOk = (Date.now() - _playingStartTime) > 500;
@@ -1248,9 +1248,11 @@ function setupInput() {
           console.log("Tap → check alignment");
         }
       }
-      // Transfer velocity to energy for coast-down
-      swipe.energy = Math.max(-SWIPE.maxEnergy, Math.min(SWIPE.maxEnergy, swipe.velocity));
-      pinch.energy = Math.max(-SWIPE.maxEnergy, Math.min(SWIPE.maxEnergy, pinch.velocity));
+      // Re-derive release velocity from the window — ignores a late pause before lift.
+      const swipeRelease = windowedVel(swipe.samples, now, SWIPE.velocityWindow);
+      const pinchRelease = windowedVel(pinch.samples, now, SWIPE.velocityWindow);
+      swipe.energy = Math.max(-SWIPE.maxEnergy, Math.min(SWIPE.maxEnergy, swipeRelease));
+      pinch.energy = Math.max(-SWIPE.maxEnergy, Math.min(SWIPE.maxEnergy, pinchRelease));
       swipe.active = false;
       pinch.active = false;
       pinch.wasPinching = false;
@@ -1260,17 +1262,17 @@ function setupInput() {
       pinch.active = false;
       const t = e.touches[0];
       swipe.active = true;
-      swipe.startX = swipe.lastX = t.clientX;
-      swipe.startY = swipe.lastY = t.clientY;
+      swipe.startX = t.clientX;
+      swipe.startY = t.clientY;
       swipe.startTime = Date.now();
-      swipe.lastTime = performance.now();
+      swipe.samples = [{ v: t.clientX, t: now }];
       swipe.velocity = 0;
     }
   }, { passive: false });
 
   window.addEventListener("touchcancel", () => {
-    swipe.active = false; swipe.energy = 0; swipe.velocity = 0;
-    pinch.active = false; pinch.energy = 0; pinch.velocity = 0;
+    swipe.active = false; swipe.energy = 0; swipe.velocity = 0; swipe.samples = [];
+    pinch.active = false; pinch.energy = 0; pinch.velocity = 0; pinch.samples = [];
     pinch.wasPinching = false;
   });
 

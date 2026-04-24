@@ -817,7 +817,7 @@ function renderFaceRow(obj, ci, fi) {
     <td>${doorIndicator}</td>
 
     <td>${texSelectHtml(`${p}ft`, obj.textures[fi])}</td>
-    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_seeds" value="${obj.decorations_seeds[fi]}" min="0" step="1" title="Seed for random Poisson-disk placement. Seed = 0 ⇒ deterministic uniform-grid layout (max spacing, horizontal split preferred)."></td>
+    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_seeds" value="${obj.decorations_seeds[fi]}" min="0" step="1" inputmode="numeric" pattern="\\d*" title="Seed for random Poisson-disk placement. Seed = 0 ⇒ deterministic uniform-grid layout (max spacing, horizontal split preferred)."></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_count" value="${obj.decorations_count[fi]}"></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_size" value="${obj.decorations_size[fi]}"></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_thickness" value="${obj.decorations_thickness[fi]}"></td>
@@ -947,10 +947,20 @@ function attachEvents() {
       const fi    = +e.target.dataset.face;
       const field = e.target.dataset.field;
       const obj   = levels[sel].objects[ci];
-      
+
       if (isLocked(obj, ci, fi)) return;
-      
-      const v = field === 'decorations_seeds' ? Math.round(+e.target.value) : +e.target.value;
+
+      // Seed: digits only, no sign / decimal / exponent.
+      if (field === 'decorations_seeds') {
+        const cleaned = e.target.value.replace(/[^0-9]/g, '');
+        if (cleaned !== e.target.value) {
+          const pos = e.target.selectionStart;
+          e.target.value = cleaned;
+          try { e.target.setSelectionRange(pos - 1, pos - 1); } catch {}
+        }
+      }
+
+      const v = field === 'decorations_seeds' ? Math.round(+e.target.value || 0) : +e.target.value;
       levels[sel].objects[ci][field][fi] = v;
 
       const isType2 = obj._type === 'type2';

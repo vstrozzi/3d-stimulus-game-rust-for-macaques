@@ -171,14 +171,17 @@ pub fn spawn_decorations_from_set(
 ) {
     let dec_tex = preloaded.get(Texture::from_u32(texture_id));
 
+    // Build a consistent face basis so every decoration on the face shares the
+    // same orientation
+    let raw_up = ((tl - bl) + (tr - br)) * 0.5;
+    let face_right = raw_up.cross(face_normal).normalize();
+    let face_up = face_normal.cross(face_right).normalize();
+    let rotation = Quat::from_mat3(&Mat3::from_cols(face_right, face_up, face_normal));
+
     for decoration in &decoration_set.decorations {
         let position = bilerp_quad(tl, tr, bl, br, decoration.uv.x, decoration.uv.y);
 
         let mesh = create_decoration_mesh(decoration_set.shape, decoration.size, decoration.thickness);
-
-        let base_rotation = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
-        let normal_rotation = Quat::from_rotation_arc(Vec3::Y, -face_normal);
-        let final_rotation = normal_rotation * base_rotation;
 
         let offset_position = position + face_normal * 0.001;
 
@@ -191,7 +194,7 @@ pub fn spawn_decorations_from_set(
                 })),
                 Transform {
                     translation: offset_position,
-                    rotation: -final_rotation,
+                    rotation,
                     scale: Vec3::ONE,
                 },
                 GameEntity,

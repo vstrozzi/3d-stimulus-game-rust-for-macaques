@@ -83,12 +83,19 @@ pub fn read_shared_memory_commands(
             .camera_speed_rotate
             .load(Ordering::Relaxed),
     );
+    // Level-scoped rotation sense (+1 default, -1 inverts left/right).
+    // Stored as `i32` bits in SHM.
+    let rotation_sense = shm
+        .game_structure_control
+        .camera_rotation_sense
+        .load(Ordering::Relaxed) as i32 as f32;
+    let signed_speed = speed_rotate * rotation_sense;
 
     if shm.commands.rotate_left.load(Ordering::Relaxed) {
-        pending_commands.rotation -= speed_rotate;
+        pending_commands.rotation -= signed_speed;
     }
     if shm.commands.rotate_right.load(Ordering::Relaxed) {
-        pending_commands.rotation += speed_rotate;
+        pending_commands.rotation += signed_speed;
     }
     if shm.commands.zoom_in.load(Ordering::Relaxed) {
         pending_commands.zoom -= CAMERA_3D_SPEED_ZOOM;

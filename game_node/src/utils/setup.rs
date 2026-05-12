@@ -124,10 +124,17 @@ fn build_pyramid_config(gs_game: &shared::SharedGameStateLocal) -> PyramidConfig
         decoration_counts: gs_game.decorations_count,
         decoration_sizes: std::array::from_fn(|i| f32::from_bits(gs_game.decorations_size[i])),
         decoration_shapes: std::array::from_fn(|i| match gs_game.decorations_shape[i] {
-            1 => DecorationShape::Square,
-            2 => DecorationShape::Star,
-            3 => DecorationShape::Triangle,
-            _ => DecorationShape::Circle,
+            1  => DecorationShape::Square,
+            2  => DecorationShape::Star,
+            3  => DecorationShape::Triangle,
+            4  => DecorationShape::Rectangle,
+            5  => DecorationShape::Oval,
+            6  => DecorationShape::Pentagon,
+            7  => DecorationShape::Kite,
+            8  => DecorationShape::Rhombus,
+            9  => DecorationShape::Trapezoid,
+            10 => DecorationShape::Semicircle,
+            _  => DecorationShape::Circle,
         }),
         face_textures: gs_game.textures,
         decoration_colors: std::array::from_fn(|i| read_color_bits(&gs_game.decorations_color, i)),
@@ -135,6 +142,7 @@ fn build_pyramid_config(gs_game: &shared::SharedGameStateLocal) -> PyramidConfig
         decoration_thicknesses: std::array::from_fn(|i| {
             f32::from_bits(gs_game.decorations_thickness[i])
         }),
+        decoration_rotations: std::array::from_fn(|i| gs_game.decorations_rotation[i] as i32),
         target_door: gs_game.target_door as usize,
     }
 }

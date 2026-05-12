@@ -77,14 +77,23 @@ pub enum Phase {
     Won = 1,
 }
 
-/// Shapes for decorations on the pyramid faces
+/// Shapes for decorations on the pyramid faces.
+/// Indices are persisted in trials.jsonl and read directly from SHM —
+/// append-only. Never renumber existing variants.
 #[repr(u32)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DecorationShape {
-    Circle   = 0,
-    Square   = 1,
-    Star     = 2,
-    Triangle = 3,
+    Circle     = 0,
+    Square     = 1,
+    Star       = 2,
+    Triangle   = 3,
+    Rectangle  = 4,
+    Oval       = 5,
+    Pentagon   = 6,
+    Kite       = 7,
+    Rhombus    = 8,
+    Trapezoid  = 9,
+    Semicircle = 10,
 }
 
 // Textures for the pyramid faces and decorations.
@@ -141,6 +150,7 @@ macro_rules! shared_game_state {
             pub decorations_shape: [$U32; 3],
             pub decorations_texture: [$U32; 3],
             pub decorations_thickness: [$U32; 3],
+            pub decorations_rotation: [$U32; 3],
 
             pub cosine_alignment_threshold: $U32,
 
@@ -177,6 +187,8 @@ macro_rules! shared_game_state {
             pub is_scene_ready: $B,
             pub win_time: $U32,
             pub camera_speed_rotate: $U32,
+            /// Multiplier applied to the camera rotation. `+1` is the default.
+            pub camera_rotation_sense: $U32,
         }
     };
 }
@@ -205,6 +217,7 @@ impl SharedGameState {
                 CAMERA_3D_INITIAL_Z,
                 CAMERA_3D_INITIAL_RADIUS,
                 CAMERA_3D_SPEED_ROTATE,
+                CAMERA_ROTATION_SENSE_DEFAULT,
             }
         };
             
@@ -269,6 +282,12 @@ impl SharedGameState {
                 AtomicU32::new(PYRAMID_DECORATIONS_THICKNESS[2].to_bits()),
             ],
 
+            decorations_rotation: [
+                AtomicU32::new(PYRAMID_DECORATIONS_ROTATION[0] as u32),
+                AtomicU32::new(PYRAMID_DECORATIONS_ROTATION[1] as u32),
+                AtomicU32::new(PYRAMID_DECORATIONS_ROTATION[2] as u32),
+            ],
+
             cosine_alignment_threshold: AtomicU32::new(COSINE_ALIGNMENT_TO_WIN.to_bits()),
             
             door_anim_fade_out: AtomicU32::new(DOOR_ANIM_FADE_OUT.to_bits()),
@@ -302,6 +321,7 @@ impl SharedGameState {
 
             win_time: AtomicU32::new(0),
             camera_speed_rotate: AtomicU32::new(CAMERA_3D_SPEED_ROTATE.to_bits()),
+            camera_rotation_sense: AtomicU32::new(CAMERA_ROTATION_SENSE_DEFAULT as u32),
         }
     }
 
@@ -321,6 +341,7 @@ impl SharedGameState {
             self.decorations_shape[i].store(other.decorations_shape[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_texture[i].store(other.decorations_texture[i].load(Ordering::Relaxed), Ordering::Relaxed);
             self.decorations_thickness[i].store(other.decorations_thickness[i].load(Ordering::Relaxed), Ordering::Relaxed);
+            self.decorations_rotation[i].store(other.decorations_rotation[i].load(Ordering::Relaxed), Ordering::Relaxed);
         }
         for i in 0..12 {
             self.decorations_color[i].store(other.decorations_color[i].load(Ordering::Relaxed), Ordering::Relaxed);
@@ -355,6 +376,7 @@ impl SharedGameState {
         self.is_scene_ready.store(other.is_scene_ready.load(Ordering::Relaxed), Ordering::Relaxed);
         self.win_time.store(other.win_time.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_speed_rotate.store(other.camera_speed_rotate.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.camera_rotation_sense.store(other.camera_rotation_sense.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 
     pub fn reset_all_fields_to_default(&self) {
@@ -420,6 +442,11 @@ impl SharedGameState {
                 self.decorations_thickness[1].load(Ordering::Relaxed),
                 self.decorations_thickness[2].load(Ordering::Relaxed),
             ],
+            decorations_rotation: [
+                self.decorations_rotation[0].load(Ordering::Relaxed),
+                self.decorations_rotation[1].load(Ordering::Relaxed),
+                self.decorations_rotation[2].load(Ordering::Relaxed),
+            ],
             cosine_alignment_threshold: self.cosine_alignment_threshold.load(Ordering::Relaxed),
             door_anim_fade_out: self.door_anim_fade_out.load(Ordering::Relaxed),
             door_anim_stay_open: self.door_anim_stay_open.load(Ordering::Relaxed),
@@ -447,6 +474,7 @@ impl SharedGameState {
             is_scene_ready: self.is_scene_ready.load(Ordering::Relaxed),
             win_time: self.win_time.load(Ordering::Relaxed),
             camera_speed_rotate: self.camera_speed_rotate.load(Ordering::Relaxed),
+            camera_rotation_sense: self.camera_rotation_sense.load(Ordering::Relaxed),
         }
     }
 
@@ -467,6 +495,7 @@ impl SharedGameState {
             self.decorations_shape[i].store(state.decorations_shape[i], Ordering::Relaxed);
             self.decorations_texture[i].store(state.decorations_texture[i], Ordering::Relaxed);
             self.decorations_thickness[i].store(state.decorations_thickness[i], Ordering::Relaxed);
+            self.decorations_rotation[i].store(state.decorations_rotation[i], Ordering::Relaxed);
         }
         self.cosine_alignment_threshold.store(state.cosine_alignment_threshold, Ordering::Relaxed);
         self.door_anim_fade_out.store(state.door_anim_fade_out, Ordering::Relaxed);
@@ -495,6 +524,7 @@ impl SharedGameState {
         self.is_scene_ready.store(state.is_scene_ready, Ordering::Relaxed);
         self.win_time.store(state.win_time, Ordering::Relaxed);
         self.camera_speed_rotate.store(state.camera_speed_rotate, Ordering::Relaxed);
+        self.camera_rotation_sense.store(state.camera_rotation_sense, Ordering::Relaxed);
     }
 
 }

@@ -275,6 +275,10 @@ function readGameStateAt(basePtr) {
     decorations_size: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_size + i * 4, true)),
     decorations_seeds: Array.from({ length: N_FACES }, (_, i) => readU64(v, o.decorations_seeds + i * 8)),
     decorations_shape: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_shape + i * 4, true)),
+    // SHM stores i32 in u32 slots; expose as signed to JS so -1 (random)
+    // round-trips through the trial log without surprise.
+    decorations_rotation: Array.from({ length: N_FACES }, (_, i) => v.getInt32(o.decorations_rotation + i * 4, true)),
+    camera_rotation_sense: v.getInt32(o.camera_rotation_sense, true),
     cosine_alignment_threshold: v.getUint32(o.cosine_alignment_threshold, true),
     door_anim_fade_out: v.getUint32(o.door_anim_fade_out, true),
     door_anim_stay_open: v.getUint32(o.door_anim_stay_open, true),
@@ -429,6 +433,13 @@ function writeGameStateControl(state) {
   if (state.decorations_seeds) {
     for (let i = 0; i < N_FACES; i++) writeU64(v, o.decorations_seeds + i * 8, state.decorations_seeds[i]);
   }
+  if (state.decorations_rotation) {
+    // Negative values (e.g. -1 = random) are written as their two's-complement
+    // u32 bits; the game reads them back via `as i32` in Rust.
+    for (let i = 0; i < N_FACES; i++) {
+      v.setInt32(o.decorations_rotation + i * 4, state.decorations_rotation[i] | 0, true);
+    }
+  }
 
   v.setUint32(o.cosine_alignment_threshold, state.cosine_alignment_threshold, true);
   v.setUint32(o.door_anim_fade_out, state.door_anim_fade_out, true);
@@ -449,6 +460,8 @@ function writeGameStateControl(state) {
   v.setUint32(o.camera_y, state.camera_y, true);
   v.setUint32(o.camera_z, state.camera_z, true);
   v.setUint32(o.camera_speed_rotate, state.camera_speed_rotate ?? 0, true);
+  // i32 — `setInt32` keeps the two's-complement bit pattern for negative values.
+  v.setInt32(o.camera_rotation_sense, (state.camera_rotation_sense ?? 1) | 0, true);
   v.setUint32(o.attempts, state.attempts ?? 0, true);
   v.setUint32(o.current_alignment, state.current_alignment ?? 0, true);
   v.setUint32(o.current_angle, state.current_angle ?? 0, true);
@@ -570,9 +583,15 @@ const FIELD_SCHEMA = {
   decorations_shape: "u32[]",
   decorations_texture: "u32[]",
   decorations_seeds: "u64[]",
+  // i32 array stored as u32 bits (negative values become 0xFFFFFFFF on write
+  // and are decoded back via `(u32 << 0) >> 0` ↔ raw bit cast).
+  // -1 means "random rotation per decoration".
+  decorations_rotation: "u32[]",
   camera_radius: "f32",
   camera_y: "f32",
   camera_speed_rotate: "f32",
+  // i32 stored as u32. Valid runtime values are +1 (default) or -1.
+  camera_rotation_sense: "u32",
 };
 
 /** Build a game-state object from default + trial config overlay.
@@ -655,10 +674,15 @@ function logFrame(stateRead, commandsSent) {
 
 function saveTrialLog(outcome) {
   const elapsed = (Date.now() - trialStartTime) / 1000;
+  const sessionName = (localStorage.getItem("session_name") || "").trim();
+  // Self-describing: each per-trial file carries the session name so unpacked
+  // logs are still identifiable. Same schema as controller.py.save_trial_log.
   const log = {
+    session_name: sessionName || "unknown",
     level_index: currentLevelIndex,
     active_chain: activeChain,
     trial_index_in_chain: _trialIdx(),
+    trial_run_counter: trialRunCounter,
     trial_config: flatTrial(),
     outcome,
     nr_attempts: nrAttempts,
@@ -671,14 +695,66 @@ function saveTrialLog(outcome) {
   console.log(`[LOG] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, ${elapsed.toFixed(1)}s`);
 }
 
-function downloadLogs() {
-  const blob = new Blob([JSON.stringify(allTrialLogs, null, 2)], { type: "application/json" });
+/** Sanitize a session name for use in a filename: strip path separators,
+ *  collapse whitespace, and clamp to a sane length. Empty after cleanup → null. */
+function sanitizeSessionName(raw) {
+  if (!raw) return null;
+  const cleaned = String(raw)
+    .replace(/[\/\\:*?"<>|]+/g, "")
+    .replace(/\s+/g, "_")
+    .trim()
+    .slice(0, 64);
+  return cleaned || null;
+}
+
+/** Local ISO-ish timestamp safe for filenames (YYYY-MM-DD_HH-MM-SS, local TZ). */
+function localTimestamp() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+         `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+
+/** Bundle every accumulated trial log into a zip with per-level folders and
+ *  per-trial JSON files matching controller.py's on-disk format. After a
+ *  successful download, clear the in-memory buffer so the next download only
+ *  contains trials run since this point. */
+async function downloadLogs() {
+  if (typeof JSZip === "undefined") {
+    alert("JSZip failed to load — cannot download logs as a zip. Check your network connection.");
+    return;
+  }
+  if (allTrialLogs.length === 0) {
+    alert("No trial logs to download yet.");
+    return;
+  }
+
+  const sessionName = sanitizeSessionName(localStorage.getItem("session_name"));
+  const stamp = localTimestamp();
+  const baseName = `${sessionName || "unknown"}_${stamp}`;
+
+  const zip = new JSZip();
+  // Group by level → level_NNN/trial_<level>_run_<run>.json
+  // Filename pattern matches controller.py exactly so the existing
+  // verify_trial_logs.py loader recognises the format unchanged.
+  for (const trial of allTrialLogs) {
+    const lvl = String(trial.level_index ?? 0).padStart(3, "0");
+    const run = String(trial.trial_run_counter ?? 0).padStart(4, "0");
+    const folder = `${baseName}/level_${lvl}`;
+    const filename = `trial_${lvl}_run_${run}.json`;
+    zip.file(`${folder}/${filename}`, JSON.stringify(trial, null, 2));
+  }
+
+  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `trial_logs_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  a.download = `${baseName}.zip`;
   a.click();
   URL.revokeObjectURL(url);
+
+  // Clear so subsequent downloads only contain new trials.
+  allTrialLogs.length = 0;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1374,6 +1450,17 @@ function setupInput() {
 // TRIALS LOADING
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Backfill fields added after the original schema so older trials.jsonl
+ *  files keep working without re-export. Mirrors `_backfill_level_defaults`
+ *  in controller.py. */
+function backfillLevelDefaults(level) {
+  level.fixed ??= {};
+  if (level.fixed.camera_rotation_sense == null) level.fixed.camera_rotation_sense = 1;
+  for (const obj of (level.objects || [])) {
+    if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
+  }
+}
+
 async function loadLevels() {
   try {
     // Check sessionStorage for custom trials loaded from the landing page
@@ -1399,6 +1486,7 @@ async function loadLevels() {
         console.warn(`Line ${i + 1} needs at least 2 objects, skipping`);
         continue;
       }
+      backfillLevelDefaults(level);
       levels.push(level);
     }
     const source = customTrials ? `custom (${customName})` : 'trials.jsonl';

@@ -180,6 +180,7 @@ impl SharedMemoryWrapper {
         decorations_shape: [u32; 3],
         decorations_texture: [u32; 3],
         decorations_thickness: [f32; 3],
+        decorations_rotation: [i32; 3],
         cosine_alignment_threshold: f32,
         door_anim_fade_out: f32,
         door_anim_stay_open: f32,
@@ -202,6 +203,7 @@ impl SharedMemoryWrapper {
         is_scene_ready: bool,
         win_elapsed_secs: f32,
         camera_speed_rotate: f32,
+        camera_rotation_sense: i32,
     ) -> PyResult<()> {
         if colors.len() != 3 || colors.iter().any(|face| face.len() != 4) {
             return Err(PyErr::new::<PyValueError, _>(format!(
@@ -241,6 +243,7 @@ impl SharedMemoryWrapper {
             gs.decorations_shape[i].store(decorations_shape[i], Ordering::Relaxed);
             gs.decorations_texture[i].store(decorations_texture[i], Ordering::Relaxed);
             gs.decorations_thickness[i].store(decorations_thickness[i].to_bits(), Ordering::Relaxed);
+            gs.decorations_rotation[i].store(decorations_rotation[i] as u32, Ordering::Relaxed);
         }
         for (face_idx, face) in decorations_color.iter().enumerate() {
             for (channel_idx, value) in face.iter().enumerate() {
@@ -277,6 +280,7 @@ impl SharedMemoryWrapper {
         gs.is_scene_ready.store(is_scene_ready, Ordering::Relaxed);
         gs.win_time.store(win_elapsed_secs.to_bits(), Ordering::Relaxed);
         gs.camera_speed_rotate.store(camera_speed_rotate.to_bits(), Ordering::Relaxed);
+        gs.camera_rotation_sense.store(camera_rotation_sense as u32, Ordering::Relaxed);
 
         Ok(())
     }
@@ -343,6 +347,11 @@ impl SharedMemoryWrapper {
                 f32::from_bits(gs.decorations_thickness[1].load(Ordering::Relaxed)),
                 f32::from_bits(gs.decorations_thickness[2].load(Ordering::Relaxed)),
             ])?;
+            dict.set_item("decorations_rotation", [
+                gs.decorations_rotation[0].load(Ordering::Relaxed) as i32,
+                gs.decorations_rotation[1].load(Ordering::Relaxed) as i32,
+                gs.decorations_rotation[2].load(Ordering::Relaxed) as i32,
+            ])?;
 
             dict.set_item("cosine_alignment_threshold", f32::from_bits(gs.cosine_alignment_threshold.load(Ordering::Relaxed)))?;
 
@@ -381,6 +390,7 @@ impl SharedMemoryWrapper {
             dict.set_item("is_scene_ready", gs.is_scene_ready.load(Ordering::Relaxed))?;
             dict.set_item("win_elapsed_secs", f32::from_bits(gs.win_time.load(Ordering::Relaxed)))?;
             dict.set_item("camera_speed_rotate", f32::from_bits(gs.camera_speed_rotate.load(Ordering::Relaxed)))?;
+            dict.set_item("camera_rotation_sense", gs.camera_rotation_sense.load(Ordering::Relaxed) as i32)?;
 
             Ok(dict.into())
         })

@@ -94,9 +94,47 @@
   .loaded-info.empty { color: rgba(255,255,255,0.25); }
 
   .file-input { display: none; }
+
+  /* ── Session name overlay (top-left) — persisted in localStorage and
+        used to name the downloaded log zip. ──────────────────────────── */
+  .session-name-wrap {
+    position: fixed;
+    top: 16px;
+    left: 16px;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .session-name-wrap label {
+    font-size: 0.7em;
+    color: rgba(255,255,255,0.4);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .session-name-wrap input {
+    background: #1e1e2e;
+    border: 1px solid #33334a;
+    border-radius: 6px;
+    padding: 6px 10px;
+    color: #e0e0f0;
+    font-family: inherit;
+    font-size: 13px;
+    width: 220px;
+  }
+  .session-name-wrap input:focus {
+    outline: none;
+    border-color: #7c6ff7;
+  }
 </style>
 </head>
 <body>
+
+<div class="session-name-wrap">
+  <label for="session-name">Session name (for log filenames)</label>
+  <input type="text" id="session-name" placeholder="e.g. monkey_A_session_03"
+         autocomplete="off" spellcheck="false" maxlength="64">
+</div>
 
 <div class="landing">
   <h1>Monkey 3D</h1>
@@ -139,6 +177,15 @@
   const loadedInfo = document.getElementById('loaded-info');
   const btnLoad = document.getElementById('btn-load');
   const btnPlay = document.getElementById('btn-play');
+  const sessionNameInput = document.getElementById('session-name');
+
+  // Session name persists across reloads so participants don't need to
+  // re-enter it. The web controller reads `localStorage.session_name`
+  // when assembling the downloaded log zip's filename.
+  sessionNameInput.value = localStorage.getItem('session_name') || '';
+  sessionNameInput.addEventListener('input', () => {
+    localStorage.setItem('session_name', sessionNameInput.value);
+  });
 
   // Check if custom trials already in sessionStorage
   function updateInfo() {

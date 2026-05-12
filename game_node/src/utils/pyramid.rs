@@ -341,11 +341,12 @@ pub fn spawn_pyramid(
         let (tl, tr, bl, br) = (top_corners[i], top_corners[next], base_corners[i], base_corners[next]);
 
         let seed = config.decoration_seeds[i];
+        let rot = config.decoration_rotations[i];
         let set = if seed == 0 {
             generate_grid_decoration_set(
                 config.decoration_counts[i], config.decoration_sizes[i],
                 config.decoration_shapes[i], config.decoration_colors[i],
-                config.decoration_thicknesses[i],
+                config.decoration_thicknesses[i], rot,
             )
         } else {
             let mut face_rng = ChaCha8Rng::seed_from_u64(seed);
@@ -353,7 +354,7 @@ pub fn spawn_pyramid(
                 &mut face_rng, tl, tr, bl, br,
                 config.decoration_counts[i], config.decoration_sizes[i],
                 config.decoration_shapes[i], config.decoration_colors[i],
-                config.decoration_thicknesses[i],
+                config.decoration_thicknesses[i], rot,
             )
         };
         dec_sets.push(Some(set));

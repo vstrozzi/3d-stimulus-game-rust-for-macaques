@@ -8,8 +8,12 @@ use shared::{DecorationShape, Texture};
 use bevy::prelude::*;
 use bevy::prelude::ops::sqrt;
 use bevy::mesh::{VertexAttributeValues, Indices};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+
+/// Seed used by `generate_grid_decoration_set` when the rotation mode is
+/// "random" — keeps grid layouts otherwise deterministic.
+const GRID_RANDOM_ROTATION_SEED: u64 = 0xDEC0_DEAD;
 
 /// Creates a star-shaped mesh
 fn create_star_mesh(size: f32, points: usize) -> Mesh {
@@ -52,6 +56,114 @@ fn create_triangle_mesh(size: f32) -> Mesh {
     )
 }
 
+/// Helper: build a flat triangle-fan mesh from a list of perimeter vertices
+/// (CCW order). Center vertex is the average. UVs map each perimeter vertex
+/// from its position scaled to the half-extent of the shape.
+fn fan_mesh(perimeter: Vec<[f32; 2]>, half_extent: f32) -> Mesh {
+    let n = perimeter.len();
+    let mut positions = Vec::with_capacity(n + 1);
+    let mut normals = Vec::with_capacity(n + 1);
+    let mut uvs = Vec::with_capacity(n + 1);
+    let mut indices = Vec::with_capacity(n * 3);
+
+    positions.push([0.0, 0.0, 0.0]);
+    normals.push([0.0, 0.0, 1.0]);
+    uvs.push([0.5, 0.5]);
+
+    for [x, y] in &perimeter {
+        positions.push([*x, *y, 0.0]);
+        normals.push([0.0, 0.0, 1.0]);
+        uvs.push([x / half_extent * 0.5 + 0.5, y / half_extent * 0.5 + 0.5]);
+    }
+    for i in 1..=n {
+        let next = if i == n { 1 } else { i + 1 };
+        indices.extend_from_slice(&[0, i as u32, next as u32]);
+    }
+    build_mesh(positions, normals, uvs, indices)
+}
+
+/// Rectangle: width = 2*size, height = size (landscape).
+fn create_rectangle_mesh(size: f32) -> Mesh {
+    let w = size;
+    let h = size * 0.5;
+    fan_mesh(vec![[w, -h], [w, h], [-w, h], [-w, -h]], size)
+}
+
+/// Oval: ellipse with x-radius = size, y-radius = 0.6 * size.
+fn create_oval_mesh(size: f32) -> Mesh {
+    const SEGMENTS: usize = 32;
+    let mut perimeter = Vec::with_capacity(SEGMENTS);
+    for i in 0..SEGMENTS {
+        let a = (i as f32) * std::f32::consts::TAU / SEGMENTS as f32;
+        perimeter.push([a.cos() * size, a.sin() * size * 0.6]);
+    }
+    fan_mesh(perimeter, size)
+}
+
+/// Regular pentagon inscribed in a circle of radius `size`, point up.
+fn create_pentagon_mesh(size: f32) -> Mesh {
+    const N: usize = 5;
+    let mut perimeter = Vec::with_capacity(N);
+    for i in 0..N {
+        let a = std::f32::consts::FRAC_PI_2 + (i as f32) * std::f32::consts::TAU / N as f32;
+        perimeter.push([a.cos() * size, a.sin() * size]);
+    }
+    fan_mesh(perimeter, size)
+}
+
+/// Kite (point up): tall slim diamond with the upper vertex farther from
+/// center than the lower vertex.
+fn create_kite_mesh(size: f32) -> Mesh {
+    fan_mesh(
+        vec![
+            [0.0, size],
+            [size * 0.55, 0.0],
+            [0.0, -size * 0.55],
+            [-size * 0.55, 0.0],
+        ],
+        size,
+    )
+}
+
+/// Rhombus (point up): equal-side diamond inscribed in a circle of radius `size`.
+fn create_rhombus_mesh(size: f32) -> Mesh {
+    fan_mesh(
+        vec![
+            [0.0, size],
+            [size * 0.7, 0.0],
+            [0.0, -size],
+            [-size * 0.7, 0.0],
+        ],
+        size,
+    )
+}
+
+/// Isosceles trapezoid: short parallel top edge, longer bottom edge.
+fn create_trapezoid_mesh(size: f32) -> Mesh {
+    fan_mesh(
+        vec![
+            [size, -size * 0.5],
+            [size * 0.5, size * 0.5],
+            [-size * 0.5, size * 0.5],
+            [-size, -size * 0.5],
+        ],
+        size,
+    )
+}
+
+/// Semicircle (flat side down) inscribed in a half-disk of radius `size`.
+fn create_semicircle_mesh(size: f32) -> Mesh {
+    const SEGMENTS: usize = 16;
+    let mut perimeter = Vec::with_capacity(SEGMENTS + 2);
+    perimeter.push([size, 0.0]);
+    for i in 1..SEGMENTS {
+        let a = (i as f32) * std::f32::consts::PI / SEGMENTS as f32;
+        perimeter.push([a.cos() * size, a.sin() * size]);
+    }
+    perimeter.push([-size, 0.0]);
+    fan_mesh(perimeter, size)
+}
+
 /// Bilinear interpolation inside the (tl, tr, bl, br) quad.
 /// u=0 -> left edge, u=1 -> right edge, v=0 -> top edge, v=1 -> bottom edge.
 fn bilerp_quad(tl: Vec3, tr: Vec3, bl: Vec3, br: Vec3, u: f32, v: f32) -> Vec3 {
@@ -73,6 +185,7 @@ pub fn generate_grid_decoration_set(
     decoration_shape: DecorationShape,
     color: Color,
     thickness: f32,
+    rotation_deg: i32,
 ) -> DecorationSet {
     let n = count as usize;
     let mut decorations: Vec<Decoration> = Vec::with_capacity(n);
@@ -83,6 +196,14 @@ pub fn generate_grid_decoration_set(
     let cols = (n as f32).sqrt().ceil() as usize;
     let rows = ((n as f32) / (cols as f32)).ceil() as usize;
 
+    // Random rotation mode (sentinel -1) uses a fixed seed so grid layouts
+    // stay reproducible across runs even when the user picks "random".
+    let mut rot_rng = if rotation_deg < 0 {
+        Some(ChaCha8Rng::seed_from_u64(GRID_RANDOM_ROTATION_SEED))
+    } else {
+        None
+    };
+
     let mut placed = 0usize;
     for r in 0..rows {
         let items_this_row = if r + 1 == rows { n - placed } else { cols };
@@ -90,16 +211,32 @@ pub fn generate_grid_decoration_set(
         for c in 0..items_this_row {
             let u = (row_offset + c as f32 + 0.5) / cols as f32;
             let v = (r as f32 + 0.5) / rows as f32;
+            let rotation = resolve_rotation(rotation_deg, rot_rng.as_mut());
             decorations.push(Decoration {
                 uv: Vec2::new(u, v),
                 size,
                 thickness,
+                rotation,
             });
             placed += 1;
         }
     }
 
     DecorationSet { shape: decoration_shape, color, decorations }
+}
+
+/// Resolves the `decorations_rotation` SHM value (degrees, `-1` = random) into
+/// a per-decoration rotation in radians. When `rotation_deg < 0`, samples
+/// uniformly in `[0, 2π)` using the supplied RNG.
+fn resolve_rotation(rotation_deg: i32, rng: Option<&mut ChaCha8Rng>) -> f32 {
+    if rotation_deg < 0 {
+        match rng {
+            Some(r) => r.random_range(0.0..std::f32::consts::TAU),
+            None => 0.0,
+        }
+    } else {
+        (rotation_deg as f32).to_radians()
+    }
 }
 
 /// Generates a decoration set for a pyramid face using Poisson-like sampling
@@ -116,6 +253,7 @@ pub fn generate_decoration_set(
     decoration_shape: DecorationShape,
     color: Color,
     thickness: f32,
+    rotation_deg: i32,
 ) -> DecorationSet {
     const MAX_PLACEMENT_ATTEMPTS: usize = 30;
 
@@ -137,10 +275,12 @@ pub fn generate_decoration_set(
             continue;
         }
 
+        let rotation = resolve_rotation(rotation_deg, Some(rng));
         decorations.push(Decoration {
             uv: Vec2::new(u, v),
             size,
             thickness,
+            rotation,
         });
         decorations_world.push((world_position, size));
         successful_placements += 1;
@@ -176,7 +316,7 @@ pub fn spawn_decorations_from_set(
     let raw_up = ((tl - bl) + (tr - br)) * 0.5;
     let face_right = raw_up.cross(face_normal).normalize();
     let face_up = face_normal.cross(face_right).normalize();
-    let rotation = Quat::from_mat3(&Mat3::from_cols(face_right, face_up, face_normal));
+    let face_rotation = Quat::from_mat3(&Mat3::from_cols(face_right, face_up, face_normal));
 
     for decoration in &decoration_set.decorations {
         let position = bilerp_quad(tl, tr, bl, br, decoration.uv.x, decoration.uv.y);
@@ -184,6 +324,10 @@ pub fn spawn_decorations_from_set(
         let mesh = create_decoration_mesh(decoration_set.shape, decoration.size, decoration.thickness);
 
         let offset_position = position + face_normal * 0.001;
+
+        // Compose face orientation with the in-face rotation (around the local
+        // mesh +Z axis = face normal).
+        let rotation = face_rotation * Quat::from_rotation_z(decoration.rotation);
 
         commands.entity(parent_face).with_children(|parent| {
             parent.spawn((
@@ -253,10 +397,17 @@ fn point_to_line_segment_distance(point: Vec3, line_start: Vec3, line_end: Vec3)
 /// Creates a mesh for a decoration shape, extruded to `thickness`.
 fn create_decoration_mesh(shape: DecorationShape, size: f32, thickness: f32) -> Mesh {
     let flat = match shape {
-        DecorationShape::Circle => Circle::new(size).mesh().resolution(16).build(),
-        DecorationShape::Square => Rectangle::new(size * 2.0, size * 2.0).mesh().build(),
-        DecorationShape::Star => create_star_mesh(size, 5),
-        DecorationShape::Triangle => create_triangle_mesh(size),
+        DecorationShape::Circle     => Circle::new(size).mesh().resolution(16).build(),
+        DecorationShape::Square     => Rectangle::new(size * 2.0, size * 2.0).mesh().build(),
+        DecorationShape::Star       => create_star_mesh(size, 5),
+        DecorationShape::Triangle   => create_triangle_mesh(size),
+        DecorationShape::Rectangle  => create_rectangle_mesh(size),
+        DecorationShape::Oval       => create_oval_mesh(size),
+        DecorationShape::Pentagon   => create_pentagon_mesh(size),
+        DecorationShape::Kite       => create_kite_mesh(size),
+        DecorationShape::Rhombus    => create_rhombus_mesh(size),
+        DecorationShape::Trapezoid  => create_trapezoid_mesh(size),
+        DecorationShape::Semicircle => create_semicircle_mesh(size),
     };
     extrude_mesh(flat, thickness)
 }

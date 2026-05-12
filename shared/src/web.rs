@@ -155,9 +155,11 @@ impl WebSharedMemory {
         set("decorations_shape", off!(gs.decorations_shape));
         set("decorations_texture", off!(gs.decorations_texture));
         set("decorations_thickness", off!(gs.decorations_thickness));
+        set("decorations_rotation", off!(gs.decorations_rotation));
         set("decorations_color", off!(gs.decorations_color));
         set("textures", off!(gs.textures));
         set("camera_speed_rotate", off!(gs.camera_speed_rotate));
+        set("camera_rotation_sense", off!(gs.camera_rotation_sense));
 
         set("cosine_alignment_threshold", off!(gs.cosine_alignment_threshold));
 
@@ -254,6 +256,10 @@ impl WebSharedMemory {
         for i in 0..3 { dec_thickness.push(&JsValue::from_f64(def.decorations_thickness[i].load(Relaxed) as f64)); }
         js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_thickness"), &dec_thickness).unwrap();
 
+        let dec_rotation = js_sys::Array::new();
+        for i in 0..3 { dec_rotation.push(&JsValue::from_f64(def.decorations_rotation[i].load(Relaxed) as f64)); }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_rotation"), &dec_rotation).unwrap();
+
         let dec_color = js_sys::Array::new();
         for i in 0..12 { dec_color.push(&JsValue::from_f64(def.decorations_color[i].load(Relaxed) as f64)); }
         js_sys::Reflect::set(&obj, &JsValue::from_str("decorations_color"), &dec_color).unwrap();
@@ -280,6 +286,7 @@ impl WebSharedMemory {
         set_u32("camera_y", def.camera_y.load(Relaxed));
         set_u32("camera_z", def.camera_z.load(Relaxed));
         set_u32("camera_speed_rotate", def.camera_speed_rotate.load(Relaxed));
+        set_u32("camera_rotation_sense", def.camera_rotation_sense.load(Relaxed));
         set_u32("attempts", def.attempts.load(Relaxed));
         set_u32("current_alignment", def.current_alignment.load(Relaxed));
         set_u32("current_angle", def.current_angle.load(Relaxed));

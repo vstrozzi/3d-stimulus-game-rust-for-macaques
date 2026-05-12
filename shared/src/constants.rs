@@ -42,6 +42,10 @@ pub mod camera_3d_constants {
     // Radius range for the camera's orbit.
     pub const CAMERA_3D_MIN_RADIUS: f32 = 5.0;
     pub const CAMERA_3D_MAX_RADIUS: f32 = 150.0;
+
+    /// Default rotation sense (`+1` or `-1`). Multiplies the rotation
+    /// applied per tick, so `-1` swaps left/right at the level scope.
+    pub const CAMERA_ROTATION_SENSE_DEFAULT: i32 = 1;
 }
 
 /// Game objects
@@ -115,7 +119,12 @@ pub mod pyramid_constants {
         0.04,
         0.06,
     ];
-    
+
+    /// Per-face decoration rotation in degrees.
+    /// `>= 0` is a fixed rotation; `-1` means each decoration on the face
+    /// gets an independent random rotation.
+    pub const PYRAMID_DECORATIONS_ROTATION: [i32; 3] = [0, 0, 0];
+
     // Index of the target door of the pyramid
     pub const PYRAMID_TARGET_DOOR_INDEX: usize = 0;
 

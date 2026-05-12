@@ -50,6 +50,7 @@ state_schema = {
     "decorations_thickness": [float],
     "decorations_texture": [int],
     "decorations_shape": [int],
+    "decorations_rotation": [int],
     "decorations_color": [[float]],
     "cosine_alignment_threshold": float,
     "door_anim_fade_out": float,
@@ -60,6 +61,7 @@ state_schema = {
     "max_spotlight_intensity": float,
     "camera_radius": float,
     "camera_speed_rotate": float,
+    "camera_rotation_sense": int,
 }
 
 # Fields present in level["fixed"] that are shared across all trials in a level
@@ -76,6 +78,7 @@ FIXED_FIELDS = {
     "max_spotlight_intensity",
     "camera_radius",
     "camera_speed_rotate",
+    "camera_rotation_sense",
     "camera_y",
 }
 
@@ -109,6 +112,15 @@ def expand_flat_trial(obj, trial_cfg, fixed):
     return flat
 
 
+def _backfill_level_defaults(level):
+    """Backfill fields that were added after the original schema, so older
+    trials.jsonl files keep loading."""
+    fixed = level.setdefault("fixed", {})
+    fixed.setdefault("camera_rotation_sense", 1)
+    for obj in level.get("objects", []):
+        obj.setdefault("decorations_rotation", [0, 0, 0])
+
+
 def load_levels(trials_path="trials_config/trials.jsonl"):
     """Load levels from new JSONL format. Each line is a level with objects/trials/fixed."""
     levels = []
@@ -130,6 +142,7 @@ def load_levels(trials_path="trials_config/trials.jsonl"):
                 if len(level["objects"]) < 1:
                     print(f"Warning: line {line_num} needs at least 1 object, skipping")
                     continue
+                _backfill_level_defaults(level)
                 ok = all(validate_object_schema(o) for o in level["objects"])
                 if not ok:
                     print(f"Warning: line {line_num} has invalid object structure, skipping")

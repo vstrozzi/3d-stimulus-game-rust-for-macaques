@@ -268,6 +268,17 @@
   }
   .alpha-in { width: 38px; }
 
+  /* ── Rotation widget ── */
+  .rot-wrap { display: flex; align-items: center; gap: 3px; }
+  .rot-rand-btn {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer; font-size: 10px;
+    padding: 2px 5px; border-radius: 4px; font-weight: 600;
+  }
+  .rot-rand-btn:hover { background: var(--accent-dim); color: var(--text); }
+  .rot-rand-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .rot-deg-in:disabled { opacity: 0.35; }
+
   /* ── Shape buttons ── */
   .shape-btns { display: flex; gap: 2px; }
   .shape-btn {
@@ -430,9 +441,13 @@ const TEXTURES = [
   "WoodFloor057_1K",             // 11
 ];
 
-// Source of truth: shared/src/lib.rs  enum DecorationShape  (repr(u32), 0-indexed)
-const SHAPES = ["Circle", "Square", "Star", "Triangle"];
-const SHAPE_ICONS = ["●", "■", "★", "▲"];
+// Source of truth: shared/src/lib.rs  enum DecorationShape  (repr(u32), 0-indexed).
+// Append-only — never renumber; trials.jsonl files persist these indices.
+const SHAPES = [
+  "Circle", "Square", "Star", "Triangle",
+  "Rectangle", "Oval", "Pentagon", "Kite", "Rhombus", "Trapezoid", "Semicircle",
+];
+const SHAPE_ICONS = ["●", "■", "★", "▲", "▭", "⬭", "⬠", "◆", "◇", "⏢", "◖"];
 
 // Relative path from this HTML file to texture assets
 const TEXTURE_ASSET_BASE = "../game_node/assets/textures";
@@ -457,6 +472,9 @@ function defaultObject(chainIdx) {
     decorations_texture: [6, 6, 6],
     decorations_shape: [0, 0, 0],
     decorations_color: [[1,1,0,1],[1,0,1,1],[0,1,1,1]],
+    // Per-face rotation in degrees. -1 = random rotation per decoration.
+    // Multiples of 360 = "no rotation" (treated identically to 0).
+    decorations_rotation: [0, 0, 0],
   };
 }
 
@@ -492,6 +510,7 @@ function defaultLevel(nObjects = 2) {
       camera_radius: 15.0,
       camera_y: 1.0,
       camera_speed_rotate: 0.05,
+      camera_rotation_sense: 1, // +1 = default, -1 = inverted left/right
     },
   };
   enforceLevel(lv);
@@ -513,7 +532,7 @@ let fileName = 'trials.jsonl';
 const FACE_FIELDS = [
   'colors', 'textures', 'decorations_seeds', 'decorations_count',
   'decorations_size', 'decorations_thickness', 'decorations_texture',
-  'decorations_shape', 'decorations_color',
+  'decorations_shape', 'decorations_color', 'decorations_rotation',
 ];
 
 function copyFace(srcObj, dstObj, srcFi, dstFi) {
@@ -532,19 +551,28 @@ function enforceLevel(lv) {
   if (f.camera_radius == null) f.camera_radius = 15.0;
   if (f.camera_y == null) f.camera_y = 1.0;
   if (f.camera_speed_rotate == null) f.camera_speed_rotate = 0.05;
+  if (f.camera_rotation_sense == null) f.camera_rotation_sense = 1;
   f.pr_switching_chain = 1 / lv.objects.length;
   f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));
-  
+
   let firstSharedIdx = -1;
   for (let i = 0; i < lv.objects.length; i++) {
-    // If loading from a file, it won't have _type yet. Assign it.
-    if (!lv.objects[i]._type) {
-      const td = lv.objects[i].target_door;
-      lv.objects[i]._type = td === 2 ? 'type1' : (td === 5 ? 'type2' : 'custom');
+    const obj = lv.objects[i];
+
+    // Backfill per-face fields added in later schema versions.
+    if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
+
+    // _type is now persisted in the JSONL. For older files without it, fall
+    // back to inferring from `target_door`. This used to clobber custom
+    // objects whose door happened to be 2 or 5 — now the inference only
+    // runs when `_type` is genuinely missing.
+    if (!obj._type) {
+      const td = obj.target_door;
+      obj._type = td === 2 ? 'type1' : (td === 5 ? 'type2' : 'custom');
     }
-    
+
     // Find master shared object
-    if (lv.objects[i]._type === 'type1' || lv.objects[i]._type === 'type2') {
+    if (obj._type === 'type1' || obj._type === 'type2') {
       if (firstSharedIdx === -1) firstSharedIdx = i;
     }
   }
@@ -754,6 +782,7 @@ function renderObject(obj, ci, N) {
           <th>Size</th>
           <th>Thick</th>
           <th>Shape</th>
+          <th title="Rotation in degrees around the face normal. 'Rand' picks a random rotation per decoration. Multiples of 360 are equivalent to 0.">Rot°</th>
           <th>Dec Texture</th>
           <th>Dec Color</th>
         </tr></thead>
@@ -822,9 +851,25 @@ function renderFaceRow(obj, ci, fi) {
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_size" value="${obj.decorations_size[fi]}"></td>
     <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_thickness" value="${obj.decorations_thickness[fi]}"></td>
     <td>${shapeBtnsHtml(`${p}sh`, obj.decorations_shape[fi])}</td>
+    <td>${rotationInputHtml(ci, fi, obj.decorations_rotation[fi])}</td>
     <td>${texSelectHtml(`${p}dt`, obj.decorations_texture[fi])}</td>
     <td>${colorInputHtml(`${p}dc`, obj.decorations_color[fi])}</td>
   </tr>`;
+}
+
+/* Rotation widget: a "Rand" toggle and a degrees number input.
+ * Value semantics:
+ *   integer ≥ 0 → fixed rotation in degrees (multiples of 360 ≡ 0)
+ *   -1          → random rotation per decoration on the face
+ */
+function rotationInputHtml(ci, fi, val) {
+  const isRandom = val < 0;
+  return `<span class="rot-wrap" data-chain="${ci}" data-face="${fi}">
+    <button class="rot-rand-btn${isRandom ? ' active' : ''}" data-rrand="${ci}-${fi}" title="Random rotation per decoration">Rand</button>
+    <input type="number" class="num-xs rot-deg-in" data-rdeg="${ci}-${fi}"
+           min="0" max="359" step="15" value="${isRandom ? 0 : val}"
+           ${isRandom ? 'disabled' : ''}>
+  </span>`;
 }
 // ================================================================
 // Render — trials
@@ -891,6 +936,13 @@ function renderFixed(fixed, lv) {
       ${numRow('camera_radius', 'camera_radius', fixed.camera_radius, '0.5', '0')}
       ${numRow('camera_y', 'camera_y', fixed.camera_y, '0.1')}
       ${numRow('camera_speed_rotate', 'camera_speed_rotate', fixed.camera_speed_rotate, '0.01', '0')}
+      <div class="fixed-row" title="Sense of camera rotation. +1 = default; -1 inverts left/right.">
+        <label>rotation_sense</label>
+        <select class="fixed-sel" data-ff="camera_rotation_sense">
+          <option value="1"${fixed.camera_rotation_sense === 1 ? ' selected' : ''}>+1 (default)</option>
+          <option value="-1"${fixed.camera_rotation_sense === -1 ? ' selected' : ''}>-1 (inverted)</option>
+        </select>
+      </div>
     </div>
     <div class="fixed-group">
       <div class="fixed-group-title">Trials</div>
@@ -984,6 +1036,28 @@ function attachEvents() {
         const el2 = document.querySelector(sel2);
         if (el2) el2.value = v;
       }
+    });
+  });
+
+  // Rotation widget — Rand toggle + degrees input
+  editor.querySelectorAll('.rot-rand-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      const [ci, fi] = e.target.dataset.rrand.split('-').map(Number);
+      const obj = levels[sel].objects[ci];
+      if (isLocked(obj, ci, fi)) return;
+      const cur = obj.decorations_rotation[fi];
+      const newVal = cur < 0 ? 0 : -1;          // toggle Random ↔ Fixed (0)
+      applyRotation(ci, fi, newVal);
+      renderLevelEditor();
+    });
+  });
+  editor.querySelectorAll('.rot-deg-in').forEach(el => {
+    el.addEventListener('input', e => {
+      const [ci, fi] = e.target.dataset.rdeg.split('-').map(Number);
+      const obj = levels[sel].objects[ci];
+      if (isLocked(obj, ci, fi)) return;
+      const v = Math.max(0, Math.round(+e.target.value || 0));
+      applyRotation(ci, fi, v);
     });
   });
 
@@ -1129,6 +1203,13 @@ function attachEvents() {
       levels[sel].fixed[field] = val;
     });
   });
+  editor.querySelectorAll('.fixed-sel').forEach(el => {
+    el.addEventListener('change', e => {
+      const field = e.target.dataset.ff;
+      // All currently-defined fixed-sel options are integers (e.g. ±1).
+      levels[sel].fixed[field] = parseInt(e.target.value, 10);
+    });
+  });
 }
 
 // ================================================================
@@ -1188,6 +1269,22 @@ function applyTexture(id, val) {
   if (needsRerender) renderLevelEditor();
 }
 
+function applyRotation(ci, fi, val) {
+  const obj = levels[sel].objects[ci];
+  if (isLocked(obj, ci, fi)) return;
+
+  obj.decorations_rotation[fi] = val;
+
+  const isType2 = obj._type === 'type2';
+  const isCustom = obj._type === 'custom';
+
+  if (fi === 0 && !isCustom) {
+    pushFace0ToShared(ci);
+  } else if (fi === 1 && isType2) {
+    copyFace(obj, obj, 1, 2);
+  }
+}
+
 function applyShape(id, val) {
   const m = id.match(/^c(\d)f(\d)sh$/);
   if (!m) return;
@@ -1238,13 +1335,11 @@ document.getElementById('btnDel').addEventListener('click', () => {
 });
 
 document.getElementById('btnExport').addEventListener('click', () => {
-  // Strip out the internal UI state (_type) before saving
-  const cleanLevels = levels.map(lv => {
-    const copy = deepClone(lv);
-    copy.objects.forEach(obj => delete obj._type);
-    return copy;
-  });
-  const jsonl = cleanLevels.map(lv => JSON.stringify(lv)).join('\n') + '\n';
+  // `_type` is persisted so re-import is deterministic: a Custom object whose
+  // door happens to be 2 or 5 must NOT be silently reclassified as type1/type2
+  // on the next load (the inference is door-based and was overwriting custom
+  // face data via the shared/mirror constraints).
+  const jsonl = levels.map(lv => JSON.stringify(lv)).join('\n') + '\n';
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([jsonl], {type: 'application/json'})),
     download: fileName,

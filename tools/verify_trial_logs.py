@@ -8,8 +8,9 @@ frame delivery, and logging consistency.
 
 Usage:
     python tools/verify_trial_logs.py out/trial_logs/                         # all native logs
-    python tools/verify_trial_logs.py wasm_logs/trial_logs_2026-04-08.json    # single WASM file
-    python tools/verify_trial_logs.py out/trial_logs/ wasm_logs/              # cross-platform comparison
+    python tools/verify_trial_logs.py monkeyA_2026-05-12_14-32-08.zip         # web download bundle
+    python tools/verify_trial_logs.py wasm_logs/trial_logs_2026-04-08.json    # legacy single-file WASM dump
+    python tools/verify_trial_logs.py out/trial_logs/ wasm_logs.zip           # cross-platform comparison
 
 Requirements: matplotlib (pip install matplotlib)
 """
@@ -19,6 +20,8 @@ import json
 import math
 import os
 import sys
+import tempfile
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -127,30 +130,40 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
 
 
 def load_path(path: str, platform: str) -> list[TrialInfo]:
-    """Load trials from a file or directory. Returns list of TrialInfo."""
+    """Load trials from a file, directory, or zip archive."""
     p = Path(path)
     trials = []
 
-    if p.is_file():
+    if p.is_file() and p.suffix.lower() == ".zip":
+        # Web download bundle: zip of per-level folders with per-trial JSON
+        # files matching controller.py's on-disk schema.
+        with zipfile.ZipFile(p) as zf, tempfile.TemporaryDirectory() as tmp:
+            zf.extractall(tmp)
+            for jf in sorted(Path(tmp).rglob("*.json")):
+                trials.extend(load_path(str(jf), platform))
+    elif p.is_file():
         with open(p) as f:
             data = json.load(f)
 
         if isinstance(data, list):
-            # WASM format: array of trial dicts
+            # WASM legacy format: array of trial dicts in one big JSON
             for i, d in enumerate(data):
                 label = f"{p.stem}_trial_{i:03d}"
                 trials.append(_parse_trial_dict(d, label, platform))
         elif isinstance(data, dict):
-            # Native format: single trial dict
+            # Native / current WASM zip format: one trial per file
             label = p.stem
             trials.append(_parse_trial_dict(data, label, platform))
         else:
             print(f"Warning: unexpected JSON root type in {p}, skipping")
 
     elif p.is_dir():
-        json_files = sorted(p.glob("*.json"))
+        # Recursively pick up .json files; this handles the unpacked-zip
+        # layout (level_NNN/trial_NNN_run_MMMM.json) just as naturally as the
+        # native out/trial_logs/ flat directory.
+        json_files = sorted(p.rglob("*.json"))
         if not json_files:
-            print(f"Warning: no .json files found in {p}")
+            print(f"Warning: no .json files found under {p}")
         for jf in json_files:
             trials.extend(load_path(str(jf), platform))
     else:
@@ -455,9 +468,15 @@ Examples:
     # Determine platforms
     paths = args.paths
     if len(paths) == 1:
-        # Auto-detect: directory named "out" or containing "trial_" → native, else wasm
         p = Path(paths[0])
-        if p.is_dir() and ("out" in str(p) or any("trial_" in f.name and f.suffix == ".json" for f in p.iterdir())):
+        # Zip downloads come exclusively from the web controller.
+        if p.is_file() and p.suffix.lower() == ".zip":
+            platform = "wasm"
+        # A directory with `level_*` subfolders is the unpacked web bundle.
+        elif p.is_dir() and any(f.is_dir() and f.name.startswith("level_") for f in p.iterdir()):
+            platform = "wasm"
+        # Flat directory with `trial_*.json` files = native controller.py output.
+        elif p.is_dir() and ("out" in str(p) or any("trial_" in f.name and f.suffix == ".json" for f in p.iterdir())):
             platform = "native"
         else:
             platform = "wasm"

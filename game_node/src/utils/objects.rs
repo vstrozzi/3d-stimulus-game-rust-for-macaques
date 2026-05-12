@@ -18,11 +18,13 @@ impl PreloadedTextures {
 
 /// Single decoration on a pyramid face. `uv` is the bilinear coordinate in
 /// the (tl, tr, bl, br) quad: u=0 left, u=1 right, v=0 top, v=1 bottom.
+/// `rotation` is the in-face rotation (radians) around the face normal.
 #[derive(Clone, Debug)]
 pub struct Decoration {
     pub uv: Vec2,
     pub size: f32,
     pub thickness: f32,
+    pub rotation: f32,
 }
 
 /// Set of decorations for a pyramid face, which all share same shape and color
@@ -156,5 +158,8 @@ pub struct PyramidConfig {
     pub decoration_colors: [Color; 3],
     pub decoration_textures: [u32; 3],
     pub decoration_thicknesses: [f32; 3],
+    /// Per-face decoration rotation in degrees. `>= 0` is a fixed angle;
+    /// `-1` means each decoration on the face gets an independent random angle.
+    pub decoration_rotations: [i32; 3],
     pub target_door: usize,
 }

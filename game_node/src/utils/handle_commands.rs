@@ -1,25 +1,24 @@
 //! Functions to handle commands received by the Controller
 use bevy::prelude::*;
+use core::sync::atomic::Ordering;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
-use crate::shared_memory::shared_memory_writer::{FrameCounterResource, RenderFrameCounterResource};
 use crate::utils::objects::{
     DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions,
     UIEntity, BlankScreen, GameEntity, GameStateLocal};
 use crate::utils::ui::{spawn_score_bar};
-use crate::utils::utils::{spawn_blank_screen, despawn_all_game_and_ui};
+use crate::utils::helpers::{spawn_blank_screen, despawn_all_game_and_ui};
 use crate::utils::ui::despawn_ui;
 use crate::utils::setup::{setup_round};
 use shared::constants::camera_3d_constants::{CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
 
 /// Reset state
-pub fn  handle_reset_command(
+pub fn handle_reset_command(
     pending: ResMut<PendingCommands>,
     mut commands: Commands,
     meshes: ResMut<Assets<Mesh>>,
     materials: ResMut<Assets<StandardMaterial>>,
     preloaded: Res<crate::utils::objects::PreloadedTextures>,
-    mut counters: (ResMut<FrameCounterResource>, ResMut<RenderFrameCounterResource>),
     camera_query: Query<&mut Transform, With<PersistentCamera>>,
     game_entities: Query<Entity, With<GameEntity>>,
     ambient_light: Option<ResMut<GlobalAmbientLight>>,
@@ -36,8 +35,8 @@ pub fn  handle_reset_command(
     }
 
     // Reset commands received
-    counters.0 .0 = 0;
-    counters.1 .0 = 0;
+    local_game_struct.0.render_frame_number = 0;
+    local_game_struct.0.frame_number = 0;
 
     // Clear animation state to avoid stale entity references after despawn
     door_win_entities.winning_light = None;
@@ -45,7 +44,11 @@ pub fn  handle_reset_command(
 
     // Clear is_animating flag in SHM
     local_game_struct.0.is_animating = false;
-    let progress_bar_size  = local_game_struct.0.progress_bar_size;
+
+    let progress_bar_size = shm
+        .as_ref()
+        .map(|shm_res| shm_res.0.get().game_structure_control.progress_bar_size.load(Ordering::Relaxed))
+        .unwrap_or(0);
 
     despawn_all_game_and_ui(commands.reborrow(), game_entities, ui_entities);
 

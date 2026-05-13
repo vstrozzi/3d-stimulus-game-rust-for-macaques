@@ -18,13 +18,11 @@ Requirements: matplotlib (pip install matplotlib)
 import argparse
 import json
 import math
-import os
 import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 try:
     import matplotlib
@@ -51,13 +49,17 @@ OUTPUT_DIR = "out/analysis"
 @dataclass
 class FrameRecord:
     frame_number: int
-    elapsed_secs: float
+    present_elapsed_secs: float = 0.0
     camera_radius: float = 0.0
-    nr_attempts: int = 0
-    cosine_alignment: float = 0.0
+    camera_x: float = 0.0
+    camera_y: float = 0.0
+    camera_z: float = 0.0
+    attempts: int = 0
+    current_alignment: float = 0.0
     current_angle: float = 0.0
     is_animating: bool = False
     win_elapsed_secs: float = 0.0
+    render_frame_number: int = 0
 
 
 @dataclass
@@ -111,17 +113,46 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
     )
 
     raw_frames = d.get("frames", {})
-    for fnum_str, entry in raw_frames.items():
-        sr = entry.get("state_read", {})
+
+    # Current controllers write `frames` as a dict keyed by frame_number,
+    # where each value is `{state_read, commands_sent}`. Keep backward
+    # compatibility with older dumps that used a list or direct state rows.
+    if isinstance(raw_frames, dict):
+        frame_items = raw_frames.items()
+    elif isinstance(raw_frames, list):
+        frame_items = enumerate(raw_frames)
+    else:
+        frame_items = []
+
+    for fnum_key, entry in frame_items:
+        if isinstance(entry, dict):
+            if "state_read" in entry and isinstance(entry.get("state_read"), dict):
+                sr = entry.get("state_read", {})
+            else:
+                sr = entry
+        else:
+            sr = {}
+
+        fnum_default = fnum_key if isinstance(fnum_key, int) else 0
+        # Legacy logs only had `elapsed_secs`; fall back so old sessions still load.
+        present = float(sr.get("present_elapsed_secs", sr.get("elapsed_secs", 0.0)))
+        # SHM-direct names are canonical; the `or`-chained fallbacks accept
+        # logs from before the schema unification (camera_position array,
+        # nr_attempts, cosine_alignment).
+        cam_pos = sr.get("camera_position") or [0.0, 0.0, 0.0]
         trial.frames.append(FrameRecord(
-            frame_number=int(sr.get("frame_number", fnum_str)),
-            elapsed_secs=float(sr.get("elapsed_secs", 0.0)),
+            frame_number=int(sr.get("frame_number", fnum_default)),
+            present_elapsed_secs=present,
             camera_radius=float(sr.get("camera_radius", 0.0)),
-            nr_attempts=int(sr.get("nr_attempts", 0)),
-            cosine_alignment=float(sr.get("cosine_alignment", 0.0)),
+            camera_x=float(sr.get("camera_x", cam_pos[0])),
+            camera_y=float(sr.get("camera_y", cam_pos[1])),
+            camera_z=float(sr.get("camera_z", cam_pos[2])),
+            attempts=int(sr.get("attempts", sr.get("nr_attempts", 0))),
+            current_alignment=float(sr.get("current_alignment", sr.get("cosine_alignment", 0.0))),
             current_angle=float(sr.get("current_angle", 0.0)),
             is_animating=bool(sr.get("is_animating", False)),
             win_elapsed_secs=float(sr.get("win_elapsed_secs", 0.0)),
+            render_frame_number=int(sr.get("render_frame_number", 0)),
         ))
 
     # Sort by frame_number for consistent analysis
@@ -139,7 +170,8 @@ def load_path(path: str, platform: str) -> list[TrialInfo]:
         # files matching controller.py's on-disk schema.
         with zipfile.ZipFile(p) as zf, tempfile.TemporaryDirectory() as tmp:
             zf.extractall(tmp)
-            for jf in sorted(Path(tmp).rglob("*.json")):
+            for jf in sorted(jf for jf in Path(tmp).rglob("*.json")
+                             if "_summary_" not in jf.name):
                 trials.extend(load_path(str(jf), platform))
     elif p.is_file():
         with open(p) as f:
@@ -158,10 +190,9 @@ def load_path(path: str, platform: str) -> list[TrialInfo]:
             print(f"Warning: unexpected JSON root type in {p}, skipping")
 
     elif p.is_dir():
-        # Recursively pick up .json files; this handles the unpacked-zip
-        # layout (level_NNN/trial_NNN_run_MMMM.json) just as naturally as the
-        # native out/trial_logs/ flat directory.
-        json_files = sorted(p.rglob("*.json"))
+        # Skip level-summary files; they live alongside per-trial files but
+        # describe the whole level run, not a single trial.
+        json_files = sorted(jf for jf in p.rglob("*.json") if "_summary_" not in jf.name)
         if not json_files:
             print(f"Warning: no .json files found under {p}")
         for jf in json_files:
@@ -175,6 +206,20 @@ def load_path(path: str, platform: str) -> list[TrialInfo]:
 # ──────────────────────────────────────────────────────────────────────────────
 # Analysis
 # ──────────────────────────────────────────────────────────────────────────────
+def _active_drift_series(frames) -> list[float]:
+    """`(present - present[0]) - active_tick_count / 60`, animation pauses excluded."""
+    if not frames:
+        return []
+    t0 = frames[0].present_elapsed_secs
+    active = 0
+    out: list[float] = []
+    for f in frames:
+        if not f.is_animating:
+            active += 1
+        out.append((f.present_elapsed_secs - t0) - active / 60.0)
+    return out
+
+
 def analyse_trial(trial: TrialInfo) -> TrialStats:
     """Compute per-trial statistics."""
     stats = TrialStats(label=trial.label, platform=trial.platform)
@@ -195,8 +240,7 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
         elif diff == 0:
             stats.duplicates += 1
 
-    # Frame deltas
-    times = [f.elapsed_secs for f in frames]
+    times = [f.present_elapsed_secs for f in frames]
     deltas = [times[i] - times[i - 1] for i in range(1, len(times))]
 
     # Filter out non-positive deltas (can happen at animation boundaries)
@@ -211,15 +255,15 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
         stats.outlier_pct = 100.0 * outliers / len(pos_deltas)
         stats.avg_fps = 1.0 / stats.dt_mean if stats.dt_mean > 0 else 0.0
 
-    # Timing accuracy
     stats.game_elapsed_final = times[-1] if times else 0.0
     stats.wall_elapsed = trial.elapsed_time
-    stats.timing_drift = abs(stats.game_elapsed_final - stats.wall_elapsed)
+    drift_series = _active_drift_series(frames)
+    stats.timing_drift = max(abs(d) for d in drift_series) if drift_series else 0.0
 
-    # Freeze detection: consecutive identical elapsed_secs during non-animation frames
+    # 3+ consecutive frozen frame_numbers outside an animation = a stall.
     freeze_run = 0
     for i in range(1, len(frames)):
-        if frames[i].elapsed_secs == frames[i - 1].elapsed_secs and not frames[i].is_animating:
+        if frames[i].frame_number == frames[i - 1].frame_number and not frames[i].is_animating:
             freeze_run += 1
         else:
             if freeze_run >= 3:  # 3+ consecutive frozen frames = a freeze event
@@ -235,20 +279,19 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
 # Plotting
 # ──────────────────────────────────────────────────────────────────────────────
 def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
-    """Generate four plots for a single trial and save as a single PNG."""
+    """Generate six plots for a single trial and save as a single PNG."""
     if len(trial.frames) < 2:
         return
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    fig, axes = plt.subplots(2, 3, figsize=(20, 9))
     fig.suptitle(
         f"{trial.label}  [{trial.platform}]  outcome={trial.outcome}  "
         f"attempts={trial.nr_attempts}  frames={stats.n_frames}",
         fontsize=11, fontweight="bold",
     )
 
-    times = [f.elapsed_secs for f in trial.frames]
+    times = [f.present_elapsed_secs for f in trial.frames]
     angles = [f.current_angle for f in trial.frames]
-    frame_nums = [f.frame_number for f in trial.frames]
 
     # ── Plot 1: Camera angle vs target over time ─────────────────────────────
     ax1 = axes[0, 0]
@@ -259,7 +302,7 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
         ax1.axhline(thresh_angle, color="#4CAF50", linestyle="--", linewidth=1,
                      label=f"cos_threshold → {thresh_angle:.3f} rad")
         ax1.axhline(-thresh_angle, color="#4CAF50", linestyle="--", linewidth=1)
-    ax1.set_xlabel("elapsed_secs")
+    ax1.set_xlabel("present_elapsed_secs (s)")
     ax1.set_ylabel("current_angle (rad)")
     ax1.set_title("Camera Angle Trajectory")
     ax1.legend(fontsize=8)
@@ -290,24 +333,88 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
         ax3.plot(fps_times, fps_vals, linewidth=0.5, color="#9C27B0", alpha=0.7)
         ax3.axhline(60, color="#4CAF50", linestyle="--", linewidth=1, label="60 FPS target")
         ax3.set_ylim(0, max(120, max(fps_vals) * 1.1) if fps_vals else 120)
-        ax3.set_xlabel("elapsed_secs")
+        ax3.set_xlabel("present_elapsed_secs (s)")
         ax3.set_ylabel("FPS")
         ax3.set_title(f"Instantaneous FPS (avg={stats.avg_fps:.1f})")
         ax3.legend(fontsize=8)
     ax3.grid(True, alpha=0.3)
 
-    # ── Plot 4: Elapsed time drift ───────────────────────────────────────────
+    # ── Plot 4: Active-time drift (ignores animation pauses) ─────────────────
+    # `elapsed_secs` is frozen during door animations by design, so naive
+    # drift = elapsed - frame/60 gets a −1.5 s step per attempt. Here we
+    # count only frames where `is_animating == False` to expose only real
+    # stalls (Bevy's FixedUpdate falling behind its 60 Hz cadence).
     ax4 = axes[1, 1]
-    if frame_nums:
-        expected_times = [(fn / 60.0) for fn in frame_nums]
-        drift = [t - e for t, e in zip(times, expected_times)]
+    drift = _active_drift_series(trial.frames)
+    if drift:
         ax4.plot(times, drift, linewidth=0.8, color="#F44336")
         ax4.axhline(0, color="#888", linestyle=":", linewidth=0.8)
-        ax4.set_xlabel("elapsed_secs")
-        ax4.set_ylabel("elapsed − (frame_number / 60) [s]")
-        ax4.set_title("Elapsed Time Drift vs Expected")
+        ax4.set_xlabel("present_elapsed_secs (s)")
+        ax4.set_ylabel("(present − t0) − active_ticks/60 [s]")
+        ax4.set_title("Active-time drift (animation pauses excluded)")
         ax4.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
     ax4.grid(True, alpha=0.3)
+
+    # ── Plot 5: Presentation Δt distribution (real flip-time intervals) ──────
+    # `present_elapsed_secs` is wall-clock at the next frame's `First`, which
+    # under Fifo equals the vsync at which this frame was latched. Deltas
+    # between consecutive rows reconstruct the actual frame interval as seen
+    # by the display. Compare to plot 2 which uses `elapsed_secs` (fixed-tick
+    # game clock) — divergence indicates fixed-loop catch-up / dropped renders.
+    ax5 = axes[0, 2]
+    present = [f.present_elapsed_secs for f in trial.frames]
+    rfn = [f.render_frame_number for f in trial.frames]
+    p_deltas = []
+    for i in range(1, len(present)):
+        d = present[i] - present[i - 1]
+        # rAF can produce a tiny negative skew at trial boundaries; drop those
+        if d > 0:
+            p_deltas.append(d)
+    if any(present):
+        if p_deltas:
+            p_ms = [d * 1000 for d in p_deltas]
+            n_bins = min(80, max(20, len(p_ms) // 5))
+            ax5.hist(p_ms, bins=n_bins, color="#00ACC1", edgecolor="#006064", alpha=0.85)
+            ax5.axvline(EXPECTED_DT * 1000, color="#F44336", linestyle="--", linewidth=1.5,
+                        label=f"ideal {EXPECTED_DT * 1000:.2f} ms")
+            mean_p = sum(p_deltas) / len(p_deltas)
+            std_p = (sum((d - mean_p) ** 2 for d in p_deltas) / len(p_deltas)) ** 0.5
+            ax5.axvline(mean_p * 1000, color="#2196F3", linestyle="-", linewidth=1.5,
+                        label=f"mean {mean_p * 1000:.2f} ms")
+            ax5.set_xlabel("present Δt (ms)")
+            ax5.set_ylabel("count")
+            ax5.set_title(f"Presentation Δt  (σ={std_p * 1000:.2f} ms, n={len(p_deltas)})")
+            ax5.legend(fontsize=8)
+    else:
+        ax5.text(0.5, 0.5, "no present_elapsed_secs in log",
+                 ha="center", va="center", transform=ax5.transAxes, fontsize=10, color="#888")
+        ax5.set_title("Presentation Δt")
+    ax5.grid(True, alpha=0.3)
+
+    # ── Plot 6: Present Δt timeline + render gap markers ─────────────────────
+    ax6 = axes[1, 2]
+    if any(present) and len(trial.frames) > 1:
+        idx = list(range(1, len(trial.frames)))
+        p_dt = [(present[i] - present[i - 1]) * 1000 for i in idx]
+        ax6.plot(idx, p_dt, linewidth=0.6, color="#00ACC1", alpha=0.8, label="present Δt")
+        ax6.axhline(EXPECTED_DT * 1000, color="#888", linestyle=":", linewidth=0.8)
+        gap_idx = [i for i in idx if rfn[i] - rfn[i - 1] > 1]
+        if gap_idx:
+            ax6.scatter(gap_idx, [p_dt[i - 1] for i in gap_idx],
+                        s=18, color="#F44336", zorder=5,
+                        label=f"render gap (n={len(gap_idx)})")
+        ax6.set_xlabel("log row index")
+        ax6.set_ylabel("Δt (ms)")
+        ax6.set_title("Present Δt timeline  (gaps = dropped renders)")
+        ax6.legend(fontsize=8, loc="upper right")
+        # Clamp y to keep huge stop_rendering jumps from squashing the plot
+        if p_dt:
+            ax6.set_ylim(0, min(max(p_dt) * 1.1, 200))
+    else:
+        ax6.text(0.5, 0.5, "no present_elapsed_secs in log",
+                 ha="center", va="center", transform=ax6.transAxes, fontsize=10, color="#888")
+        ax6.set_title("Present Δt timeline")
+    ax6.grid(True, alpha=0.3)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     out_path = out_dir / f"{trial.label}.png"

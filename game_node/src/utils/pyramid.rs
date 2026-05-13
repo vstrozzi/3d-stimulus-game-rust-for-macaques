@@ -8,7 +8,7 @@ use crate::utils::objects::{
 use crate::utils::decorations::{
     generate_decoration_set, generate_grid_decoration_set, spawn_decorations_from_set,
 };
-use crate::utils::utils::build_mesh;
+use crate::utils::helpers::build_mesh;
 use bevy::prelude::*;
 use shared::{Texture};
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
@@ -205,7 +205,7 @@ pub fn spawn_pyramid_base(
         let frame_id = commands
             .spawn((
                 Mesh3d(meshes.add(frame_mesh)),
-                MeshMaterial3d(materials.add(natural_material(&wood))),
+                MeshMaterial3d(materials.add(natural_material(wood))),
                 Transform::default(),
                 BaseFrame { door_index: i },
                 GameEntity,
@@ -378,7 +378,7 @@ pub fn spawn_pyramid(
             .spawn((
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(materials.add(StandardMaterial {
-                    ..tinted_material(&face_tex, config.colors[i])
+                    ..tinted_material(face_tex, config.colors[i])
                 })),
                 Transform::default(),
                 Pyramid,

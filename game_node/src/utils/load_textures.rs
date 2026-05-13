@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, ImageAddressMode};
 use bevy::math::Affine2;
 use crate::{PreloadedTextures, GameConditions, GameStateLocal};
+use crate::shared_memory::shared_memory_writer::{FrameCounterResource, RenderFrameCounterResource, StagedRenderSample, StagedFrame}; 
 
 /// Holds all loaded handles for one PBR texture set
 /// Store this as a resource so handles stay alive
@@ -162,15 +163,26 @@ pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMu
 }
 
 /// Each frame while `is_scene_ready` is false, check whether all textures used by the
-/// current trial are fully loaded (including GPU upload). Once confirmed, set the flag so
-/// the controller knows it is safe to remove the blank screen.
+/// current trial are fully loaded (including GPU upload) **and** the GPU warmup
+/// pass has finished. Once both are true, set the flag so the controller
+/// knows it is safe to remove the blank screen.
+///
+/// Gating on warmup ensures the first trial doesn't pay the
+/// pipeline-compilation / GPU-upload cost that previously produced
+/// multi-hundred-millisecond Δt spikes in trial 0. See `warmup.rs`.
 pub fn check_scene_ready(
     mut game_conditions: ResMut<GameConditions>,
     preloaded: Res<PreloadedTextures>,
     images: Res<Assets<Image>>,
     local_game_struct: Res<GameStateLocal>,
+    warmup: Res<crate::utils::warmup::WarmupState>,
+    mut counters: (ResMut<FrameCounterResource>, ResMut<RenderFrameCounterResource>, ResMut<StagedRenderSample>),
 ) {
     if game_conditions.is_scene_ready {
+        return;
+    }
+
+    if !warmup.complete {
         return;
     }
 
@@ -182,7 +194,7 @@ pub fn check_scene_ready(
         .chain(gs.decorations_texture.iter())
         .all(|&t| {
             let tex = Texture::from_u32(t);
-            let res = 
+            let res =
             preloaded.0.get(&tex)
                 .map(|set| set.all_loaded(&images))
                 .unwrap_or(false);
@@ -190,6 +202,16 @@ pub fn check_scene_ready(
         });
 
     if all_loaded {
+        // Reset time counters
+        counters.0.0 = 0;
+        counters.1.0 = 0;
+
+        counters.2.pending = Some(StagedFrame {
+            render_frame_number: 0,
+            render_elapsed_secs_bits: 0,
+            photodiode_white: false,
+        });
+
         game_conditions.is_scene_ready = true;
     }
 }

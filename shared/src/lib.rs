@@ -25,7 +25,7 @@ pub const RING_BUFFER_SIZE: usize = 8;
 #[repr(C)]
 #[derive(Debug)]
 pub struct SharedCommands {
-    // Continous
+    // Continuous
     pub rotate_left: AtomicBool,
     pub rotate_right: AtomicBool,
     pub zoom_in: AtomicBool,
@@ -81,7 +81,7 @@ pub enum Phase {
 /// Indices are persisted in trials.jsonl and read directly from SHM —
 /// append-only. Never renumber existing variants.
 #[repr(u32)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumIter)]
 pub enum DecorationShape {
     Circle     = 0,
     Square     = 1,
@@ -127,7 +127,7 @@ impl Texture {
 }
 
 /// Shared atomic game structure for game state communication (1 for each Controller and Game, 2 in total, read-write respectively).
-/// It contains all the information realting the current game state (i.e. the game is a deterministic state).
+/// It contains all the information relating to the current game state (i.e. the game is a deterministic state).
 /// It is updated every Game tick by the game and whenever needed by the Controller.
 macro_rules! shared_game_state {
     ($name:ident, $U32:ty, $U64:ty, $B:ty) => {
@@ -173,6 +173,14 @@ macro_rules! shared_game_state {
             pub render_frame_number: $U64,
             pub elapsed_secs: $U32,
             pub render_elapsed_secs: $U32,
+            /// Time at which this frame's pixels actually became visible on
+            /// screen, sampled at the start of the *following* frame.
+            /// On native, this is `Instant::now()` in Bevy's `First` schedule
+            /// after `present()` returned (back-pressured by Fifo vsync).
+            /// On WASM, this is the `requestAnimationFrame` timestamp of the
+            /// next frame. Constant compositor + scanout offset remains; the
+            /// photodiode absorbs it during calibration.
+            pub present_elapsed_secs: $U32,
             pub photodiode_white: $B,
             pub camera_radius: $U32,
             pub camera_x: $U32,
@@ -306,6 +314,7 @@ impl SharedGameState {
             render_frame_number: AtomicU64::new(0),
             elapsed_secs: AtomicU32::new(0),
             render_elapsed_secs: AtomicU32::new(0),
+            present_elapsed_secs: AtomicU32::new(0),
             photodiode_white: AtomicBool::new(false),
             camera_radius: AtomicU32::new(CAMERA_3D_INITIAL_RADIUS.to_bits()),
             camera_x: AtomicU32::new(CAMERA_3D_INITIAL_X.to_bits()),
@@ -362,6 +371,7 @@ impl SharedGameState {
         self.render_frame_number.store(other.render_frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.elapsed_secs.store(other.elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
         self.render_elapsed_secs.store(other.render_elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.present_elapsed_secs.store(other.present_elapsed_secs.load(Ordering::Relaxed), Ordering::Relaxed);
         self.photodiode_white.store(other.photodiode_white.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_radius.store(other.camera_radius.load(Ordering::Relaxed), Ordering::Relaxed);
         self.camera_x.store(other.camera_x.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -391,8 +401,8 @@ impl SharedGameState {
             target_door: self.target_door.load(Ordering::Relaxed),
             colors: {
                 let mut cols = [0u32; 12];
-                for i in 0..12 {
-                    cols[i] = self.colors[i].load(Ordering::Relaxed);
+                for (i, c) in cols.iter_mut().enumerate() {
+                    *c = self.colors[i].load(Ordering::Relaxed);
                 }
                 cols
             },
@@ -413,22 +423,22 @@ impl SharedGameState {
             ],
             decorations_color: {
                 let mut cols = [0u32; 12];
-                for i in 0..12 {
-                    cols[i] = self.decorations_color[i].load(Ordering::Relaxed);
+                for (i, c) in cols.iter_mut().enumerate() {
+                    *c = self.decorations_color[i].load(Ordering::Relaxed);
                 }
                 cols
             },
             decorations_seeds: {
                 let mut seeds = [0u64; 3];
-                for i in 0..3 {
-                    seeds[i] = self.decorations_seeds[i].load(Ordering::Relaxed);
+                for (i, s) in seeds.iter_mut().enumerate() {
+                    *s = self.decorations_seeds[i].load(Ordering::Relaxed);
                 }
                 seeds
             },
             decorations_shape: {
                 let mut shapes = [0u32; 3];
-                for i in 0..3 {
-                    shapes[i] = self.decorations_shape[i].load(Ordering::Relaxed);
+                for (i, s) in shapes.iter_mut().enumerate() {
+                    *s = self.decorations_shape[i].load(Ordering::Relaxed);
                 }
                 shapes
             },
@@ -460,6 +470,7 @@ impl SharedGameState {
             render_frame_number: self.render_frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
             render_elapsed_secs: self.render_elapsed_secs.load(Ordering::Relaxed),
+            present_elapsed_secs: self.present_elapsed_secs.load(Ordering::Relaxed),
             photodiode_white: self.photodiode_white.load(Ordering::Relaxed),
             camera_radius: self.camera_radius.load(Ordering::Relaxed),
             camera_x: self.camera_x.load(Ordering::Relaxed),
@@ -510,6 +521,7 @@ impl SharedGameState {
         self.render_frame_number.store(state.render_frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);
         self.render_elapsed_secs.store(state.render_elapsed_secs, Ordering::Relaxed);
+        self.present_elapsed_secs.store(state.present_elapsed_secs, Ordering::Relaxed);
         self.photodiode_white.store(state.photodiode_white, Ordering::Relaxed);
         self.camera_radius.store(state.camera_radius, Ordering::Relaxed);
         self.camera_x.store(state.camera_x, Ordering::Relaxed);

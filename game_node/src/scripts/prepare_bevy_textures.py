@@ -110,7 +110,7 @@ def prepare(folder: Path) -> bool:
     # Overwrite: wipe and recreate
     if out_dir.exists():
         shutil.rmtree(out_dir)
-        print(f"    ♻ Overwriting existing bevy_ready/")
+        print("    Overwriting existing bevy_ready/")
     out_dir.mkdir()
 
     print(f"\n  📂 {folder.name}")
@@ -143,10 +143,12 @@ def prepare(folder: Path) -> bool:
         h, w = load_gray(reference_path).shape
 
         roughness = load_gray(rough_path) if rough_path else np.full((h, w), 0.5, dtype=np.float32)
-        if not rough_path: print("    i No roughness map — padding with 0.5")
+        if not rough_path:
+            print("    i No roughness map — padding with 0.5")
 
         metalness = load_gray(metal_path) if metal_path else np.zeros((h, w), dtype=np.float32)
-        if not metal_path: print("    i No metalness map — padding with 0.0")
+        if not metal_path:
+            print("    i No metalness map — padding with 0.0")
 
         packed = np.zeros((h, w, 3), dtype=np.float32)
         packed[:, :, 1] = roughness

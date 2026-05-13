@@ -19,7 +19,7 @@ pub fn spawn_score_bar(
     }
 
     // Calculate how many rows we need
-    let num_rows = (progress_bar_size + PROGRESS_BAR_WRAP_AROUND_SIZE - 1) / PROGRESS_BAR_WRAP_AROUND_SIZE;
+    let num_rows = progress_bar_size.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
 
     commands
         .spawn((

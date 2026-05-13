@@ -1,7 +1,6 @@
 //! Function to spawn decorations on a pyramid face.
-/// Creates a star-shaped mesh.
 
-use crate::utils::utils::build_mesh;
+use crate::utils::helpers::build_mesh;
 use crate::utils::objects::{Decoration, DecorationSet, GameEntity, PreloadedTextures};
 use crate::utils::load_textures::tinted_material_tiled;
 use shared::{DecorationShape, Texture};
@@ -334,7 +333,7 @@ pub fn spawn_decorations_from_set(
                 Mesh3d(meshes.add(mesh)),
                 MeshMaterial3d(materials.add(StandardMaterial {
                     reflectance: 0.1,
-                    ..tinted_material_tiled(&dec_tex, decoration_set.color, 0.05)
+                    ..tinted_material_tiled(dec_tex, decoration_set.color, 0.05)
                 })),
                 Transform {
                     translation: offset_position,
@@ -395,7 +394,11 @@ fn point_to_line_segment_distance(point: Vec3, line_start: Vec3, line_end: Vec3)
 }
 
 /// Creates a mesh for a decoration shape, extruded to `thickness`.
-fn create_decoration_mesh(shape: DecorationShape, size: f32, thickness: f32) -> Mesh {
+///
+/// Exposed publicly so the startup warmup phase can pre-build one mesh per
+/// shape variant, forcing Bevy to allocate the vertex/index buffers and
+/// compile the render pipelines before the first real trial runs.
+pub fn create_decoration_mesh(shape: DecorationShape, size: f32, thickness: f32) -> Mesh {
     let flat = match shape {
         DecorationShape::Circle     => Circle::new(size).mesh().resolution(16).build(),
         DecorationShape::Square     => Rectangle::new(size * 2.0, size * 2.0).mesh().build(),
@@ -471,7 +474,7 @@ fn extrude_mesh(flat_mesh: Mesh, thickness: f32) -> Mesh {
                 .or_insert((true, a, b));
         }
     }
-    for (_key, (is_boundary, e0, e1)) in &edge_seen {
+    for (is_boundary, e0, e1) in edge_seen.values() {
         if !is_boundary {
             continue;
         }

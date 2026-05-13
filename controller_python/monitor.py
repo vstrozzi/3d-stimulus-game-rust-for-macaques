@@ -98,7 +98,6 @@ Column reference:
     sys.stdout.flush()
 
     prev_seq = shm.read_command_seq()
-    prev_ack = shm.read_command_ack()
     prev_head = shm.frame_write_head()
     prev_time = time.perf_counter()
     last_ring_head = shm.frame_write_head()
@@ -241,7 +240,6 @@ Column reference:
             )
 
             prev_seq = seq
-            prev_ack = ack
             prev_head = head
             prev_time = now
 

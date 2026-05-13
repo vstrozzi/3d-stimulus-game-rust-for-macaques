@@ -62,10 +62,24 @@ export class WebSharedMemory {
 }
 
 /**
+ * Single object containing every cross-controller constant — values, field
+ * lists, FSM labels. Mirrors the attributes exposed by the Python module so
+ * `controller.py` and `controller_main.js` can pull the same source.
+ */
+export function controller_constants(): any;
+
+/**
  * Allocate the shared memory on Rust side and return pointer.
  * JS will use this pointer to create a view.
  */
 export function create_shared_memory_wasm(): number;
+
+/**
+ * Constants and defaults consumed by the trial editor (trial_editor.html).
+ * Lets the editor import the same source of truth as the game and the
+ * controllers, instead of hand-mirroring values from shared/src/lib.rs.
+ */
+export function editor_constants(): any;
 
 /**
  * REFRESH_RATE_HZ from constants.rs — mirrors Python's monkey_shared.REFRESH_RATE_HZ
@@ -101,6 +115,8 @@ export interface InitOutput {
     readonly websharedmemory_get_game_state_offsets: (a: number) => any;
     readonly websharedmemory_get_default_game_state: (a: number) => any;
     readonly __wbg_websharedmemory_free: (a: number, b: number) => void;
+    readonly editor_constants: () => any;
+    readonly controller_constants: () => any;
     readonly refresh_rate_hz: () => number;
     readonly shared_game_state_byte_size: () => number;
     readonly create_shared_memory_wasm: () => number;

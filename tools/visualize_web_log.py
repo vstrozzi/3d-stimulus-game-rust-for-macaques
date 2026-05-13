@@ -63,7 +63,7 @@ def plot_session(trials, out_path: Path) -> None:
     # the zip preserves a different file order.
     trials = sorted(trials, key=lambda t: t.label)
 
-    fig, axes = plt.subplots(4, 1, figsize=(14, 11), sharex=True)
+    fig, axes = plt.subplots(5, 1, figsize=(14, 13), sharex=True)
     fig.suptitle(
         f"Web session overview — {len(trials)} trial{'s' if len(trials) != 1 else ''}",
         fontsize=12, fontweight="bold",
@@ -125,6 +125,39 @@ def plot_session(trials, out_path: Path) -> None:
     ax.set_ylabel("cosine_alignment")
     ax.set_title("Alignment trajectory (one curve per trial, coloured by outcome)")
     ax.grid(True, alpha=0.3)
+
+    # ── Panel 5: per-trial presentation Δt summary ───────────────────────────
+    # For each trial, compute mean and 95th-percentile of
+    # `present_elapsed_secs` deltas — the real wall-clock frame interval.
+    # Mean should sit at 16.67 ms on a healthy 60 Hz display; 95th percentile
+    # reveals stalls (dropped frames, GC, compositor contention).
+    ax = axes[4]
+    means_ms = []
+    p95_ms = []
+    for t in trials:
+        present = [f.present_elapsed_secs for f in t.frames]
+        deltas = [b - a for a, b in zip(present, present[1:]) if b - a > 0]
+        if deltas:
+            mean = sum(deltas) / len(deltas)
+            sorted_d = sorted(deltas)
+            p95 = sorted_d[int(len(sorted_d) * 0.95)]
+            means_ms.append(mean * 1000)
+            p95_ms.append(p95 * 1000)
+        else:
+            means_ms.append(0.0)
+            p95_ms.append(0.0)
+    if any(means_ms):
+        ax.bar(xs, means_ms, color="#00ACC1", edgecolor="#006064", label="mean")
+        ax.plot(xs, p95_ms, "o-", color="#F44336", markersize=4, linewidth=1, label="95th pct")
+        ax.axhline(1000 / 60, color="#4CAF50", linestyle="--", linewidth=1, label="ideal 16.67 ms")
+        ax.set_ylabel("present Δt (ms)")
+        ax.set_title("Real flip-time interval per trial (mean + 95th percentile)")
+        ax.legend(fontsize=8, loc="upper right")
+    else:
+        ax.text(0.5, 0.5, "no present_elapsed_secs in logs",
+                ha="center", va="center", transform=ax.transAxes, fontsize=10, color="#888")
+        ax.set_title("Real flip-time interval per trial")
+    ax.grid(True, alpha=0.3, axis="y")
 
     # Compact x-tick labels — every Nth trial label so it stays readable.
     step = max(1, len(trials) // 20)

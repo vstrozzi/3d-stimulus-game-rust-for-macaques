@@ -1,5 +1,9 @@
 //! Declaration of the utils modules for monkey_3d_game.
 
+// Bevy systems idiomatically accept many resources/queries and use deeply
+// nested Query types; clippy's defaults flag these on every system.
+#![allow(clippy::too_many_arguments, clippy::type_complexity)]
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -23,7 +27,7 @@ pub mod shared_memory {
 /// Game functions
 pub mod utils {
     pub mod camera;
-    pub mod utils;
+    pub mod helpers;
     pub mod ui;
     pub mod handle_commands;
     pub mod debug_functions;
@@ -35,6 +39,7 @@ pub mod utils {
     pub mod setup;
     pub mod systems_logic;
     pub mod load_textures;
+    pub mod warmup;
 }
 
 use crate::{
@@ -100,7 +105,8 @@ pub fn build_app() -> App {
     .insert_resource(RoundStartTimestamp::default())
     .insert_resource(GameConditions::default())
     .insert_resource(GameStateLocal::default())
-    .insert_resource(PreloadedTextures::default());
+    .insert_resource(PreloadedTextures::default())
+    .insert_resource(crate::utils::warmup::WarmupState::default());
     app
 }
 

@@ -12,13 +12,31 @@ pub struct FrameCounterResource(pub u64);
 #[derive(Resource, Default)]
 pub struct RenderFrameCounterResource(pub u64);
 
+/// Holds the per-render-frame data sampled in `Update` but not yet committed
+/// to SHM. Committed in the *next* frame's `First` schedule, so the
+/// `present_elapsed_secs` stamp captured at that point reflects the moment
+/// this frame's photons actually appeared on screen (vsync of the prior
+/// `present()` call, back-pressured by `PresentMode::Fifo`).
+#[derive(Resource, Default)]
+pub struct StagedRenderSample {
+    pub pending: Option<StagedFrame>,
+}
+
+#[derive(Clone, Copy)]
+pub struct StagedFrame {
+    pub render_frame_number: u64,
+    pub render_elapsed_secs_bits: u32,
+    pub photodiode_white: bool,
+}
+
 // Update the shared memory game state after every game loop update
 pub struct StateEmitterPlugin;
 
 impl Plugin for StateEmitterPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FrameCounterResource>()
-           .init_resource::<RenderFrameCounterResource>();
+           .init_resource::<RenderFrameCounterResource>()
+           .init_resource::<StagedRenderSample>();
     }
 }
 
@@ -84,47 +102,87 @@ pub fn update_shared_memory_local(
     }
 }
 
-/// Increment render frame counter and write render-scoped fields directly to SHM.
-/// Runs in Update (once per render frame), not FixedUpdate.
-/// Writes: render_frame_number, render_elapsed_secs, photodiode_white.
-pub fn increment_render_frame_counter(
+/// Sample render-frame data in `Update` and stash it for commit at the next
+/// `First` tick. We do not write to SHM here: the matching
+/// `present_elapsed_secs` (real wall-clock time of the actual flip) is only
+/// available after `present()` returns and the next frame begins.
+pub fn stage_render_sample(
     mut counter: ResMut<RenderFrameCounterResource>,
-    shm_res: Option<Res<SharedMemResource>>,
+    mut staged: ResMut<StagedRenderSample>,
     round_start: Res<RoundStartTimestamp>,
     photodiode_query: Query<(&Visibility, &BackgroundColor), With<crate::utils::debug_functions::PhotodiodeMarker>>,
 ) {
-    use std::sync::atomic::Ordering::Relaxed;
     counter.0 += 1;
-    if let Some(shm_res) = shm_res {
-        let shm = shm_res.0.get();
-        let gs = &shm.game_structure_game;
-        gs.render_frame_number.store(counter.0, Relaxed);
+    let render_secs_bits = round_start.0
+        .map(|t| t.as_secs_f32().to_bits())
+        .unwrap_or(0.0_f32.to_bits());
+    let is_white = photodiode_query.iter().any(|(vis, bg)| {
+        *vis != Visibility::Hidden && bg.0 == Color::WHITE
+    });
+    staged.pending = Some(StagedFrame {
+        render_frame_number: counter.0,
+        render_elapsed_secs_bits: render_secs_bits,
+        photodiode_white: is_white,
+    });
+}
 
-        // Render-frame timestamp (same clock as elapsed_secs but sampled in Update)
-        let render_secs = round_start.0
-            .map(|t| t.as_secs_f32().to_bits())
-            .unwrap_or(0.0_f32.to_bits());
-        gs.render_elapsed_secs.store(render_secs, Relaxed);
+/// Commit the previously staged render-frame sample to SHM, stamping it with
+/// the wall-clock time of *now* (Bevy's `First` schedule). Under
+/// `PresentMode::Fifo` the main loop is back-pressured by `present()`, so this
+/// stamp closely tracks the vsync at which the previous frame's pixels were
+/// latched by the compositor — i.e. the photon-onset time for that frame.
+///
+/// Constant compositor + scanout offset remains; the photodiode absorbs it.
+pub fn commit_render_sample(
+    mut staged: ResMut<StagedRenderSample>,
+    shm_res: Option<Res<SharedMemResource>>,
+    time_real: Res<Time<bevy::time::Real>>,
+) {
+    use std::sync::atomic::Ordering::Relaxed;
+    let Some(frame) = staged.pending.take() else { return };
+    let Some(shm_res) = shm_res else { return };
+    let shm = shm_res.0.get();
+    let gs = &shm.game_structure_game;
 
-        // Photodiode state: true when visible AND white
-        let is_white = photodiode_query.iter().any(|(vis, bg)| {
-            *vis != Visibility::Hidden && bg.0 == Color::WHITE
-        });
-        gs.photodiode_white.store(is_white, Relaxed);
-    }
+    // Wall-clock seconds since app start. Monotonic; the controller computes
+    // per-frame deltas against the previous row.
+    let present_secs = time_real.elapsed_secs();
+
+    gs.render_frame_number.store(frame.render_frame_number, Relaxed);
+    gs.render_elapsed_secs.store(frame.render_elapsed_secs_bits, Relaxed);
+    gs.present_elapsed_secs.store(present_secs.to_bits(), Relaxed);
+    gs.photodiode_white.store(frame.photodiode_white, Relaxed);
 }
 
 /// Write shared memory from the local game state to shared memory to be read by controller
 pub fn write_shared_memory_game_state(
     shm_res: Option<Res<SharedMemResource>>,
-    game_state_local: Res<GameStateLocal>,
+    mut game_state_local: ResMut<GameStateLocal>,
 ) {
+
+    use std::sync::atomic::Ordering::Relaxed;
 
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
     let gs_game = &shm.game_structure_game;
 
-    // Update based on current values
+    // Preserve the render-sample fields previously committed by
+    // `commit_render_sample` (runs in `First`). Without this, the
+    // subsequent whole-state write would clobber the fields (they can
+    // be zero in the local `GameStateLocal`), which explains why
+    // `render_frame_number` and `present_elapsed_secs` in logs were
+    // observed as 0.
+    let cur_rfn = gs_game.render_frame_number.load(Relaxed);
+    let cur_rend_elapsed = gs_game.render_elapsed_secs.load(Relaxed);
+    let cur_present = gs_game.present_elapsed_secs.load(Relaxed);
+    let cur_photo = gs_game.photodiode_white.load(Relaxed);
+
+    game_state_local.0.render_frame_number = cur_rfn;
+    game_state_local.0.render_elapsed_secs = cur_rend_elapsed;
+    game_state_local.0.present_elapsed_secs = cur_present;
+    game_state_local.0.photodiode_white = cur_photo;
+
+    // Update based on current values (now preserving staged fields)
     gs_game.write_from_local(&game_state_local.0);
 
     // Also push into the ring buffer so the controller can catch skipped frames

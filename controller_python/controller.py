@@ -1,12 +1,19 @@
-import math
-import sys
-import time
+import atexit
+import datetime
 import json
+import math
 import os
 import random
-import datetime
-from pynput import keyboard
+import signal
+import sys
+import tempfile
+import time
 from enum import Enum, auto
+
+from pynput import keyboard
+
+PARTICIPANT_NAME = "native"
+LOG_ROOT = "./out/logs"
 
 try:
     import monkey_shared
@@ -15,26 +22,22 @@ except ImportError:
     print("Build the shared library with 'cargo build --release -p shared --features python' and copy the resulting '.so' to controller_python/monkey_shared.so.")
     sys.exit(1)
 
-# Constants imported from shared/src/constants.rs via monkey_shared
+# Constants imported from shared/src/constants.rs via monkey_shared.
+# Single source of truth — mirrored to controller_main.js through wasm-bindgen.
 REFRESH_RATE_HZ = monkey_shared.REFRESH_RATE_HZ
 WIN_BLANK_DURATION_FRAMES = monkey_shared.WIN_BLANK_DURATION_FRAMES
-POLLING_RATE_TIME_S = 1  # time of polling in between of game controller
-GAME_UNRESPONSIVENESS_THRESHOLD_S = 3.0  # time threshold to consider game unresponsive to restart trial
-COLOR_SUGGESTION_COS_SIM = math.cos(math.pi / 6)  # cosine threshold for suggesting a colored light hint
+SHM_NAME = monkey_shared.SHM_NAME
+POLLING_RATE_S = monkey_shared.POLLING_RATE_S
+GAME_UNRESPONSIVENESS_THRESHOLD_S = monkey_shared.GAME_UNRESPONSIVENESS_THRESHOLD_S
+COLOR_SUGGESTION_COS_SIM = monkey_shared.COLOR_SUGGESTION_COS_SIM
+DEFAULT_CAMERA_Y = monkey_shared.DEFAULT_CAMERA_Y
+CAMERA_3D_INITIAL_RADIUS = monkey_shared.CAMERA_3D_INITIAL_RADIUS
+N_START_ORIENTS = monkey_shared.N_START_ORIENTS
 
-# Six evenly-spaced start orientations (one per door of the hexagonal base)
-START_ORIENTS = [k * 2.0 * math.pi / 6.0 for k in range(6)]
+# Evenly-spaced start orientations (one per door of the hexagonal base)
+START_ORIENTS = [k * 2.0 * math.pi / N_START_ORIENTS for k in range(N_START_ORIENTS)]
 
-# Controller-only metadata fields (not written to game shared memory)
-CONTROLLER_META_FIELDS = {
-    "nr_attempts_to_win",
-    "nr_attempts_suggestion",
-    "nr_attempts_to_retroceed",
-    "elapsed_time_to_win",
-    "elapsed_time_to_retroceed",
-    "start_trial",
-    "camera_y",
-}
+CONTROLLER_META_FIELDS = set(monkey_shared.CONTROLLER_META_FIELDS)
 
 # Game-state schema (fields written to shared memory) — matches SharedGameState in shared/src/lib.rs
 state_schema = {
@@ -129,7 +132,7 @@ def load_levels(trials_path="trials_config/trials.jsonl"):
     trial_file = os.path.join(parent_dir, trials_path)
 
     try:
-        with open(trial_file, "r") as f:
+        with open(trial_file, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
@@ -170,17 +173,40 @@ class TrialProceeding(Enum):
     RETROCEED = auto()
 
 
+# Catches drift if a state is renamed only on one side: each ControllerState
+# name must appear in monkey_shared.FSM_STATES (which controller_main.js also reads).
+assert [s.name for s in ControllerState] == list(monkey_shared.FSM_STATES), (
+    f"ControllerState drifted from shared FSM_STATES: "
+    f"py={[s.name for s in ControllerState]} shared={list(monkey_shared.FSM_STATES)}"
+)
+assert [s.name for s in TrialProceeding] == list(monkey_shared.PROCEEDING_VALUES), (
+    f"TrialProceeding drifted from shared PROCEEDING_VALUES: "
+    f"py={[s.name for s in TrialProceeding]} shared={list(monkey_shared.PROCEEDING_VALUES)}"
+)
+
+
 class MonkeyGameController:
     def __init__(self):
         self.pressed_keys = set()
 
         # Shared-memory handle
         try:
-            self.shm_wrapper = monkey_shared.SharedMemoryWrapper("monkey_game")
+            self.shm_wrapper = monkey_shared.SharedMemoryWrapper(SHM_NAME)
             print("Connected to shared memory interface.")
         except Exception as exc:
             print(f"SHM Connection Error: {exc}")
             sys.exit(1)
+
+        # Catch log-schema drift early: every name in LOGGED_STATE_FIELDS must
+        # be a real key in the SHM-read dict, otherwise the verifier and
+        # controller_main.js will silently disagree.
+        _default_keys = set(self.shm_wrapper.read_default_game_state().keys())
+        _missing = self.LOGGED_STATE_FIELDS - _default_keys
+        if _missing:
+            raise RuntimeError(
+                f"LOGGED_STATE_FIELDS references SHM keys that read_game_state "
+                f"doesn't expose: {sorted(_missing)}"
+            )
 
         # Continuous inputs
         self.inputs = {
@@ -198,6 +224,15 @@ class MonkeyGameController:
             "animation_door": False,
             "animation_all_door": False,
             "animation_colored": False,
+        }
+
+        # Session metadata, written once into every trial log.
+        self.session_info = {
+            "app_start_unix_ns": time.time_ns(),
+            "platform": "native",
+            "os": sys.platform,
+            "refresh_rate_hz": float(REFRESH_RATE_HZ),
+            "present_mode": "fifo",
         }
 
         # Level configuration
@@ -230,14 +265,30 @@ class MonkeyGameController:
         self.game_time_unresponsive = 0.0
         self.trial_start_state = None
         self.frame_log = {}
+        self.win_event = None
         self.trial_run_counter = 0
         self.current_state = None
 
-        # Output directory for logs
+        # Per-level-run tracking
+        self.level_run_counter = 0
+        self.current_level_summary = None
+        self.current_level_summary_path = None
+        self.current_level_dir = None
+        self._last_summary_filename = None
+        self._last_summary_path = None
+
+        # Output root for logs
         script_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.dirname(script_dir)
-        self.log_dir = os.path.join(parent_dir, "out", "trial_logs")
-        os.makedirs(self.log_dir, exist_ok=True)
+        self.log_root = os.path.join(parent_dir, LOG_ROOT.lstrip("./"))
+        os.makedirs(self.log_root, exist_ok=True)
+
+        atexit.register(self._finalize_level_run_safe, "interrupted")
+        for _sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                signal.signal(_sig, lambda *_: (self._finalize_level_run_safe("interrupted"), sys.exit(0)))
+            except (ValueError, OSError):
+                pass
 
         self._running = True
 
@@ -267,6 +318,9 @@ class MonkeyGameController:
     def _set_trial_idx(self, val):
         self.chain_idxs[self.active_chain] = val
 
+    def _level_start_trial(self):
+        return self.level["fixed"].get("start_trial", 0)
+
     def _level_complete(self):
         n = len(self.level["trials"])
         return all(idx >= n for idx in self.chain_idxs)
@@ -295,13 +349,14 @@ class MonkeyGameController:
                 state[key] = value
         return state
 
-    # Progress bar: sum of trial indices across all objects in the current level.
-    # Size = trials_per_level × number_of_objects. Resets to 0 on level change.
+    # Count only progress from the loaded start_trial so resumed levels
+    # reflect the visible chain segment rather than the absolute trial index.
     def _progress_bar_cur(self):
-        return sum(self.chain_idxs)
+        return sum(max(0, idx) for idx in self.chain_idxs)
 
     def _progress_bar_size(self):
-        return len(self.level["trials"]) * len(self.level["objects"])
+        remaining = max(0, len(self.level["trials"]))
+        return remaining * len(self.level["objects"])
 
     # Command helpers
     def check_has_finished(self, state):
@@ -356,54 +411,231 @@ class MonkeyGameController:
         return cmds
 
     # Fields that are game→controller only (written by the game, not the controller)
-    READ_ONLY_FIELDS = {"render_frame_number", "render_elapsed_secs", "photodiode_white"}
+    READ_ONLY_FIELDS = {"render_frame_number", "render_elapsed_secs", "present_elapsed_secs", "photodiode_white"}
 
     def write_game_state(self, state):
         filtered = {k: v for k, v in state.items() if k not in self.READ_ONLY_FIELDS}
         self.shm_wrapper.write_game_state(**filtered)
 
-    LOGGED_STATE_FIELDS = {
-        "frame_number",
-        "render_frame_number",
-        "elapsed_secs",
-        "render_elapsed_secs",
-        "photodiode_white",
-        "camera_radius",
-        "camera_position",
-        "nr_attempts",
-        "cosine_alignment",
-        "current_angle",
-        "is_animating",
-        "win_elapsed_secs",
-    }
+    # Pulled from shared/src/constants.rs so the Python and JS controllers
+    # log the exact same set of SHM fields.
+    LOGGED_STATE_FIELDS = set(monkey_shared.LOGGED_STATE_FIELDS)
 
     def log_frame(self, state_read, commands_sent):
+        win_secs = state_read.get("win_elapsed_secs", 0.0) or 0.0
+        if win_secs != 0.0 and self.win_event is None:
+            self.win_event = {
+                "win_elapsed_secs": float(win_secs),
+                "frame_number": int(state_read.get("frame_number", -1)),
+                "present_elapsed_secs": float(state_read.get("present_elapsed_secs", 0.0)),
+            }
         filtered_state = {k: v for k, v in state_read.items() if k in self.LOGGED_STATE_FIELDS}
         entry = {"state_read": filtered_state, "commands_sent": commands_sent}
-        self.frame_log[str(self.current_frame)] = entry
+        key = str(state_read.get("frame_number", self.current_frame))
+        self.frame_log[key] = entry
+
+    @staticmethod
+    def _stamp(dt):
+        return dt.strftime("%Y%m%d-%H%M%S")
+
+    @staticmethod
+    def _time_folder(dt):
+        return dt.strftime("%H%M%S")
+
+    def _level_run_paths(self, level_index, started_at):
+        date = started_at.strftime("%Y-%m-%d")
+        level_name = f"level_{level_index:03d}"
+        run_stamp = self._stamp(started_at)
+        run_time = self._time_folder(started_at)
+        level_dir = os.path.join(
+            self.log_root, PARTICIPANT_NAME, date, level_name, run_time
+        )
+        trials_dir = os.path.join(level_dir, "trials")
+        summary_filename = (
+            f"{PARTICIPANT_NAME}_{level_name}_summary_run_"
+            f"{self.level_run_counter:03d}_{run_stamp}.json"
+        )
+        return level_dir, trials_dir, level_name, summary_filename
+
+    def _trial_filename(self, level_index, trial_start_dt):
+        level_name = f"level_{level_index:03d}"
+        return (
+            f"{PARTICIPANT_NAME}_{level_name}_trial_{level_index:03d}_run_"
+            f"{self.trial_run_counter:04d}_{self._stamp(trial_start_dt)}.json"
+        )
+
+    def _atomic_write_json(self, path, payload):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        fd, tmp = tempfile.mkstemp(prefix=".tmp_", dir=os.path.dirname(path))
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(payload, f, indent=2, default=str)
+            os.replace(tmp, path)
+        finally:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+
+    def _start_level_run_if_needed(self):
+        if self.current_level_summary is not None:
+            return
+        started = datetime.datetime.now()
+        level_dir, trials_dir, level_name, summary_filename = self._level_run_paths(
+            self.current_level_index, started
+        )
+        self.current_level_dir = level_dir
+        self.current_level_summary_path = os.path.join(level_dir, summary_filename)
+        os.makedirs(trials_dir, exist_ok=True)
+        self.current_level_summary = {
+            "participant": PARTICIPANT_NAME,
+            "level_index": self.current_level_index,
+            "level_name": level_name,
+            "level_run_counter": self.level_run_counter,
+            "session_info": self.session_info,
+            "level_config": self.levels[self.current_level_index],
+            "timestamp_start": started.isoformat(),
+            "timestamp_end": None,
+            "duration_s": None,
+            "level_completed": None,
+            "trials": [],
+            "outcomes": {},
+            "total_attempts": 0,
+            "chain_idxs_end": None,
+            "timing_health": None,
+            "prev_file": self._last_summary_filename,
+            "next_file": None,
+        }
+        self._flush_level_summary()
+        if self._last_summary_path:
+            self._patch_prev_summary_next(summary_filename)
+
+    def _flush_level_summary(self):
+        if self.current_level_summary is None:
+            return
+        self._atomic_write_json(self.current_level_summary_path, self.current_level_summary)
+
+    def _patch_prev_summary_next(self, new_filename):
+        prev_path = self._last_summary_path
+        if not prev_path or not os.path.exists(prev_path):
+            return
+        try:
+            with open(prev_path, encoding="utf-8") as f:
+                data = json.load(f)
+            data["next_file"] = new_filename
+            self._atomic_write_json(prev_path, data)
+        except Exception as e:
+            print(f"[LOG] Could not patch prev summary {prev_path}: {e}")
+
+    def _compute_timing_health(self):
+        present = []
+        render_gaps = 0
+        freezes = 0
+        last_rfn = None
+        for trial in self.current_level_summary["trials"]:
+            frames = trial.get("_frames_for_health") or []
+            for f in frames:
+                p = f.get("present_elapsed_secs")
+                if p is not None:
+                    present.append(p)
+                rfn = f.get("render_frame_number")
+                if last_rfn is not None and rfn is not None and rfn - last_rfn > 1:
+                    render_gaps += rfn - last_rfn - 1
+                if rfn is not None:
+                    last_rfn = rfn
+        deltas = [present[i] - present[i - 1] for i in range(1, len(present))
+                  if present[i] - present[i - 1] > 0]
+        if deltas:
+            mean = sum(deltas) / len(deltas)
+            std = math.sqrt(sum((d - mean) ** 2 for d in deltas) / len(deltas))
+        else:
+            mean = std = 0.0
+        return {
+            "present_dt_mean_ms": round(mean * 1000, 3),
+            "present_dt_std_ms":  round(std  * 1000, 3),
+            "render_gaps": render_gaps,
+            "freeze_events": freezes,
+            "drift_max_s": 0.0,
+        }
+
+    def _finalize_level_run_safe(self, status):
+        try:
+            self._finalize_level_run(status)
+        except Exception as e:
+            print(f"[LOG] finalize_level_run failed: {e}")
+
+    def _finalize_level_run(self, status):
+        if self.current_level_summary is None:
+            return
+        end = datetime.datetime.now()
+        start_iso = self.current_level_summary["timestamp_start"]
+        start_dt = datetime.datetime.fromisoformat(start_iso)
+        self.current_level_summary["timestamp_end"] = end.isoformat()
+        self.current_level_summary["duration_s"] = round((end - start_dt).total_seconds(), 4)
+        self.current_level_summary["level_completed"] = status
+        self.current_level_summary["chain_idxs_end"] = list(self.chain_idxs)
+        self.current_level_summary["timing_health"] = self._compute_timing_health()
+        # Drop the transient _frames_for_health field used only for health stats.
+        for t in self.current_level_summary["trials"]:
+            t.pop("_frames_for_health", None)
+        self._flush_level_summary()
+        self._last_summary_filename = os.path.basename(self.current_level_summary_path)
+        self._last_summary_path = self.current_level_summary_path
+        self.current_level_summary = None
+        self.current_level_summary_path = None
+        self.current_level_dir = None
+        self.level_run_counter += 1
 
     def save_trial_log(self, outcome):
-        elapsed = time.time() - self.trial_start_time
+        self._start_level_run_if_needed()
+        trial_start_dt = datetime.datetime.fromtimestamp(self.trial_start_time)
+        end_dt = datetime.datetime.now()
+        elapsed = (end_dt - trial_start_dt).total_seconds()
+        trial_filename = self._trial_filename(self.current_level_index, trial_start_dt)
+        trial_path = os.path.join(self.current_level_dir, "trials", trial_filename)
         log = {
             "level_index": self.current_level_index,
             "active_chain": self.active_chain,
             "trial_index_in_chain": self._trial_idx(),
+            "trial_run_counter": self.trial_run_counter,
             "trial_config": self.flat_trial,
             "outcome": outcome,
             "nr_attempts": self.nr_attempts,
             "elapsed_time": round(elapsed, 4),
-            "timestamp_start": datetime.datetime.fromtimestamp(self.trial_start_time).isoformat(),
-            "timestamp_end": datetime.datetime.now().isoformat(),
+            "timestamp_start": trial_start_dt.isoformat(),
+            "timestamp_end": end_dt.isoformat(),
+            "session_info": self.session_info,
+            "win_event": self.win_event,
             "frames": self.frame_log,
         }
-        filename = f"trial_{self.current_level_index:03d}_run_{self.trial_run_counter:04d}.json"
-        filepath = os.path.join(self.log_dir, filename)
         try:
-            with open(filepath, "w") as f:
-                json.dump(log, f, indent=2, default=str)
-            print(f"[LOG] Saved trial log → {filepath}")
+            self._atomic_write_json(trial_path, log)
+            print(f"[LOG] Saved trial log → {trial_path}")
         except Exception as e:
-            print(f"[LOG] Failed to save log: {e}")
+            print(f"[LOG] Failed to save trial: {e}")
+            return
+
+        summary_row = {
+            "trial_index_in_chain": self._trial_idx(),
+            "active_chain": self.active_chain,
+            "trial_run_counter": self.trial_run_counter,
+            "outcome": outcome,
+            "nr_attempts": self.nr_attempts,
+            "elapsed_time": round(elapsed, 4),
+            "win_event": self.win_event,
+            "file": trial_filename,
+            "_frames_for_health": [
+                {"present_elapsed_secs": fr.get("state_read", {}).get("present_elapsed_secs"),
+                 "render_frame_number":  fr.get("state_read", {}).get("render_frame_number")}
+                for fr in self.frame_log.values()
+            ],
+        }
+        self.current_level_summary["trials"].append(summary_row)
+        self.current_level_summary["outcomes"][outcome] = \
+            self.current_level_summary["outcomes"].get(outcome, 0) + 1
+        self.current_level_summary["total_attempts"] += self.nr_attempts
+        self._flush_level_summary()
 
     # Main loop
     def loop(self):
@@ -415,8 +647,8 @@ class MonkeyGameController:
             seq_nr = self.shm_wrapper.command_seq()
             # Game has not updated yet, sleep
             if not states or ack_nr < seq_nr:
-                self.game_time_unresponsive += POLLING_RATE_TIME_S / 1000.0
-                time.sleep(POLLING_RATE_TIME_S / 1000.0)
+                self.game_time_unresponsive += POLLING_RATE_S
+                time.sleep(POLLING_RATE_S)
                 if self.game_time_unresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S or self.current_frame == 0:
                     print(f"[FSM] Game unresponsive for {self.game_time_unresponsive:.1f}s, resyncing...")
                     self._resync_with_game()
@@ -429,11 +661,16 @@ class MonkeyGameController:
                 print(f"[FSM] Starting at frame {self.current_frame}")
                 continue
 
-            # Log intermediate frames that the old polling loop would have missed
-            for s in states[:-1]:
-                fn = s.get("frame_number", 0)
-                if str(fn) not in self.frame_log:
-                    self.log_frame(s, {})
+            # Log intermediate frames only in meaningful states
+            if self.fsm_state in (
+                ControllerState.PLAYING,
+                ControllerState.WAITING_ANIMATION_START,
+                ControllerState.WAITING_ANIMATION_END,
+            ):
+                for s in states[:-1]:
+                    fn = s.get("frame_number", 0)
+                    if str(fn) not in self.frame_log:
+                        self.log_frame(s, {})
 
             # Use the latest state for FSM dispatch
             self.current_state = states[-1]
@@ -488,10 +725,12 @@ class MonkeyGameController:
         trial_state["progress_bar_size"] = self._progress_bar_size()
 
         # Position camera using fixed camera_y and camera_radius
-        cam_y = self.level["fixed"].get("camera_y", 1.0)
-        cam_r = trial_state.get("camera_radius", 15.0)
+        cam_y = self.level["fixed"].get("camera_y", DEFAULT_CAMERA_Y)
+        cam_r = trial_state.get("camera_radius", CAMERA_3D_INITIAL_RADIUS)
 
-        trial_state["camera_position"] = [0.0, cam_y, cam_r]
+        trial_state["camera_x"] = 0.0
+        trial_state["camera_y"] = cam_y
+        trial_state["camera_z"] = cam_r
 
         state_old = self.shm_wrapper.read_game_state()
 
@@ -515,8 +754,19 @@ class MonkeyGameController:
         self.nr_attempts = 0
         self.trial_start_time = time.time()
         self.frame_log = {}
+        self.win_event = None
         self.trial_run_counter += 1
         self._time_win_expired = False
+
+        # Re-sync frame tracking with the game's fresh counter.
+        # `handle_reset_command` on the game side zeros `frame_number` (and
+        # `elapsed_secs`) via setup_round. Without this re-sync, the
+        # controller's `self.current_frame` and `last_write_head` still point
+        # at pre-reset ring-buffer slots, which causes a brief window of
+        # stale states to be observed and any FSM logic gated on
+        # `current_frame` continuity to misbehave. Drop them.
+        self.current_frame = -1
+        self.last_write_head = self.shm_wrapper.frame_write_head()
 
         self.fsm_state = ControllerState.WAITING_FOR_START
         print("[FSM] → WAITING_FOR_START  (press 'r' to begin)")
@@ -533,7 +783,7 @@ class MonkeyGameController:
                 "zoom_in": False,
                 "zoom_out": False,
                 "check": False,
-                "reset": True,
+                "reset": False,
                 "toggle_blank": True,
                 "toggle_stop_rendering": self.current_state.get("is_rendering_stopped", False), # resume rendering
                 "animation_door": False,
@@ -580,7 +830,7 @@ class MonkeyGameController:
         if self.triggers["check"]:
             suggestion_threshold = flat.get("nr_attempts_suggestion", 0)
             retroceeds_threshold = flat.get("nr_attempts_to_retroceed", 0)
-            cosine_current = self.current_state.get("cosine_alignment", 0.0)
+            cosine_current = self.current_state.get("current_alignment", 0.0)
             cosine_threshold = flat.get("cosine_alignment_threshold", 0.0)
 
             # Since animating stop rendering
@@ -601,7 +851,7 @@ class MonkeyGameController:
                 self.log_frame(self.current_state, cmds)
                 return
             # Suggestion available and can play: animate depending on cosine alignment
-            elif (self.nr_attempts < suggestion_threshold and cosine_current < cosine_threshold) or \
+            if (self.nr_attempts < suggestion_threshold and cosine_current < cosine_threshold) or \
                  (in_stay_budget and cosine_current > cosine_threshold):
                 colored_light = cosine_current > COLOR_SUGGESTION_COS_SIM
                 cmds["animation_colored"] = colored_light
@@ -696,6 +946,7 @@ class MonkeyGameController:
 
         # Advance to next level if all chains exhausted
         if self._level_complete():
+            self._finalize_level_run("completed")
             self.current_level_index = (self.current_level_index + 1) % self.total_levels
             start = self.level["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.level["objects"])

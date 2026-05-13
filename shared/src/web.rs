@@ -4,8 +4,9 @@
 //! so that the JS controller can read/write the same memory regions as the
 //! Bevy game running in the same WASM instance.
 
-use crate::{SharedMemory, SharedGameState, RING_BUFFER_SIZE};
+use crate::{SharedMemory, SharedGameState, RING_BUFFER_SIZE, DecorationShape, Texture};
 use wasm_bindgen::prelude::*;
+use strum::IntoEnumIterator;
 use std::sync::OnceLock;
 
 /// Global static instance of shared memory for WASM
@@ -29,6 +30,171 @@ pub fn shared_game_state_byte_size() -> u32 {
 #[wasm_bindgen]
 pub fn refresh_rate_hz() -> f64 {
     crate::constants::game_constants::REFRESH_RATE_HZ
+}
+
+/// Single object containing every cross-controller constant — values, field
+/// lists, FSM labels. Mirrors the attributes exposed by the Python module so
+/// `controller.py` and `controller_main.js` can pull the same source.
+#[wasm_bindgen]
+pub fn controller_constants() -> JsValue {
+    use crate::constants::controller_constants as cc;
+
+    let obj = js_sys::Object::new();
+    let set = |k: &str, v: JsValue| {
+        js_sys::Reflect::set(&obj, &JsValue::from_str(k), &v).unwrap();
+    };
+
+    set("SHM_NAME", JsValue::from_str(cc::SHM_NAME));
+    set("POLLING_RATE_S", JsValue::from_f64(cc::POLLING_RATE_S as f64));
+    set(
+        "GAME_UNRESPONSIVENESS_THRESHOLD_S",
+        JsValue::from_f64(cc::GAME_UNRESPONSIVENESS_THRESHOLD_S as f64),
+    );
+    set(
+        "COLOR_SUGGESTION_COS_SIM",
+        JsValue::from_f64(cc::COLOR_SUGGESTION_COS_SIM as f64),
+    );
+    set("DEFAULT_CAMERA_Y", JsValue::from_f64(cc::DEFAULT_CAMERA_Y as f64));
+    set(
+        "CAMERA_3D_INITIAL_RADIUS",
+        JsValue::from_f64(crate::constants::camera_3d_constants::CAMERA_3D_INITIAL_RADIUS as f64),
+    );
+    set("N_FACES", JsValue::from_f64(cc::N_FACES as f64));
+    set("N_COLOR_CHANNELS", JsValue::from_f64(cc::N_COLOR_CHANNELS as f64));
+    set("N_COLOR_FLOATS", JsValue::from_f64(cc::N_COLOR_FLOATS as f64));
+    set("N_START_ORIENTS", JsValue::from_f64(cc::N_START_ORIENTS as f64));
+
+    let to_array = |items: &[&str]| -> JsValue {
+        let arr = js_sys::Array::new();
+        for s in items {
+            arr.push(&JsValue::from_str(s));
+        }
+        arr.into()
+    };
+    set("LOGGED_STATE_FIELDS", to_array(cc::LOGGED_STATE_FIELDS));
+    set("CONTROLLER_META_FIELDS", to_array(cc::CONTROLLER_META_FIELDS));
+    set("FSM_STATES", to_array(cc::FSM_STATES));
+    set("PROCEEDING_VALUES", to_array(cc::PROCEEDING_VALUES));
+
+    obj.into()
+}
+
+/// Constants and defaults consumed by the trial editor (trial_editor.html).
+/// Lets the editor import the same source of truth as the game and the
+/// controllers, instead of hand-mirroring values from shared/src/lib.rs.
+#[wasm_bindgen]
+pub fn editor_constants() -> JsValue {
+    use crate::constants::{
+        camera_3d_constants as cam, controller_constants as cc, game_constants as gc,
+        lighting_constants as light, pyramid_constants as pyr,
+    };
+
+    let obj = js_sys::Object::new();
+    let set = |k: &str, v: JsValue| {
+        js_sys::Reflect::set(&obj, &JsValue::from_str(k), &v).unwrap();
+    };
+
+    // Enum variant names — single source of truth for the editor's dropdowns.
+    let texture_names = js_sys::Array::new();
+    for t in Texture::iter() {
+        texture_names.push(&JsValue::from_str(&t.to_string()));
+    }
+    set("TEXTURE_NAMES", texture_names.into());
+
+    let shape_names = js_sys::Array::new();
+    for s in DecorationShape::iter() {
+        shape_names.push(&JsValue::from_str(&s.to_string()));
+    }
+    set("SHAPE_NAMES", shape_names.into());
+
+    // Pyramid + lighting + camera defaults. Editor's "+ Level" button
+    // populates these into a new level.
+    set("PYRAMID_BASE_RADIUS", JsValue::from_f64(pyr::PYRAMID_BASE_RADIUS as f64));
+    set("PYRAMID_HEIGHT", JsValue::from_f64(pyr::PYRAMID_HEIGHT as f64));
+    set(
+        "PYRAMID_TARGET_DOOR_INDEX",
+        JsValue::from_f64(pyr::PYRAMID_TARGET_DOOR_INDEX as f64),
+    );
+    set("DOOR_ANIM_FADE_OUT", JsValue::from_f64(pyr::DOOR_ANIM_FADE_OUT as f64));
+    set("DOOR_ANIM_STAY_OPEN", JsValue::from_f64(pyr::DOOR_ANIM_STAY_OPEN as f64));
+    set("DOOR_ANIM_FADE_IN", JsValue::from_f64(pyr::DOOR_ANIM_FADE_IN as f64));
+    set("COSINE_ALIGNMENT_TO_WIN", JsValue::from_f64(gc::COSINE_ALIGNMENT_TO_WIN as f64));
+    set(
+        "SPOTLIGHT_LIGHT_INTENSITY",
+        JsValue::from_f64(light::SPOTLIGHT_LIGHT_INTENSITY as f64),
+    );
+    set(
+        "GLOBAL_AMBIENT_LIGHT_INTENSITY",
+        JsValue::from_f64(light::GLOBAL_AMBIENT_LIGHT_INTENSITY as f64),
+    );
+    set(
+        "MAX_SPOTLIGHT_INTENSITY",
+        JsValue::from_f64(light::MAX_SPOTLIGHT_INTENSITY as f64),
+    );
+    set("CAMERA_3D_INITIAL_RADIUS", JsValue::from_f64(cam::CAMERA_3D_INITIAL_RADIUS as f64));
+    set("CAMERA_3D_SPEED_ROTATE", JsValue::from_f64(cam::CAMERA_3D_SPEED_ROTATE as f64));
+    set("DEFAULT_CAMERA_Y", JsValue::from_f64(cc::DEFAULT_CAMERA_Y as f64));
+    set(
+        "CAMERA_ROTATION_SENSE_DEFAULT",
+        JsValue::from_f64(cam::CAMERA_ROTATION_SENSE_DEFAULT as f64),
+    );
+    set("N_FACES", JsValue::from_f64(cc::N_FACES as f64));
+    set("N_START_ORIENTS", JsValue::from_f64(cc::N_START_ORIENTS as f64));
+
+    // Per-face arrays (length N_FACES). Editor uses these to populate a new
+    // object's default shape/size/count/color/seed values.
+    let to_f64_arr = |xs: &[f32]| -> JsValue {
+        let a = js_sys::Array::new();
+        for &v in xs { a.push(&JsValue::from_f64(v as f64)); }
+        a.into()
+    };
+    let to_u32_arr = |xs: &[u32]| -> JsValue {
+        let a = js_sys::Array::new();
+        for &v in xs { a.push(&JsValue::from_f64(v as f64)); }
+        a.into()
+    };
+    let to_u64_arr = |xs: &[u64]| -> JsValue {
+        let a = js_sys::Array::new();
+        for &v in xs { a.push(&JsValue::from_f64(v as f64)); }
+        a.into()
+    };
+    let to_i32_arr = |xs: &[i32]| -> JsValue {
+        let a = js_sys::Array::new();
+        for &v in xs { a.push(&JsValue::from_f64(v as f64)); }
+        a.into()
+    };
+    let to_color_arr = |xs: &[[f32; 4]]| -> JsValue {
+        let outer = js_sys::Array::new();
+        for face in xs {
+            let inner = js_sys::Array::new();
+            for &c in face { inner.push(&JsValue::from_f64(c as f64)); }
+            outer.push(&inner);
+        }
+        outer.into()
+    };
+    let to_tex_idx_arr = |xs: &[Texture]| -> JsValue {
+        let a = js_sys::Array::new();
+        for &t in xs { a.push(&JsValue::from_f64(t as u32 as f64)); }
+        a.into()
+    };
+    let to_shape_idx_arr = |xs: &[DecorationShape]| -> JsValue {
+        let a = js_sys::Array::new();
+        for &s in xs { a.push(&JsValue::from_f64(s as u32 as f64)); }
+        a.into()
+    };
+
+    set("PYRAMID_COLORS", to_color_arr(&pyr::PYRAMID_COLORS));
+    set("PYRAMID_TEXTURES", to_tex_idx_arr(&pyr::PYRAMID_TEXTURES));
+    set("PYRAMID_DECORATIONS_COUNT", to_u32_arr(&pyr::PYRAMID_DECORATIONS_COUNT));
+    set("PYRAMID_DECORATIONS_SIZE", to_f64_arr(&pyr::PYRAMID_DECORATIONS_SIZE));
+    set("PYRAMID_DECORATIONS_SHAPE", to_shape_idx_arr(&pyr::PYRAMID_DECORATIONS_SHAPE));
+    set("PYRAMID_DECORATIONS_COLOR", to_color_arr(&pyr::PYRAMID_DECORATIONS_COLOR));
+    set("PYRAMID_DECORATIONS_TEXTURE", to_tex_idx_arr(&pyr::PYRAMID_DECORATIONS_TEXTURE));
+    set("PYRAMID_DECORATIONS_THICKNESS", to_f64_arr(&pyr::PYRAMID_DECORATIONS_THICKNESS));
+    set("PYRAMID_DECORATIONS_ROTATION", to_i32_arr(&pyr::PYRAMID_DECORATIONS_ROTATION));
+    set("DECORATIONS_SEEDS", to_u64_arr(&gc::DECORATIONS_SEEDS));
+
+    obj.into()
 }
 
 // Helper wrapper for WASM side
@@ -182,6 +348,7 @@ impl WebSharedMemory {
         set("render_frame_number", off!(gs.render_frame_number));
         set("elapsed_secs",       off!(gs.elapsed_secs));
         set("render_elapsed_secs", off!(gs.render_elapsed_secs));
+        set("present_elapsed_secs", off!(gs.present_elapsed_secs));
         set("photodiode_white",   off!(gs.photodiode_white));
         set("camera_radius",      off!(gs.camera_radius));
         set("camera_x",           off!(gs.camera_x));
@@ -280,6 +447,7 @@ impl WebSharedMemory {
         set_f64("render_frame_number", def.render_frame_number.load(Relaxed) as f64);
         set_u32("elapsed_secs", def.elapsed_secs.load(Relaxed));
         set_u32("render_elapsed_secs", def.render_elapsed_secs.load(Relaxed));
+        set_u32("present_elapsed_secs", def.present_elapsed_secs.load(Relaxed));
         set_bool("photodiode_white", def.photodiode_white.load(Relaxed));
         set_u32("camera_radius", def.camera_radius.load(Relaxed));
         set_u32("camera_x", def.camera_x.load(Relaxed));

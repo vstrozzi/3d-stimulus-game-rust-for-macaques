@@ -16,6 +16,8 @@ impl NativeSharedMemory {
     /// Must only be called by the game node at startup.
     fn create(name: &str) -> std::io::Result<Self> {
         let size = std::mem::size_of::<SharedMemory>();
+        // truncate is intentionally omitted — see comment below.
+        #[allow(clippy::suspicious_open_options)]
         let file = OpenOptions::new()
             .read(true)
             .write(true)

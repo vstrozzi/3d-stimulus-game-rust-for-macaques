@@ -3,8 +3,6 @@
 pub mod game_constants {
     pub const REFRESH_RATE_HZ: f64 = 60.0; // Hz
 
-    pub const UNLOCK_SOL_NR: usize = 3; // Number of consecutive correct disalignments to unlock
-
     // Cosine alignment with door to win
     pub const COSINE_ALIGNMENT_TO_WIN: f32 = 0.95; // approx ~8 degrees
 
@@ -23,9 +21,6 @@ pub mod game_constants {
     // Progress bar dots constants
     pub const PROGRESS_BAR_WRAP_AROUND_SIZE: u32 = 20;
     pub const PROGRESS_BAR_DOTS_SIZE: f32 = 20.0;
-
-    // Loading screen duration in seconds (time for scene to render/stabilize)
-    pub const LOADING_DURATION_SECS: f32 = 0.3;
 }
 
 /// 3D camera
@@ -156,6 +151,84 @@ pub mod lighting_constants {
     pub const MAX_SPOTLIGHT_INTENSITY: f32 = 50_000_000.0;
 }
 
+
+/// Constants shared between the Python and JS controllers. Single source of
+/// truth — both controllers import these via PyO3 / wasm-bindgen.
+pub mod controller_constants {
+    /// SHM segment name used by the native game and the Python controller.
+    pub const SHM_NAME: &str = "monkey_game";
+
+    /// Controller→game poll period.
+    pub const POLLING_RATE_S: f32 = 0.001;
+
+    /// If the game stops pushing frames for this long, the controller resyncs.
+    pub const GAME_UNRESPONSIVENESS_THRESHOLD_S: f32 = 3.0;
+
+    /// Cosine threshold (≈ cos(π/6)) above which the "check" animation shows
+    /// a colored hint instead of plain white.
+    pub const COLOR_SUGGESTION_COS_SIM: f32 = 0.8660254;
+
+    /// Default camera Y when a level doesn't override it.
+    pub const DEFAULT_CAMERA_Y: f32 = 1.0;
+
+    /// Number of pyramid faces (and chains per level).
+    pub const N_FACES: usize = 3;
+
+    /// Color channels per face (RGBA).
+    pub const N_COLOR_CHANNELS: usize = 4;
+
+    /// Flat color array length = N_FACES * N_COLOR_CHANNELS.
+    pub const N_COLOR_FLOATS: usize = N_FACES * N_COLOR_CHANNELS;
+
+    /// Number of evenly-spaced start orientations sampled per trial
+    /// (one per door of the hexagonal base = 2 × N_FACES).
+    pub const N_START_ORIENTS: usize = N_FACES * 2;
+
+    /// SHM-direct state fields written into each frame entry of a trial log.
+    /// Both the Python and JS controllers consume this list; the verifier
+    /// reads the same keys. Add/rename a field here, both sides pick it up.
+    pub const LOGGED_STATE_FIELDS: &[&str] = &[
+        "frame_number",
+        "render_frame_number",
+        "present_elapsed_secs",
+        "photodiode_white",
+        "camera_radius",
+        "camera_x",
+        "camera_y",
+        "camera_z",
+        "attempts",
+        "current_alignment",
+        "current_angle",
+        "is_animating",
+        "is_blank",
+        "is_rendering_stopped",
+    ];
+
+    /// Trial-config keys consumed only by the controller (never written to SHM).
+    pub const CONTROLLER_META_FIELDS: &[&str] = &[
+        "nr_attempts_to_win",
+        "nr_attempts_suggestion",
+        "nr_attempts_to_retroceed",
+        "elapsed_time_to_win",
+        "elapsed_time_to_retroceed",
+        "start_trial",
+        "camera_y",
+    ];
+
+    /// FSM state names. Used as string labels in logs and for cross-language
+    /// consistency assertions.
+    pub const FSM_STATES: &[&str] = &[
+        "INIT",
+        "WAITING_FOR_START",
+        "PLAYING",
+        "WAITING_ANIMATION_START",
+        "WAITING_ANIMATION_END",
+        "TRIAL_COMPLETE",
+    ];
+
+    /// Trial-outcome labels.
+    pub const PROCEEDING_VALUES: &[&str] = &["ADVANCE", "STAY", "RETROCEED"];
+}
 
 /// Shared timing constants for stimulus experiments.
 pub mod timing {

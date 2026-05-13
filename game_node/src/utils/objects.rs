@@ -36,21 +36,12 @@ pub struct DecorationSet {
 }
 
 /// Resource for the current conditions the system across trials
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct GameConditions{
     pub stop_rendering: bool,
     /// True once all texture assets for the current trial are fully loaded on the GPU.
     /// Reset to false on every reset command; the controller gates space-to-start on this.
     pub is_scene_ready: bool,
-}
-
-impl Default for GameConditions {
-    fn default() -> Self {
-        GameConditions {
-            stop_rendering: false,
-            is_scene_ready: false,
-        }
-    }
 }
 
 /// Resource current winning doors and animation state

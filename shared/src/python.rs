@@ -1,4 +1,4 @@
-//! Python bindings for shared memroy of native.rs
+//! Python bindings for shared memory of native.rs
 use crate::{SharedMemoryHandle, open_shared_memory, SharedGameState, RING_BUFFER_SIZE};
 use std::sync::atomic::Ordering;
 use pyo3::exceptions::PyValueError;
@@ -193,9 +193,11 @@ impl SharedMemoryWrapper {
         frame_number: u64,
         elapsed_secs: f32,
         camera_radius: f32,
-        camera_position: [f32; 3],
+        camera_x: f32,
+        camera_y: f32,
+        camera_z: f32,
         attempts: u32,
-        cosine_alignment: f32,
+        current_alignment: f32,
         current_angle: f32,
         is_animating: bool,
         is_blank: bool,
@@ -268,11 +270,11 @@ impl SharedMemoryWrapper {
         gs.frame_number.store(frame_number, Ordering::Relaxed);
         gs.elapsed_secs.store(elapsed_secs.to_bits(), Ordering::Relaxed);
         gs.camera_radius.store(camera_radius.to_bits(), Ordering::Relaxed);
-        gs.camera_x.store(camera_position[0].to_bits(), Ordering::Relaxed);
-        gs.camera_y.store(camera_position[1].to_bits(), Ordering::Relaxed);
-        gs.camera_z.store(camera_position[2].to_bits(), Ordering::Relaxed);
+        gs.camera_x.store(camera_x.to_bits(), Ordering::Relaxed);
+        gs.camera_y.store(camera_y.to_bits(), Ordering::Relaxed);
+        gs.camera_z.store(camera_z.to_bits(), Ordering::Relaxed);
         gs.attempts.store(attempts, Ordering::Relaxed);
-        gs.current_alignment.store(cosine_alignment.to_bits(), Ordering::Relaxed);
+        gs.current_alignment.store(current_alignment.to_bits(), Ordering::Relaxed);
         gs.current_angle.store(current_angle.to_bits(), Ordering::Relaxed);
         gs.is_animating.store(is_animating, Ordering::Relaxed);
         gs.is_blank.store(is_blank, Ordering::Relaxed);
@@ -374,15 +376,14 @@ impl SharedMemoryWrapper {
             dict.set_item("render_frame_number", gs.render_frame_number.load(Ordering::Relaxed))?;
             dict.set_item("elapsed_secs", f32::from_bits(gs.elapsed_secs.load(Ordering::Relaxed)))?;
             dict.set_item("render_elapsed_secs", f32::from_bits(gs.render_elapsed_secs.load(Ordering::Relaxed)))?;
+            dict.set_item("present_elapsed_secs", f32::from_bits(gs.present_elapsed_secs.load(Ordering::Relaxed)))?;
             dict.set_item("photodiode_white", gs.photodiode_white.load(Ordering::Relaxed))?;
             dict.set_item("camera_radius", f32::from_bits(gs.camera_radius.load(Ordering::Relaxed)))?;
-            dict.set_item("camera_position", vec![
-                f32::from_bits(gs.camera_x.load(Ordering::Relaxed)),
-                f32::from_bits(gs.camera_y.load(Ordering::Relaxed)),
-                f32::from_bits(gs.camera_z.load(Ordering::Relaxed)),
-            ])?;
+            dict.set_item("camera_x", f32::from_bits(gs.camera_x.load(Ordering::Relaxed)))?;
+            dict.set_item("camera_y", f32::from_bits(gs.camera_y.load(Ordering::Relaxed)))?;
+            dict.set_item("camera_z", f32::from_bits(gs.camera_z.load(Ordering::Relaxed)))?;
             dict.set_item("attempts", gs.attempts.load(Ordering::Relaxed))?;
-            dict.set_item("cosine_alignment", f32::from_bits(gs.current_alignment.load(Ordering::Relaxed)))?;
+            dict.set_item("current_alignment", f32::from_bits(gs.current_alignment.load(Ordering::Relaxed)))?;
             dict.set_item("current_angle", f32::from_bits(gs.current_angle.load(Ordering::Relaxed)))?;
             dict.set_item("is_animating", gs.is_animating.load(Ordering::Relaxed))?;
             dict.set_item("is_blank", gs.is_blank.load(Ordering::Relaxed))?;
@@ -435,6 +436,22 @@ impl SharedMemoryWrapper {
         // camera_3d_constants
         use crate::constants::camera_3d_constants;
         m.add("CAMERA_3D_INITIAL_RADIUS", camera_3d_constants::CAMERA_3D_INITIAL_RADIUS)?;
+
+        // controller_constants — single source of truth shared with controller_main.js
+        use crate::constants::controller_constants as cc;
+        m.add("SHM_NAME", cc::SHM_NAME)?;
+        m.add("POLLING_RATE_S", cc::POLLING_RATE_S)?;
+        m.add("GAME_UNRESPONSIVENESS_THRESHOLD_S", cc::GAME_UNRESPONSIVENESS_THRESHOLD_S)?;
+        m.add("COLOR_SUGGESTION_COS_SIM", cc::COLOR_SUGGESTION_COS_SIM)?;
+        m.add("DEFAULT_CAMERA_Y", cc::DEFAULT_CAMERA_Y)?;
+        m.add("N_FACES", cc::N_FACES)?;
+        m.add("N_COLOR_CHANNELS", cc::N_COLOR_CHANNELS)?;
+        m.add("N_COLOR_FLOATS", cc::N_COLOR_FLOATS)?;
+        m.add("N_START_ORIENTS", cc::N_START_ORIENTS)?;
+        m.add("LOGGED_STATE_FIELDS", cc::LOGGED_STATE_FIELDS.to_vec())?;
+        m.add("CONTROLLER_META_FIELDS", cc::CONTROLLER_META_FIELDS.to_vec())?;
+        m.add("FSM_STATES", cc::FSM_STATES.to_vec())?;
+        m.add("PROCEEDING_VALUES", cc::PROCEEDING_VALUES.to_vec())?;
 
         Ok(())
     }

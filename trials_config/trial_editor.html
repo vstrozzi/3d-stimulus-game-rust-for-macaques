@@ -162,8 +162,6 @@
     border-radius: 10px;
     overflow: hidden;
   }
-  .obj-card.chain-a { border-color: var(--chain-a); }
-  .obj-card.chain-b { border-color: var(--chain-b); }
   .obj-header {
     display: flex;
     align-items: center;
@@ -172,23 +170,12 @@
     font-weight: 700;
     font-size: 13px;
   }
-  .obj-header.chain-a { background: rgba(74,143,212,0.15); color: var(--chain-a); }
-  .obj-header.chain-b { background: rgba(212,136,74,0.15); color: var(--chain-b); }
   .obj-header label { font-size: 12px; color: var(--text-dim); margin-left: auto; }
   .obj-header input[type=number] {
     width: 48px; padding: 3px 5px; font-size: 12px;
     background: var(--surface2); border: 1px solid var(--border);
     color: var(--text); border-radius: 4px;
   }
-
-  /* ── Type badge ── */
-  .type-badge {
-    font-size: 10px; padding: 2px 7px; border-radius: 10px;
-    font-weight: 700; text-transform: uppercase; letter-spacing: .4px;
-  }
-  .type-1 { background: rgba(74,143,212,0.25); color: var(--chain-a); }
-  .type-2 { background: rgba(212,136,74,0.25); color: var(--chain-b); }
-  .type-desc { font-size: 11px; color: var(--text-dim); font-weight: 400; margin-left: 4px; }
 
   /* ── Read-only span for computed values ── */
   .readonly-val {
@@ -388,7 +375,6 @@
     transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 </style>
-</style>
 </head>
 <body>
 
@@ -413,68 +399,92 @@
   </div>
 </div>
 
-<script>
+<script type="module">
 // ================================================================
-// Constants — parsed from shared/src/lib.rs (single source of truth)
+// Constants — loaded from the shared Rust library (single source of truth)
 // ================================================================
-// To regenerate: open shared/src/lib.rs, find `pub enum Texture` and
-// `pub enum DecorationShape`, copy the variant names in order.
+// editor_constants() and controller_constants() come from
+// shared/src/web.rs via wasm-bindgen. Same source as controller_main.js,
+// so renaming a Texture variant in Rust automatically updates the editor.
 //
 // Texture previews load from game_node/assets/textures/{name}-JPG/bevy_ready/color.png
-// If opening this file from disk (file://), browser security may block
-// image loading. Serve via a local HTTP server for previews to work:
-//   python -m http.server 8000   (from repo root)
+// Serve over HTTP for previews to work:  python -m http.server 8000
 
-// Source of truth: shared/src/lib.rs  enum Texture  (repr(u32), 0-indexed)
-const TEXTURES = [
-  "Bark001_1K",                  // 0
-  "ChristmasTreeOrnament021_1K", // 1
-  "Fabric079_1K",                // 2
-  "Grass004_1K",                 // 3
-  "Marble016_1K",                // 4
-  "Metal061B_1K",                // 5
-  "PavingStones146_1K",          // 6
-  "Rock024_1K",                  // 7
-  "Rock035_1K",                  // 8
-  "Rope001_1K",                  // 9
-  "Tiles017_1K",                 // 10
-  "WoodFloor057_1K",             // 11
-];
+import init, {
+  editor_constants,
+  controller_constants,
+} from "../game_node/pkg/game_node.js";
 
-// Source of truth: shared/src/lib.rs  enum DecorationShape  (repr(u32), 0-indexed).
-// Append-only — never renumber; trials.jsonl files persist these indices.
-const SHAPES = [
-  "Circle", "Square", "Star", "Triangle",
-  "Rectangle", "Oval", "Pentagon", "Kite", "Rhombus", "Trapezoid", "Semicircle",
-];
+// Populated on init() — used throughout the editor.
+let TEXTURES = null;          // enum Texture variants, by repr
+let SHAPES = null;            // enum DecorationShape variants, by repr
+let N_FACES = null;           // pyramid faces (= chains per object)
+let N_DOORS = null;           // = N_FACES * 2 (hexagonal base)
+let FACE_INDICES = null;      // [0, 1, …, N_FACES - 1]
+let START_ORIENTS = null;
+let PYRAMID_DEFAULTS = null;  // base_radius, height, fade-out/in/stay, colors, etc.
+let CAMERA_DEFAULTS = null;   // initial_radius, default_y, speed_rotate, rotation_sense
+let LIGHTING_DEFAULTS = null; // spotlight/ambient intensities
+let GAME_DEFAULTS = null;     // cosine_alignment_to_win, decorations_seeds
+let EDITOR_FACE_TEX_IDX = 0;        // default face texture index (resolved by name)
+let EDITOR_DECORATION_TEX_IDX = 0;  // default decoration texture index (resolved by name)
+
+// Editor starting textures, resolved against TEXTURES at init. If a texture
+// is renamed/removed in Rust, the lookup falls back to 0 and warns.
+const EDITOR_DEFAULT_FACE_TEXTURE_NAME = "WoodFloor057_1K";
+const EDITOR_DEFAULT_DECORATION_TEXTURE_NAME = "PavingStones146_1K";
+
+// Editor-only display glyphs — no Rust equivalent. Order must mirror SHAPES.
 const SHAPE_ICONS = ["●", "■", "★", "▲", "▭", "⬭", "⬠", "◆", "◇", "⏢", "◖"];
 
 // Relative path from this HTML file to texture assets
 const TEXTURE_ASSET_BASE = "../game_node/assets/textures";
 
-// Six evenly-spaced start orientations (one per door of the hexagonal base).
-// These are valid values for start_orient in fixed; the controller samples randomly.
-const START_ORIENTS = Array.from({length: 6}, (_, k) => +(k * 2 * Math.PI / 6).toFixed(5));
+// Default trials file — fetched at startup, used as the export filename
+// until the user imports a differently-named .jsonl.
+const TRIALS_FILENAME = "trials.jsonl";
 
 // ================================================================
-// Defaults
+// Defaults — derived from Rust constants where one exists; remaining
+// values (uniform 20/0.2/0.05 per face etc.) are editor-UX choices.
 // ================================================================
+// Editor convention: object 0 → "type1" (door 2), object 1 → "type2" (door 5).
+// These door indices are an editor concept, not a game constant.
+const EDITOR_TYPE1_DOOR = 2;
+const EDITOR_TYPE2_DOOR = 5;
+
+// Editor UX starting values for a per-face slot. Game invariants come from
+// Rust; everything in this block is an editor-only convenience default.
+const EDITOR_DEFAULT_FACE_COLOR = [0.5, 0.5, 0.5, 1];
+const EDITOR_DEFAULT_DECORATION_COUNT = 20;
+const EDITOR_DEFAULT_DECORATION_SIZE = 0.2;
+const EDITOR_DEFAULT_DECORATION_THICKNESS = 0.05;
+const EDITOR_DEFAULT_DECORATION_SHAPE = 0;     // index into SHAPES (Circle)
+const EDITOR_DEFAULT_DECORATION_ROTATION = 0;  // 0 = fixed, -1 = random
+
+function repeat(value, n) {
+  return Array.from({ length: n }, () => (Array.isArray(value) ? value.slice() : value));
+}
+
 function defaultObject(chainIdx) {
   return {
-    _type: chainIdx === 0 ? 'type1' : 'type2', // <-- Added explicit type tracking
-    target_door: chainIdx === 0 ? 2 : 5,
-    colors: [[0,0,0,1],[0.5,0.5,0.5,1],[0.5,0.5,0.5,1]],
-    textures: [11, 11, 11],
-    decorations_seeds: [69, 70, 71],
-    decorations_count: [20, 20, 20],
-    decorations_size: [0.2, 0.2, 0.2],
-    decorations_thickness: [0.05, 0.05, 0.05],
-    decorations_texture: [6, 6, 6],
-    decorations_shape: [0, 0, 0],
-    decorations_color: [[1,1,0,1],[1,0,1,1],[0,1,1,1]],
+    _type: chainIdx === 0 ? 'type1' : 'type2',
+    target_door: chainIdx === 0 ? EDITOR_TYPE1_DOOR : EDITOR_TYPE2_DOOR,
+    // Neutral starting palette so the user customises rather than inheriting
+    // the game's red/green/blue defaults from PYRAMID_COLORS. Face 0 stays
+    // dark so the "shared" face stands out from the mirrors.
+    colors: [[0,0,0,1], ...repeat(EDITOR_DEFAULT_FACE_COLOR, N_FACES - 1)],
+    textures: repeat(EDITOR_FACE_TEX_IDX, N_FACES),
+    decorations_seeds: Array.from(GAME_DEFAULTS.decorations_seeds),
+    decorations_count: repeat(EDITOR_DEFAULT_DECORATION_COUNT, N_FACES),
+    decorations_size: repeat(EDITOR_DEFAULT_DECORATION_SIZE, N_FACES),
+    decorations_thickness: repeat(EDITOR_DEFAULT_DECORATION_THICKNESS, N_FACES),
+    decorations_texture: repeat(EDITOR_DECORATION_TEX_IDX, N_FACES),
+    decorations_shape: repeat(EDITOR_DEFAULT_DECORATION_SHAPE, N_FACES),
+    decorations_color: PYRAMID_DEFAULTS.decorations_color.map(c => Array.from(c)),
     // Per-face rotation in degrees. -1 = random rotation per decoration.
     // Multiples of 360 = "no rotation" (treated identically to 0).
-    decorations_rotation: [0, 0, 0],
+    decorations_rotation: repeat(EDITOR_DEFAULT_DECORATION_ROTATION, N_FACES),
   };
 }
 
@@ -498,19 +508,19 @@ function defaultLevel(nObjects = 2) {
       pr_switching_chain: 1 / nObjects,
       start_orient: 0.0,
       start_trial: 0,
-      base_radius: 2.5,
-      height: 4.0,
-      cosine_alignment_threshold: 0.95,
-      door_anim_fade_out: 0.5,
-      door_anim_stay_open: 0.5,
-      door_anim_fade_in: 0.5,
-      main_spotlight_intensity: 50000000,
-      ambient_brightness: 100,
-      max_spotlight_intensity: 50000000,
-      camera_radius: 15.0,
-      camera_y: 1.0,
-      camera_speed_rotate: 0.05,
-      camera_rotation_sense: 1, // +1 = default, -1 = inverted left/right
+      base_radius: PYRAMID_DEFAULTS.base_radius,
+      height: PYRAMID_DEFAULTS.height,
+      cosine_alignment_threshold: GAME_DEFAULTS.cosine_alignment_to_win,
+      door_anim_fade_out: PYRAMID_DEFAULTS.door_anim_fade_out,
+      door_anim_stay_open: PYRAMID_DEFAULTS.door_anim_stay_open,
+      door_anim_fade_in: PYRAMID_DEFAULTS.door_anim_fade_in,
+      main_spotlight_intensity: LIGHTING_DEFAULTS.spotlight_intensity,
+      ambient_brightness: LIGHTING_DEFAULTS.ambient_intensity,
+      max_spotlight_intensity: LIGHTING_DEFAULTS.max_spotlight_intensity,
+      camera_radius: CAMERA_DEFAULTS.initial_radius,
+      camera_y: CAMERA_DEFAULTS.default_y,
+      camera_speed_rotate: CAMERA_DEFAULTS.speed_rotate,
+      camera_rotation_sense: CAMERA_DEFAULTS.rotation_sense,
     },
   };
   enforceLevel(lv);
@@ -522,7 +532,7 @@ function defaultLevel(nObjects = 2) {
 // ================================================================
 let levels = [];
 let sel = -1;
-let fileName = 'trials.jsonl';
+let fileName = TRIALS_FILENAME;
 
 // ================================================================
 // Constraint enforcement
@@ -548,10 +558,10 @@ function enforceLevel(lv) {
   if (!lv.objects || lv.objects.length < 1) return;
   const f = lv.fixed;
   if (f.start_trial == null) f.start_trial = 0;
-  if (f.camera_radius == null) f.camera_radius = 15.0;
-  if (f.camera_y == null) f.camera_y = 1.0;
-  if (f.camera_speed_rotate == null) f.camera_speed_rotate = 0.05;
-  if (f.camera_rotation_sense == null) f.camera_rotation_sense = 1;
+  if (f.camera_radius == null) f.camera_radius = CAMERA_DEFAULTS.initial_radius;
+  if (f.camera_y == null) f.camera_y = CAMERA_DEFAULTS.default_y;
+  if (f.camera_speed_rotate == null) f.camera_speed_rotate = CAMERA_DEFAULTS.speed_rotate;
+  if (f.camera_rotation_sense == null) f.camera_rotation_sense = CAMERA_DEFAULTS.rotation_sense;
   f.pr_switching_chain = 1 / lv.objects.length;
   f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));
 
@@ -560,7 +570,9 @@ function enforceLevel(lv) {
     const obj = lv.objects[i];
 
     // Backfill per-face fields added in later schema versions.
-    if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
+    if (!Array.isArray(obj.decorations_rotation)) {
+      obj.decorations_rotation = repeat(EDITOR_DEFAULT_DECORATION_ROTATION, N_FACES);
+    }
 
     // _type is now persisted in the JSONL. For older files without it, fall
     // back to inferring from `target_door`. This used to clobber custom
@@ -568,7 +580,7 @@ function enforceLevel(lv) {
     // runs when `_type` is genuinely missing.
     if (!obj._type) {
       const td = obj.target_door;
-      obj._type = td === 2 ? 'type1' : (td === 5 ? 'type2' : 'custom');
+      obj._type = td === EDITOR_TYPE1_DOOR ? 'type1' : (td === EDITOR_TYPE2_DOOR ? 'type2' : 'custom');
     }
 
     // Find master shared object
@@ -598,7 +610,7 @@ function pushFace0ToShared(sourceCi) {
   const srcObj = lv.objects[sourceCi];
   for (let i = 0; i < lv.objects.length; i++) {
     if (i === sourceCi) continue;
-    const isOtherCustom = lv.objects[i].target_door !== 2 && lv.objects[i].target_door !== 5;
+    const isOtherCustom = lv.objects[i].target_door !== EDITOR_TYPE1_DOOR && lv.objects[i].target_door !== EDITOR_TYPE2_DOOR;
     if (!isOtherCustom) {
       copyFace(srcObj, lv.objects[i], 0, 0);
     }
@@ -742,20 +754,19 @@ function renderLevelEditor() {
 function renderObject(obj, ci, N) {
   const CHAIN_COLORS = ['var(--chain-a)', 'var(--chain-b)', '#a06cd5', '#5cc9a7', '#e8a735', '#e05555'];
   const colorVar = CHAIN_COLORS[ci % CHAIN_COLORS.length];
-  const cls    = ci === 0 ? 'chain-a' : 'chain-b';
 
   const td = obj.target_door;
-  const doorSelVal = obj._type || (td === 2 ? 'type1' : td === 5 ? 'type2' : 'custom');
+  const doorSelVal = obj._type || (td === EDITOR_TYPE1_DOOR ? 'type1' : td === EDITOR_TYPE2_DOOR ? 'type2' : 'custom');
   const isCustom = doorSelVal === 'custom';
 
   const doorSelect = `<span class="target-door-wrap">
     <select class="door-sel" data-ci="${ci}">
-      <option value="type1"${doorSelVal === 'type1' ? ' selected' : ''}>Type 1 (door 2)</option>
-      <option value="type2"${doorSelVal === 'type2' ? ' selected' : ''}>Type 2 (door 5)</option>
+      <option value="type1"${doorSelVal === 'type1' ? ' selected' : ''}>Type 1 (door ${EDITOR_TYPE1_DOOR})</option>
+      <option value="type2"${doorSelVal === 'type2' ? ' selected' : ''}>Type 2 (door ${EDITOR_TYPE2_DOOR})</option>
       <option value="custom"${doorSelVal === 'custom' ? ' selected' : ''}>Custom…</option>
     </select>
     <span class="custom-door-label" style="display:${isCustom ? 'inline-flex' : 'none'}; align-items:center; gap:3px; font-size:11px; color:var(--text-dim);">
-      Door <input type="number" class="door-custom-in" data-ci="${ci}" min="0" max="5" value="${td}">
+      Door <input type="number" class="door-custom-in" data-ci="${ci}" min="0" max="${N_DOORS - 1}" value="${td}">
     </span>
     <span class="obj-ctrl-btns">
       ${ci > 0 ? `<button data-omove="${ci}" data-dir="-1" title="Move Up">↑</button>` : ''}
@@ -765,8 +776,8 @@ function renderObject(obj, ci, N) {
   </span>`;
 
   return `
-  <div class="obj-card ${cls}" style="border-color:${colorVar}">
-    <div class="obj-header ${cls}" style="background:color-mix(in srgb, ${colorVar} 15%, transparent);color:${colorVar}">
+  <div class="obj-card" style="border-color:${colorVar}">
+    <div class="obj-header" style="background:color-mix(in srgb, ${colorVar} 15%, transparent);color:${colorVar}">
       <span>Object ${ci}</span>
       ${doorSelect}
     </div>
@@ -787,7 +798,7 @@ function renderObject(obj, ci, N) {
           <th>Dec Color</th>
         </tr></thead>
         <tbody>
-          ${[0, 1, 2].map(fi => renderFaceRow(obj, ci, fi)).join('')}
+          ${FACE_INDICES.map(fi => renderFaceRow(obj, ci, fi)).join('')}
         </tbody>
       </table>
     </div>
@@ -914,15 +925,15 @@ function renderTrials(trials) {
 // Render — settings (was "Fixed Settings")
 // ================================================================
 function renderFixed(fixed, lv) {
-  // start_orient: display the 6 valid door angles as read-only info (not editable).
+  // start_orient: display every valid door angle as read-only info (not editable).
   // The controller randomises orientation at runtime from this set.
+  const stepDeg = 360 / START_ORIENTS.length;
   const orientDisplay = START_ORIENTS.map((rad, k) =>
-    `${k * 60}°`
+    `${Math.round(k * stepDeg)}°`
   ).join(' · ');
 
   const N = lv ? lv.objects.length : 2;
   const prVal = (1 / N);
-  const maxTrial = lv ? Math.max(0, lv.trials.length - 1) : 0;
 
   const numRow = (label, field, val, step, min = '') =>
     `<div class="fixed-row">
@@ -1092,10 +1103,10 @@ function attachEvents() {
       levels[sel].objects[ci]._type = val; // Store explicit type
       
       if (val === 'type1') {
-        levels[sel].objects[ci].target_door = 2;
+        levels[sel].objects[ci].target_door = EDITOR_TYPE1_DOOR;
       } else if (val === 'type2') {
-        levels[sel].objects[ci].target_door = 5;
-      } 
+        levels[sel].objects[ci].target_door = EDITOR_TYPE2_DOOR;
+      }
       // If custom, leave the target_door exactly as whatever the user sets it to!
       
       enforceLevel(levels[sel]); 
@@ -1106,7 +1117,7 @@ function attachEvents() {
   editor.querySelectorAll('.door-custom-in').forEach(el => {
     el.addEventListener('change', e => { 
       const ci = +e.target.dataset.ci;
-      levels[sel].objects[ci].target_door = Math.max(0, Math.min(5, Math.round(+e.target.value)));
+      levels[sel].objects[ci].target_door = Math.max(0, Math.min(N_DOORS - 1, Math.round(+e.target.value)));
       enforceLevel(levels[sel]);
       renderAll(); 
     });
@@ -1403,11 +1414,69 @@ document.getElementById('levelList').addEventListener('click', e => {
 });
 
 // ================================================================
-// Init — auto-load trials.jsonl on page open
+// Init — load WASM constants, then auto-load trials.jsonl
 // ================================================================
-(async function init() {
+(async function bootstrap() {
+  // 1. Load Rust-side constants (shapes, textures, defaults). Both
+  //    init() and the two getter functions are pure — they don't start
+  //    Bevy. controller_main.js loads the same module.
+  await init();
+  const ec = editor_constants();
+  const cc = controller_constants();
+
+  TEXTURES = ec.TEXTURE_NAMES;
+  SHAPES = ec.SHAPE_NAMES;
+  N_FACES = cc.N_FACES;
+  N_DOORS = N_FACES * 2;
+  FACE_INDICES = Array.from({ length: N_FACES }, (_, i) => i);
+  START_ORIENTS = Array.from({ length: cc.N_START_ORIENTS },
+                              (_, k) => +(k * 2 * Math.PI / cc.N_START_ORIENTS).toFixed(5));
+
+  // Resolve editor's default texture choices by name so reordering the
+  // Rust enum doesn't silently break the defaults. Falls back to index 0.
+  const resolveTex = (name) => {
+    const idx = Array.from(TEXTURES).indexOf(name);
+    if (idx < 0) {
+      console.warn(`Editor default texture "${name}" not found in TEXTURES; using index 0.`);
+      return 0;
+    }
+    return idx;
+  };
+  EDITOR_FACE_TEX_IDX = resolveTex(EDITOR_DEFAULT_FACE_TEXTURE_NAME);
+  EDITOR_DECORATION_TEX_IDX = resolveTex(EDITOR_DEFAULT_DECORATION_TEXTURE_NAME);
+  PYRAMID_DEFAULTS = {
+    base_radius: ec.PYRAMID_BASE_RADIUS,
+    height: ec.PYRAMID_HEIGHT,
+    door_anim_fade_out: ec.DOOR_ANIM_FADE_OUT,
+    door_anim_stay_open: ec.DOOR_ANIM_STAY_OPEN,
+    door_anim_fade_in: ec.DOOR_ANIM_FADE_IN,
+    decorations_color: ec.PYRAMID_DECORATIONS_COLOR,
+  };
+  CAMERA_DEFAULTS = {
+    initial_radius: ec.CAMERA_3D_INITIAL_RADIUS,
+    default_y: ec.DEFAULT_CAMERA_Y,
+    speed_rotate: ec.CAMERA_3D_SPEED_ROTATE,
+    rotation_sense: ec.CAMERA_ROTATION_SENSE_DEFAULT,
+  };
+  LIGHTING_DEFAULTS = {
+    spotlight_intensity: ec.SPOTLIGHT_LIGHT_INTENSITY,
+    ambient_intensity: ec.GLOBAL_AMBIENT_LIGHT_INTENSITY,
+    max_spotlight_intensity: ec.MAX_SPOTLIGHT_INTENSITY,
+  };
+  GAME_DEFAULTS = {
+    cosine_alignment_to_win: ec.COSINE_ALIGNMENT_TO_WIN,
+    decorations_seeds: ec.DECORATIONS_SEEDS,
+  };
+
+  // Sanity check — drift here means SHAPE_ICONS got out of sync with the Rust
+  // DecorationShape enum. Add an icon when you add a variant.
+  if (SHAPE_ICONS.length !== SHAPES.length) {
+    console.warn(`SHAPE_ICONS (${SHAPE_ICONS.length}) does not match SHAPES (${SHAPES.length}); add a glyph in trial_editor.html.`);
+  }
+
+  // 2. Auto-load trials file
   try {
-    const resp = await fetch('./trials.jsonl');
+    const resp = await fetch(`./${TRIALS_FILENAME}`);
     if (resp.ok) {
       const text = await resp.text();
       levels = text.split('\n')
@@ -1418,11 +1487,11 @@ document.getElementById('levelList').addEventListener('click', e => {
           return lv;
         });
       sel = levels.length > 0 ? 0 : -1;
-      fileName = 'trials.jsonl';
-      console.log(`Auto-loaded ${levels.length} levels from trials.jsonl`);
+      fileName = TRIALS_FILENAME;
+      console.log(`Auto-loaded ${levels.length} levels from ${TRIALS_FILENAME}`);
     }
   } catch (e) {
-    console.log('No trials.jsonl found, starting empty.', e);
+    console.log(`No ${TRIALS_FILENAME} found, starting empty.`, e);
   }
   renderAll();
 })();

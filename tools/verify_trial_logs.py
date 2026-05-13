@@ -293,6 +293,23 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     times = [f.present_elapsed_secs for f in trial.frames]
     angles = [f.current_angle for f in trial.frames]
 
+    # Find animation intervals and attempt indices for annotations
+    anim_intervals = []
+    anim_start = None
+    for f in trial.frames:
+        if f.is_animating and anim_start is None:
+            anim_start = f.present_elapsed_secs
+        elif not f.is_animating and anim_start is not None:
+            anim_intervals.append((anim_start, f.present_elapsed_secs))
+            anim_start = None
+    if anim_start is not None and trial.frames:
+        anim_intervals.append((anim_start, trial.frames[-1].present_elapsed_secs))
+
+    attempt_indices = []
+    for i in range(1, len(trial.frames)):
+        if trial.frames[i].attempts > trial.frames[i - 1].attempts:
+            attempt_indices.append(i)
+
     # ── Plot 1: Camera angle vs target over time ─────────────────────────────
     ax1 = axes[0, 0]
     ax1.plot(times, angles, linewidth=0.8, color="#2196F3", label="current_angle (rad)")
@@ -302,6 +319,15 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
         ax1.axhline(thresh_angle, color="#4CAF50", linestyle="--", linewidth=1,
                      label=f"cos_threshold → {thresh_angle:.3f} rad")
         ax1.axhline(-thresh_angle, color="#4CAF50", linestyle="--", linewidth=1)
+    
+    # Annotate animations and checked attempts
+    for i, (start, end) in enumerate(anim_intervals):
+        ax1.axvspan(start, end, color='green', alpha=0.15, label="animation" if i == 0 else "")
+    if attempt_indices:
+        a_t = [times[i] for i in attempt_indices]
+        a_y = [angles[i] for i in attempt_indices]
+        ax1.scatter(a_t, a_y, color='red', marker='o', s=30, zorder=5, label="checked attempt")
+
     ax1.set_xlabel("present_elapsed_secs (s)")
     ax1.set_ylabel("current_angle (rad)")
     ax1.set_title("Camera Angle Trajectory")
@@ -333,6 +359,20 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
         ax3.plot(fps_times, fps_vals, linewidth=0.5, color="#9C27B0", alpha=0.7)
         ax3.axhline(60, color="#4CAF50", linestyle="--", linewidth=1, label="60 FPS target")
         ax3.set_ylim(0, max(120, max(fps_vals) * 1.1) if fps_vals else 120)
+        
+        # Annotate animations and checked attempts
+        for i, (start, end) in enumerate(anim_intervals):
+            ax3.axvspan(start, end, color='green', alpha=0.15, label="animation" if i == 0 else "")
+        if attempt_indices:
+            a_t = []
+            a_y = []
+            for i in attempt_indices:
+                if i >= 1 and (i - 1) < len(fps_vals):
+                    a_t.append(times[i])
+                    a_y.append(fps_vals[i - 1])
+            if a_t:
+                ax3.scatter(a_t, a_y, color='red', marker='o', s=30, zorder=5, label="checked attempt")
+
         ax3.set_xlabel("present_elapsed_secs (s)")
         ax3.set_ylabel("FPS")
         ax3.set_title(f"Instantaneous FPS (avg={stats.avg_fps:.1f})")
@@ -347,8 +387,20 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     ax4 = axes[1, 1]
     drift = _active_drift_series(trial.frames)
     if drift:
-        ax4.plot(times, drift, linewidth=0.8, color="#F44336")
+        ax4.plot(times, drift, linewidth=0.8, color="#F44336", label="active-time drift")
         ax4.axhline(0, color="#888", linestyle=":", linewidth=0.8)
+        
+        # Annotate animations and checked attempts
+        for i, (start, end) in enumerate(anim_intervals):
+            ax4.axvspan(start, end, color='green', alpha=0.15, label="animation" if i == 0 else "")
+        if attempt_indices:
+            a_t = [times[i] for i in attempt_indices]
+            a_y = [drift[i] for i in attempt_indices]
+            ax4.scatter(a_t, a_y, color='red', marker='o', s=30, zorder=5, label="checked attempt")
+            
+        if anim_intervals or attempt_indices:
+            ax4.legend(fontsize=8)
+
         ax4.set_xlabel("present_elapsed_secs (s)")
         ax4.set_ylabel("(present − t0) − active_ticks/60 [s]")
         ax4.set_title("Active-time drift (animation pauses excluded)")

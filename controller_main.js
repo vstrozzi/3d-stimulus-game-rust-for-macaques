@@ -711,14 +711,15 @@ function _levelName(idx) {
   return `level_${String(idx).padStart(3, "0")}`;
 }
 
-function _summaryFilename(idx, runCtr, startedAt) {
-  return `${_participantName()}_${_levelName(idx)}_summary_run_` +
-         `${String(runCtr).padStart(3, "0")}_${_stampCompact(startedAt)}.json`;
+function _summaryFilename(idx, startedAt) {
+  return `${_participantName()}_${_levelName(idx)}_summary_${_stampCompact(startedAt)}.json`;
 }
 
-function _trialFilename(idx, trialRunCtr, startedAt) {
-  return `${_participantName()}_${_levelName(idx)}_trial_` +
-         `${String(idx).padStart(3, "0")}_run_${String(trialRunCtr).padStart(4, "0")}` +
+function _trialFilename(idx, trialIdxInChain, activeChainIdx, trialRunCtr, startedAt) {
+  return `${_participantName()}_${_levelName(idx)}` +
+         `_trial_${String(trialIdxInChain).padStart(3, "0")}` +
+         `_object_${String(activeChainIdx).padStart(3, "0")}` +
+         `_run_${String(trialRunCtr).padStart(4, "0")}` +
          `_${_stampCompact(startedAt)}.json`;
 }
 
@@ -729,7 +730,7 @@ function _levelDirRel(idx, startedAt) {
 function _startLevelRunIfNeeded() {
   if (currentLevelSummary !== null) return;
   const started = new Date();
-  const filename = _summaryFilename(currentLevelIndex, levelRunCounter, started);
+  const filename = _summaryFilename(currentLevelIndex, started);
   currentLevelSummary = {
     participant: _participantName(),
     level_index: currentLevelIndex,
@@ -823,7 +824,7 @@ function saveTrialLog(outcome) {
   const trialStartDt = new Date(trialStartTime);
   const trialEndDt = new Date();
   const elapsed = (trialEndDt.getTime() - trialStartDt.getTime()) / 1000;
-  const filename = _trialFilename(currentLevelIndex, trialRunCounter, trialStartDt);
+  const filename = _trialFilename(currentLevelIndex, _trialIdx(), activeChain, trialRunCounter, trialStartDt);
   const log = {
     level_index: currentLevelIndex,
     active_chain: activeChain,
@@ -1030,7 +1031,6 @@ function handleInit(state) {
 function handleWaitingForStart(state) {
   // Block start until the game confirms all trial textures are on the GPU
   if (!state.is_scene_ready) {
-    writeNoCommands();
     return;
   }
 
@@ -1049,6 +1049,7 @@ function handleWaitingForStart(state) {
     // first-render buffer allocations) and the source of trial_000's huge
     // Δt outlier. The pyramid is already correctly configured; we just
     // unblank and resume rendering here.
+
     const cmds = makeCmd({ reset: false, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
@@ -1854,6 +1855,16 @@ async function start() {
   // Small delay so "Ready!" is visible, then hide the overlay
   setTimeout(hideLoadingOverlay, 300);
   updateStatusBar("Ready");
+
+  // Mirror controller.py:643 `self._resync_with_game()` before the loop:
+  // - skip any ring entries the game pushed during warmup (else lastWriteHead=0
+  //   makes the first read return stale pre-controller frames, and the
+  //   `currentFrame === 0` clause in controllerLoop will keep firing
+  //   resyncWithGame -> INIT -> re-fire `reset` mid-first-trial, killing the
+  //   first animation's emissive cleanup).
+  // - align commandSeqCounter with the game's command_ack so the first
+  //   incrementCommandSeq actually produces a "new" seq the game will act on.
+  resyncWithGame();
 
   // Start the controller FSM loop on requestAnimationFrame instead of a
   // high-frequency setInterval. Rationale:

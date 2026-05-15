@@ -3,8 +3,8 @@
 verify_trial_logs.py — Cross-platform trial log analyzer.
 
 Parses trial logs from native (Python controller) and WASM (JS controller),
-generates per-trial plots and an aggregate summary comparing timing,
-frame delivery, and logging consistency.
+generates per-trial plots, a session overview plot, and an aggregate summary
+comparing timing, frame delivery, and logging consistency.
 
 Usage:
     python tools/verify_trial_logs.py out/trial_logs/                         # all native logs
@@ -42,6 +42,12 @@ OUTLIER_LO = EXPECTED_DT * 0.5    # < 8.33 ms
 OUTLIER_HI = EXPECTED_DT * 2.0    # > 33.33 ms
 OUTPUT_DIR = "out/analysis"
 
+OUTCOME_COLORS = {
+    "advance": "#55cc88",
+    "stay": "#e8a735",
+    "retroceed": "#e05555",
+}
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Data structures
@@ -66,6 +72,9 @@ class FrameRecord:
 class TrialInfo:
     label: str               # e.g. "trial_000_run_0001" or "wasm_trial_3"
     platform: str            # "native" or "wasm"
+    # Path of this trial relative to the input root, no extension. Used to
+    # mirror the input directory tree into out/analysis/<platform>/...
+    source_rel_path: str = ""
     level_index: int = 0
     active_chain: int = 0
     trial_index: int = 0
@@ -89,6 +98,11 @@ class TrialStats:
     dt_max: float = 0.0
     outlier_pct: float = 0.0
     avg_fps: float = 0.0
+    # Frame-pacing tail metrics (GN/HUB convention: average of worst N% Δt).
+    dt_1pct_low: float = 0.0
+    dt_01pct_low: float = 0.0
+    fps_1pct_low: float = 0.0
+    fps_01pct_low: float = 0.0
     game_elapsed_final: float = 0.0
     wall_elapsed: float = 0.0
     timing_drift: float = 0.0
@@ -160,47 +174,66 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
     return trial
 
 
-def load_path(path: str, platform: str) -> list[TrialInfo]:
-    """Load trials from a file, directory, or zip archive."""
-    p = Path(path)
+def _load_json_file(jf: Path, source_rel: str, platform: str) -> list[TrialInfo]:
+    """Parse one JSON file into one (dict root) or many (list root) trials."""
+    with open(jf) as f:
+        data = json.load(f)
+
     trials = []
+    if isinstance(data, list):
+        # WASM legacy format: array of trial dicts in one big JSON.
+        for i, d in enumerate(data):
+            label = f"{jf.stem}_trial_{i:03d}"
+            t = _parse_trial_dict(d, label, platform)
+            t.source_rel_path = f"{source_rel}_trial_{i:03d}"
+            trials.append(t)
+    elif isinstance(data, dict):
+        t = _parse_trial_dict(data, jf.stem, platform)
+        t.source_rel_path = source_rel
+        trials.append(t)
+    else:
+        print(f"Warning: unexpected JSON root type in {jf}, skipping")
+    return trials
+
+
+def _load_dir_recursive(d: Path, root: Path, root_label: str, platform: str) -> list[TrialInfo]:
+    """Walk `d` for JSON trial files; preserve paths relative to `root`."""
+    trials = []
+    # Skip level-summary files; they describe the whole level, not a trial.
+    json_files = sorted(jf for jf in d.rglob("*.json") if "_summary_" not in jf.name)
+    if not json_files:
+        print(f"Warning: no .json files found under {d}")
+        return trials
+    for jf in json_files:
+        rel = jf.relative_to(root).with_suffix("")
+        source_rel = f"{root_label}/{rel}" if str(rel) != "." else root_label
+        trials.extend(_load_json_file(jf, source_rel, platform))
+    return trials
+
+
+def load_path(path: str, platform: str) -> list[TrialInfo]:
+    """Load trials from a file, directory, or zip archive.
+
+    Each loaded trial records its position relative to the input root in
+    `source_rel_path`, so the analysis output can mirror the input layout.
+    """
+    p = Path(path)
+    if not p.exists():
+        print(f"Warning: path {p} does not exist, skipping")
+        return []
 
     if p.is_file() and p.suffix.lower() == ".zip":
         # Web download bundle: zip of per-level folders with per-trial JSON
-        # files matching controller.py's on-disk schema.
+        # files matching controller.py's on-disk schema. The zip's stem
+        # (e.g. "monkeyA_2026-05-12_14-32-08") becomes the session root.
         with zipfile.ZipFile(p) as zf, tempfile.TemporaryDirectory() as tmp:
             zf.extractall(tmp)
-            for jf in sorted(jf for jf in Path(tmp).rglob("*.json")
-                             if "_summary_" not in jf.name):
-                trials.extend(load_path(str(jf), platform))
-    elif p.is_file():
-        with open(p) as f:
-            data = json.load(f)
+            return _load_dir_recursive(Path(tmp), Path(tmp), p.stem, platform)
 
-        if isinstance(data, list):
-            # WASM legacy format: array of trial dicts in one big JSON
-            for i, d in enumerate(data):
-                label = f"{p.stem}_trial_{i:03d}"
-                trials.append(_parse_trial_dict(d, label, platform))
-        elif isinstance(data, dict):
-            # Native / current WASM zip format: one trial per file
-            label = p.stem
-            trials.append(_parse_trial_dict(data, label, platform))
-        else:
-            print(f"Warning: unexpected JSON root type in {p}, skipping")
+    if p.is_file():
+        return _load_json_file(p, p.stem, platform)
 
-    elif p.is_dir():
-        # Skip level-summary files; they live alongside per-trial files but
-        # describe the whole level run, not a single trial.
-        json_files = sorted(jf for jf in p.rglob("*.json") if "_summary_" not in jf.name)
-        if not json_files:
-            print(f"Warning: no .json files found under {p}")
-        for jf in json_files:
-            trials.extend(load_path(str(jf), platform))
-    else:
-        print(f"Warning: path {p} does not exist, skipping")
-
-    return trials
+    return _load_dir_recursive(p, p, p.name, platform)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -254,6 +287,18 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
         outliers = sum(1 for d in pos_deltas if d < OUTLIER_LO or d > OUTLIER_HI)
         stats.outlier_pct = 100.0 * outliers / len(pos_deltas)
         stats.avg_fps = 1.0 / stats.dt_mean if stats.dt_mean > 0 else 0.0
+
+        # 1%/0.1% lows: mean Δt of the worst 1% / 0.1% of frames, reported as
+        # FPS. Captures stutter tail that mean/σ hide. Floor of 1 frame so
+        # short trials still produce a value.
+        sorted_desc = sorted(pos_deltas, reverse=True)
+        n = len(sorted_desc)
+        n_1pct = max(1, n // 100)
+        n_01pct = max(1, n // 1000)
+        stats.dt_1pct_low = sum(sorted_desc[:n_1pct]) / n_1pct
+        stats.dt_01pct_low = sum(sorted_desc[:n_01pct]) / n_01pct
+        stats.fps_1pct_low = 1.0 / stats.dt_1pct_low if stats.dt_1pct_low > 0 else 0.0
+        stats.fps_01pct_low = 1.0 / stats.dt_01pct_low if stats.dt_01pct_low > 0 else 0.0
 
     stats.game_elapsed_final = times[-1] if times else 0.0
     stats.wall_elapsed = trial.elapsed_time
@@ -433,6 +478,18 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
             std_p = (sum((d - mean_p) ** 2 for d in p_deltas) / len(p_deltas)) ** 0.5
             ax5.axvline(mean_p * 1000, color="#2196F3", linestyle="-", linewidth=1.5,
                         label=f"mean {mean_p * 1000:.2f} ms")
+            # Tail markers: avg Δt of the worst 1% / 0.1% of frames.
+            # 1/x ⇒ "1% low FPS", the standard stutter metric.
+            sorted_desc = sorted(p_deltas, reverse=True)
+            n = len(sorted_desc)
+            n_1pct = max(1, n // 100)
+            n_01pct = max(1, n // 1000)
+            dt_1 = sum(sorted_desc[:n_1pct]) / n_1pct
+            dt_01 = sum(sorted_desc[:n_01pct]) / n_01pct
+            ax5.axvline(dt_1 * 1000, color="#FF9800", linestyle="--", linewidth=1.2,
+                        label=f"1% low {dt_1 * 1000:.2f} ms ({1.0 / dt_1:.1f} fps)")
+            ax5.axvline(dt_01 * 1000, color="#D32F2F", linestyle="--", linewidth=1.2,
+                        label=f"0.1% low {dt_01 * 1000:.2f} ms ({1.0 / dt_01:.1f} fps)")
             ax5.set_xlabel("present Δt (ms)")
             ax5.set_ylabel("count")
             ax5.set_title(f"Presentation Δt  (σ={std_p * 1000:.2f} ms, n={len(p_deltas)})")
@@ -469,7 +526,115 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     ax6.grid(True, alpha=0.3)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    out_path = out_dir / f"{trial.label}.png"
+    # Mirror the input layout: out/analysis/<platform>/<source_rel_path>.png
+    rel = trial.source_rel_path or trial.label
+    out_path = out_dir / trial.platform / f"{rel}.png"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"  → {out_path}")
+
+
+def plot_session(trials: list, out_path: Path, title_suffix: str = "") -> None:
+    """5-panel session overview: outcomes, attempts, durations, alignment, present Δt."""
+    if not trials:
+        return
+
+    trials = sorted(trials, key=lambda t: t.label)
+
+    fig, axes = plt.subplots(5, 1, figsize=(14, 13), sharex=True)
+    suffix = f" — {title_suffix}" if title_suffix else ""
+    fig.suptitle(
+        f"Session overview{suffix} — {len(trials)} trial{'s' if len(trials) != 1 else ''}",
+        fontsize=12, fontweight="bold",
+    )
+
+    xs = list(range(len(trials)))
+    labels = [t.label for t in trials]
+
+    # ── Panel 1: outcome strip ────────────────────────────────────────────
+    ax = axes[0]
+    for i, t in enumerate(trials):
+        color = OUTCOME_COLORS.get(t.outcome, "#888")
+        ax.barh(0, 1, left=i - 0.5, height=0.8, color=color, edgecolor="#222")
+    ax.set_yticks([])
+    ax.set_xlim(-0.5, len(trials) - 0.5)
+    ax.set_title("Outcome")
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color=c, label=name)
+        for name, c in OUTCOME_COLORS.items()
+    ]
+    ax.legend(handles=handles, loc="upper right", fontsize=8, ncol=3)
+
+    # ── Panel 2: attempts per trial ───────────────────────────────────────
+    ax = axes[1]
+    ax.bar(xs, [t.nr_attempts for t in trials], color="#7c6ff7", edgecolor="#3a2f99")
+    ax.set_ylabel("nr_attempts")
+    ax.set_title("Attempts per trial")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # ── Panel 3: elapsed time per trial ───────────────────────────────────
+    ax = axes[2]
+    ax.bar(xs, [t.elapsed_time for t in trials], color="#4a8fd4", edgecolor="#26568a")
+    ax.set_ylabel("elapsed (s)")
+    ax.set_title("Wall-clock duration per trial")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    # ── Panel 4: cosine alignment trajectory (concatenated) ───────────────
+    ax = axes[3]
+    for i, t in enumerate(trials):
+        if len(t.frames) < 2:
+            continue
+        n = len(t.frames)
+        xs_t = [i + k / (n - 1) for k in range(n)]
+        ys_t = [f.current_alignment for f in t.frames]
+        ax.plot(xs_t, ys_t, linewidth=0.6, alpha=0.8,
+                color=OUTCOME_COLORS.get(t.outcome, "#888"))
+    if trials and trials[0].cosine_threshold > 0:
+        ax.axhline(trials[0].cosine_threshold, color="#222", linestyle="--",
+                   linewidth=1, label=f"threshold {trials[0].cosine_threshold:.2f}")
+        ax.legend(fontsize=8, loc="lower right")
+    ax.set_ylabel("cosine_alignment")
+    ax.set_title("Alignment trajectory (one curve per trial, coloured by outcome)")
+    ax.grid(True, alpha=0.3)
+
+    # ── Panel 5: per-trial presentation Δt summary ────────────────────────
+    # Mean Δt should sit at 16.67 ms on a healthy 60 Hz display; p95 reveals
+    # stalls (dropped frames, GC, compositor contention).
+    ax = axes[4]
+    means_ms, p95_ms = [], []
+    for t in trials:
+        present = [f.present_elapsed_secs for f in t.frames]
+        deltas = [b - a for a, b in zip(present, present[1:]) if b - a > 0]
+        if deltas:
+            mean = sum(deltas) / len(deltas)
+            sorted_d = sorted(deltas)
+            p95 = sorted_d[int(len(sorted_d) * 0.95)]
+            means_ms.append(mean * 1000)
+            p95_ms.append(p95 * 1000)
+        else:
+            means_ms.append(0.0)
+            p95_ms.append(0.0)
+    if any(means_ms):
+        ax.bar(xs, means_ms, color="#00ACC1", edgecolor="#006064", label="mean")
+        ax.plot(xs, p95_ms, "o-", color="#F44336", markersize=4, linewidth=1, label="95th pct")
+        ax.axhline(EXPECTED_DT * 1000, color="#4CAF50", linestyle="--",
+                   linewidth=1, label=f"ideal {EXPECTED_DT * 1000:.2f} ms")
+        ax.set_ylabel("present Δt (ms)")
+        ax.set_title("Real flip-time interval per trial (mean + 95th percentile)")
+        ax.legend(fontsize=8, loc="upper right")
+    else:
+        ax.text(0.5, 0.5, "no present_elapsed_secs in logs",
+                ha="center", va="center", transform=ax.transAxes, fontsize=10, color="#888")
+        ax.set_title("Real flip-time interval per trial")
+    ax.grid(True, alpha=0.3, axis="y")
+
+    step = max(1, len(trials) // 20)
+    axes[-1].set_xticks(xs[::step])
+    axes[-1].set_xticklabels(labels[::step], rotation=45, ha="right", fontsize=7)
+    axes[-1].set_xlabel("trial index")
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"  → {out_path}")
@@ -491,7 +656,7 @@ def format_summary(all_stats: list[TrialStats]) -> str:
     hdr = (
         f"{'Trial':<35s}  {'Platfm':<6s}  {'Frames':>6s}  {'Gaps':>4s}  {'Dups':>4s}  "
         f"{'Δt mean':>8s}  {'Δt σ':>7s}  {'Δt min':>7s}  {'Δt max':>7s}  "
-        f"{'Out%':>5s}  {'FPS':>5s}  {'Frz':>3s}  {'Drift':>7s}"
+        f"{'Out%':>5s}  {'FPS':>5s}  {'1%low':>6s}  {'.1%low':>6s}  {'Frz':>3s}  {'Drift':>7s}"
     )
     lines.append(hdr)
     lines.append("-" * len(hdr))
@@ -500,7 +665,8 @@ def format_summary(all_stats: list[TrialStats]) -> str:
         row = (
             f"{s.label:<35s}  {s.platform:<6s}  {s.n_frames:>6d}  {s.gaps:>4d}  {s.duplicates:>4d}  "
             f"{s.dt_mean * 1000:>7.2f}ms  {s.dt_std * 1000:>6.2f}ms  {s.dt_min * 1000:>6.2f}ms  {s.dt_max * 1000:>6.2f}ms  "
-            f"{s.outlier_pct:>4.1f}%  {s.avg_fps:>5.1f}  {s.freeze_count:>3d}  {s.timing_drift:>6.3f}s"
+            f"{s.outlier_pct:>4.1f}%  {s.avg_fps:>5.1f}  {s.fps_1pct_low:>6.1f}  {s.fps_01pct_low:>6.1f}  "
+            f"{s.freeze_count:>3d}  {s.timing_drift:>6.3f}s"
         )
         lines.append(row)
 
@@ -532,6 +698,12 @@ def format_summary(all_stats: list[TrialStats]) -> str:
         if fps_vals:
             avg_fps = sum(fps_vals) / len(fps_vals)
             lines.append(f"  Mean FPS:          {avg_fps:.1f}  (target: 60.0)")
+        lows_1 = [s.fps_1pct_low for s in stats_list if s.fps_1pct_low > 0]
+        lows_01 = [s.fps_01pct_low for s in stats_list if s.fps_01pct_low > 0]
+        if lows_1:
+            lines.append(f"  Mean 1% low FPS:   {sum(lows_1) / len(lows_1):.1f}  (min: {min(lows_1):.1f})")
+        if lows_01:
+            lines.append(f"  Mean 0.1% low FPS: {sum(lows_01) / len(lows_01):.1f}  (min: {min(lows_01):.1f})")
         if outlier_pcts:
             avg_out = sum(outlier_pcts) / len(outlier_pcts)
             lines.append(f"  Mean outlier %:    {avg_out:.1f}%")
@@ -553,6 +725,8 @@ def format_summary(all_stats: list[TrialStats]) -> str:
         metrics: list[tuple[str, callable]] = [
             ("Mean Δt (ms)", lambda sl: f"{(sum(s.dt_mean for s in sl) / len(sl)) * 1000:.2f}" if sl else "N/A"),
             ("Mean FPS", lambda sl: f"{sum(s.avg_fps for s in sl if s.avg_fps > 0) / max(1, sum(1 for s in sl if s.avg_fps > 0)):.1f}" if sl else "N/A"),
+            ("1% low FPS (mean)", lambda sl: f"{sum(s.fps_1pct_low for s in sl if s.fps_1pct_low > 0) / max(1, sum(1 for s in sl if s.fps_1pct_low > 0)):.1f}" if sl else "N/A"),
+            ("0.1% low FPS (mean)", lambda sl: f"{sum(s.fps_01pct_low for s in sl if s.fps_01pct_low > 0) / max(1, sum(1 for s in sl if s.fps_01pct_low > 0)):.1f}" if sl else "N/A"),
             ("Mean outlier %", lambda sl: f"{sum(s.outlier_pct for s in sl) / len(sl):.1f}%" if sl else "N/A"),
             ("Total gaps", lambda sl: str(sum(s.gaps for s in sl))),
             ("Total duplicates", lambda sl: str(sum(s.duplicates for s in sl))),
@@ -665,6 +839,18 @@ Examples:
 
         if not args.no_plots:
             plot_trial(trial, stats, out_dir)
+
+    # Session overview — one per (platform, input-root) group, mirroring the
+    # input layout so cross-platform / multi-zip runs each get their own.
+    if not args.no_plots:
+        groups: dict[tuple[str, str], list] = {}
+        for t in all_trials:
+            root_label = t.source_rel_path.split("/", 1)[0] if t.source_rel_path else t.label
+            groups.setdefault((t.platform, root_label), []).append(t)
+        for (plat, root_label), group_trials in sorted(groups.items()):
+            sess_path = out_dir / plat / root_label / "session_overview.png"
+            sess_path.parent.mkdir(parents=True, exist_ok=True)
+            plot_session(group_trials, sess_path, title_suffix=f"{plat}/{root_label}")
 
     # Summary
     summary = format_summary(all_stats)

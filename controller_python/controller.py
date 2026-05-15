@@ -451,17 +451,15 @@ class MonkeyGameController:
             self.log_root, PARTICIPANT_NAME, date, level_name, run_time
         )
         trials_dir = os.path.join(level_dir, "trials")
-        summary_filename = (
-            f"{PARTICIPANT_NAME}_{level_name}_summary_run_"
-            f"{self.level_run_counter:03d}_{run_stamp}.json"
-        )
+        summary_filename = f"{PARTICIPANT_NAME}_{level_name}_summary_{run_stamp}.json"
         return level_dir, trials_dir, level_name, summary_filename
 
-    def _trial_filename(self, level_index, trial_start_dt):
+    def _trial_filename(self, level_index, trial_idx_in_chain, active_chain, trial_start_dt):
         level_name = f"level_{level_index:03d}"
         return (
-            f"{PARTICIPANT_NAME}_{level_name}_trial_{level_index:03d}_run_"
-            f"{self.trial_run_counter:04d}_{self._stamp(trial_start_dt)}.json"
+            f"{PARTICIPANT_NAME}_{level_name}"
+            f"_trial_{trial_idx_in_chain:03d}_object_{active_chain:03d}"
+            f"_run_{self.trial_run_counter:04d}_{self._stamp(trial_start_dt)}.json"
         )
 
     def _atomic_write_json(self, path, payload):
@@ -592,7 +590,9 @@ class MonkeyGameController:
         trial_start_dt = datetime.datetime.fromtimestamp(self.trial_start_time)
         end_dt = datetime.datetime.now()
         elapsed = (end_dt - trial_start_dt).total_seconds()
-        trial_filename = self._trial_filename(self.current_level_index, trial_start_dt)
+        trial_filename = self._trial_filename(
+            self.current_level_index, self._trial_idx(), self.active_chain, trial_start_dt
+        )
         trial_path = os.path.join(self.current_level_dir, "trials", trial_filename)
         log = {
             "level_index": self.current_level_index,
@@ -783,7 +783,7 @@ class MonkeyGameController:
                 "zoom_in": False,
                 "zoom_out": False,
                 "check": False,
-                "reset": False,
+                "reset": True,
                 "toggle_blank": True,
                 "toggle_stop_rendering": self.current_state.get("is_rendering_stopped", False), # resume rendering
                 "animation_door": False,

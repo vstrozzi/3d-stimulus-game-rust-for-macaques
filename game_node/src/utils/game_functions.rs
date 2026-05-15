@@ -97,7 +97,13 @@ pub fn handle_door_animation(
     | {
         *visibility = Visibility::Visible;
         if let Some(material) = materials.get_mut(&material_handle.0) {
-            material.emissive = color.to_linear();
+            let lin = color.to_linear();
+            material.emissive = LinearRgba::new(
+                lin.red * intensity_factor,
+                lin.green * intensity_factor,
+                lin.blue * intensity_factor,
+                lin.alpha,
+            );
         }
     };
 

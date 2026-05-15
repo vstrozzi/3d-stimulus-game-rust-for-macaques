@@ -52,8 +52,7 @@ monkey_3d_game/
 ├── trials_config/
 │   └── trial_editor.html       browser-based trial JSON editor
 ├── tools/
-│   ├── verify_trial_logs.py    drift / gap / FPS verifier (native + web ZIPs)
-│   └── visualize_web_log.py    4-panel session dashboard
+│   └── verify_trial_logs.py    drift / gap / FPS verifier + session overview (native + web ZIPs)
 └── assets/                     PBR textures (color, normal, mr, occlusion, depth)
 ```
 
@@ -91,10 +90,10 @@ needs `Cross-Origin-Opener-Policy: same-origin` and
 ```
 python tools/verify_trial_logs.py path/to/session.zip
 python tools/verify_trial_logs.py path/to/native_logs/
-python tools/visualize_web_log.py path/to/session.zip
 ```
-Both accept zips, directories, and individual JSONs; auto-detect web vs.
-native.
+Accepts zips, directories, and individual JSONs; auto-detects web vs.
+native. Emits per-trial PNGs, a `session_overview.png` (or one per
+platform when comparing native + wasm), and `summary.txt`.
 
 ---
 
@@ -516,7 +515,13 @@ clock. Causes:
   states**; frame-tracking re-synced after reset in both controllers.
 - **Verifier**: handles `.zip`, recursive dirs, auto-detects web;
   drift labeled "Active-time drift (animation pauses excluded)".
-- **`tools/visualize_web_log.py`**: 4-panel session dashboard.
+- **Session overview merged into `verify_trial_logs.py`**: emits
+  `session_overview.png` (5-panel: outcomes, attempts, durations,
+  alignment trajectory, per-trial present-Δt mean+p95) alongside the
+  per-trial PNGs. Standalone `visualize_web_log.py` removed.
+- **1% / 0.1% low FPS metrics**: added to the per-trial summary table,
+  per-platform aggregate, and cross-platform comparison. Visualized in
+  the presentation-Δt histogram (plot 5) as orange/red vertical lines.
 
 ---
 

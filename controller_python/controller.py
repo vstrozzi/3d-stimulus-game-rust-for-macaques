@@ -264,6 +264,9 @@ class MonkeyGameController:
         self.trial_start_time = 0.0
         self.game_time_unresponsive = 0.0
         self.trial_start_state = None
+        self.trial_start_orient = None
+        self._frame_zero = None
+        self._render_frame_zero = None
         self.frame_log = {}
         self.win_event = None
         self.trial_run_counter = 0
@@ -422,16 +425,31 @@ class MonkeyGameController:
     LOGGED_STATE_FIELDS = set(monkey_shared.LOGGED_STATE_FIELDS)
 
     def log_frame(self, state_read, commands_sent):
+        raw_fn = int(state_read.get("frame_number", self.current_frame))
+        raw_rfn = int(state_read.get("render_frame_number", 0))
+
+        if self._frame_zero is None:
+            self._frame_zero = raw_fn
+        if self._render_frame_zero is None:
+            self._render_frame_zero = raw_rfn
+
+        logged_fn = raw_fn - self._frame_zero
+        logged_rfn = raw_rfn - self._render_frame_zero
+
         win_secs = state_read.get("win_elapsed_secs", 0.0) or 0.0
         if win_secs != 0.0 and self.win_event is None:
             self.win_event = {
                 "win_elapsed_secs": float(win_secs),
-                "frame_number": int(state_read.get("frame_number", -1)),
+                "win_frame_number": logged_fn,
                 "present_elapsed_secs": float(state_read.get("present_elapsed_secs", 0.0)),
             }
         filtered_state = {k: v for k, v in state_read.items() if k in self.LOGGED_STATE_FIELDS}
+        if "frame_number" in filtered_state:
+            filtered_state["frame_number"] = logged_fn
+        if "render_frame_number" in filtered_state:
+            filtered_state["render_frame_number"] = logged_rfn
         entry = {"state_read": filtered_state, "commands_sent": commands_sent}
-        key = str(state_read.get("frame_number", self.current_frame))
+        key = str(logged_fn)
         self.frame_log[key] = entry
 
     @staticmethod
@@ -486,21 +504,20 @@ class MonkeyGameController:
         self.current_level_dir = level_dir
         self.current_level_summary_path = os.path.join(level_dir, summary_filename)
         os.makedirs(trials_dir, exist_ok=True)
+        level_cfg = {k: v for k, v in self.levels[self.current_level_index].items() if k != "fixed"}
         self.current_level_summary = {
             "participant": PARTICIPANT_NAME,
             "level_index": self.current_level_index,
             "level_name": level_name,
             "level_run_counter": self.level_run_counter,
             "session_info": self.session_info,
-            "level_config": self.levels[self.current_level_index],
+            "level_config": level_cfg,
             "timestamp_start": started.isoformat(),
             "timestamp_end": None,
-            "duration_s": None,
+            "elapsed_time_no_anim": None,
+            "elapsed_time_anim": None,
             "level_completed": None,
-            "trials": [],
-            "outcomes": {},
-            "total_attempts": 0,
-            "chain_idxs_end": None,
+            "trials_runs": [],
             "timing_health": None,
             "prev_file": self._last_summary_filename,
             "next_file": None,
@@ -531,7 +548,7 @@ class MonkeyGameController:
         render_gaps = 0
         freezes = 0
         last_rfn = None
-        for trial in self.current_level_summary["trials"]:
+        for trial in self.current_level_summary["trials_runs"]:
             frames = trial.get("_frames_for_health") or []
             for f in frames:
                 p = f.get("present_elapsed_secs")
@@ -567,15 +584,16 @@ class MonkeyGameController:
         if self.current_level_summary is None:
             return
         end = datetime.datetime.now()
-        start_iso = self.current_level_summary["timestamp_start"]
-        start_dt = datetime.datetime.fromisoformat(start_iso)
         self.current_level_summary["timestamp_end"] = end.isoformat()
-        self.current_level_summary["duration_s"] = round((end - start_dt).total_seconds(), 4)
+        runs = self.current_level_summary["trials_runs"]
+        no_anim = sum(t.get("elapsed_time_no_anim", 0.0) or 0.0 for t in runs)
+        anim = sum(t.get("elapsed_time_anim", 0.0) or 0.0 for t in runs)
+        self.current_level_summary["elapsed_time_no_anim"] = no_anim
+        self.current_level_summary["elapsed_time_anim"] = anim
         self.current_level_summary["level_completed"] = status
-        self.current_level_summary["chain_idxs_end"] = list(self.chain_idxs)
         self.current_level_summary["timing_health"] = self._compute_timing_health()
         # Drop the transient _frames_for_health field used only for health stats.
-        for t in self.current_level_summary["trials"]:
+        for t in runs:
             t.pop("_frames_for_health", None)
         self._flush_level_summary()
         self._last_summary_filename = os.path.basename(self.current_level_summary_path)
@@ -589,20 +607,45 @@ class MonkeyGameController:
         self._start_level_run_if_needed()
         trial_start_dt = datetime.datetime.fromtimestamp(self.trial_start_time)
         end_dt = datetime.datetime.now()
-        elapsed = (end_dt - trial_start_dt).total_seconds()
         trial_filename = self._trial_filename(
             self.current_level_index, self._trial_idx(), self.active_chain, trial_start_dt
         )
         trial_path = os.path.join(self.current_level_dir, "trials", trial_filename)
+
+        # Bucket present_elapsed_secs deltas by preceding frame's is_animating.
+        rows = sorted(
+            (
+                (int(k), fr) for k, fr in self.frame_log.items()
+                if isinstance(fr, dict) and isinstance(fr.get("state_read"), dict)
+            ),
+            key=lambda kv: kv[0],
+        )
+        elapsed_time_anim = 0.0
+        elapsed_time_no_anim = 0.0
+        for (_, prev), (_, cur) in zip(rows, rows[1:]):
+            p0 = prev["state_read"].get("present_elapsed_secs")
+            p1 = cur["state_read"].get("present_elapsed_secs")
+            if p0 is None or p1 is None:
+                continue
+            dt = float(p1) - float(p0)
+            if dt <= 0:
+                continue
+            if prev["state_read"].get("is_animating"):
+                elapsed_time_anim += dt
+            else:
+                elapsed_time_no_anim += dt
+
         log = {
             "level_index": self.current_level_index,
             "active_chain": self.active_chain,
             "trial_index_in_chain": self._trial_idx(),
             "trial_run_counter": self.trial_run_counter,
-            "trial_config": self.flat_trial,
+            "trial_config": {k: v for k, v in self.flat_trial.items() if k != "start_orient"},
+            "start_orient": self.trial_start_orient,
             "outcome": outcome,
             "nr_attempts": self.nr_attempts,
-            "elapsed_time": round(elapsed, 4),
+            "elapsed_time_no_anim": elapsed_time_no_anim,
+            "elapsed_time_anim": elapsed_time_anim,
             "timestamp_start": trial_start_dt.isoformat(),
             "timestamp_end": end_dt.isoformat(),
             "session_info": self.session_info,
@@ -622,7 +665,9 @@ class MonkeyGameController:
             "trial_run_counter": self.trial_run_counter,
             "outcome": outcome,
             "nr_attempts": self.nr_attempts,
-            "elapsed_time": round(elapsed, 4),
+            "elapsed_time_no_anim": elapsed_time_no_anim,
+            "elapsed_time_anim": elapsed_time_anim,
+            "start_orient": self.trial_start_orient,
             "win_event": self.win_event,
             "file": trial_filename,
             "_frames_for_health": [
@@ -631,10 +676,7 @@ class MonkeyGameController:
                 for fr in self.frame_log.values()
             ],
         }
-        self.current_level_summary["trials"].append(summary_row)
-        self.current_level_summary["outcomes"][outcome] = \
-            self.current_level_summary["outcomes"].get(outcome, 0) + 1
-        self.current_level_summary["total_attempts"] += self.nr_attempts
+        self.current_level_summary["trials_runs"].append(summary_row)
         self._flush_level_summary()
 
     # Main loop
@@ -719,8 +761,11 @@ class MonkeyGameController:
 
         default_state = self.shm_wrapper.read_default_game_state()
         trial_state = self.write_config_on_state(flat, default_state)
-        # Sample start orientation randomly from the 6 evenly-spaced door angles
+        # Sample start orientation randomly from the 6 evenly-spaced door angles.
+        # Editor stores a sentinel (-1) for this field; the real value is chosen
+        # here and recorded into the trial log so analyses can recover it.
         trial_state["start_orient"] = random.choice(START_ORIENTS)
+        self.trial_start_orient = float(trial_state["start_orient"])
         trial_state["progress_bar_cur_size"] = self._progress_bar_cur()
         trial_state["progress_bar_size"] = self._progress_bar_size()
 
@@ -754,6 +799,8 @@ class MonkeyGameController:
         self.nr_attempts = 0
         self.trial_start_time = time.time()
         self.frame_log = {}
+        self._frame_zero = None
+        self._render_frame_zero = None
         self.win_event = None
         self._time_win_expired = False
 

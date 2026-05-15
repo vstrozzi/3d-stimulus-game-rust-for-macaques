@@ -506,7 +506,10 @@ function defaultLevel(nObjects = 2) {
     trials: [defaultTrial()],
     fixed: {
       pr_switching_chain: 1 / nObjects,
-      start_orient: 0.0,
+      // Sentinel: the controller always overrides start_orient with a random
+      // choice from START_ORIENTS, so the value stored here is never used.
+      // Keeping it -1 makes that obvious in saved JSONL files.
+      start_orient: -1,
       start_trial: 0,
       base_radius: PYRAMID_DEFAULTS.base_radius,
       height: PYRAMID_DEFAULTS.height,
@@ -558,6 +561,9 @@ function enforceLevel(lv) {
   if (!lv.objects || lv.objects.length < 1) return;
   const f = lv.fixed;
   if (f.start_trial == null) f.start_trial = 0;
+  // start_orient is overridden at runtime; force the stored value to the -1
+  // sentinel on import so old files don't look like the editor controls it.
+  f.start_orient = -1;
   if (f.camera_radius == null) f.camera_radius = CAMERA_DEFAULTS.initial_radius;
   if (f.camera_y == null) f.camera_y = CAMERA_DEFAULTS.default_y;
   if (f.camera_speed_rotate == null) f.camera_speed_rotate = CAMERA_DEFAULTS.speed_rotate;

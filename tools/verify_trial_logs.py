@@ -66,6 +66,15 @@ class FrameRecord:
     is_animating: bool = False
     win_elapsed_secs: float = 0.0
     render_frame_number: int = 0
+    # Commands_sent flags surfaced for the actions-over-time raster.
+    # toggle_blank and toggle_stop_rendering are merged into a single channel
+    # because the FSM always fires them together at trial boundaries.
+    cmd_rotate_left: bool = False
+    cmd_rotate_right: bool = False
+    cmd_check: bool = False
+    cmd_reset: bool = False
+    cmd_toggle_blank_or_stop: bool = False
+    cmd_animation_door: bool = False
 
 
 @dataclass
@@ -80,7 +89,10 @@ class TrialInfo:
     trial_index: int = 0
     outcome: str = ""
     nr_attempts: int = 0
-    elapsed_time: float = 0.0   # wall-clock from controller
+    elapsed_time: float = 0.0   # wall-clock from controller (no_anim + anim)
+    elapsed_time_no_anim: float = 0.0
+    elapsed_time_anim: float = 0.0
+    trial_run_counter: int = 0
     cosine_threshold: float = 0.0
     frames: list = field(default_factory=list)  # sorted list[FrameRecord]
 
@@ -114,6 +126,9 @@ class TrialStats:
 # ──────────────────────────────────────────────────────────────────────────────
 def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
     """Parse a single trial dict (same schema for native/WASM)."""
+    no_anim = float(d.get("elapsed_time_no_anim", 0.0) or 0.0)
+    anim_t = float(d.get("elapsed_time_anim", 0.0) or 0.0)
+    total = no_anim + anim_t if (no_anim or anim_t) else float(d.get("elapsed_time", 0.0) or 0.0)
     trial = TrialInfo(
         label=label,
         platform=platform,
@@ -122,9 +137,12 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
         trial_index=d.get("trial_index_in_chain", 0),
         outcome=d.get("outcome", ""),
         nr_attempts=d.get("nr_attempts", 0),
-        elapsed_time=d.get("elapsed_time", 0.0),
+        elapsed_time=total,
         cosine_threshold=d.get("trial_config", {}).get("cosine_alignment_threshold", 0.0),
     )
+    trial.elapsed_time_no_anim = no_anim if (no_anim or anim_t) else total
+    trial.elapsed_time_anim = anim_t
+    trial.trial_run_counter = int(d.get("trial_run_counter", 0) or 0)
 
     raw_frames = d.get("frames", {})
 
@@ -144,8 +162,10 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
                 sr = entry.get("state_read", {})
             else:
                 sr = entry
+            cs = entry.get("commands_sent", {}) if isinstance(entry.get("commands_sent"), dict) else {}
         else:
             sr = {}
+            cs = {}
 
         fnum_default = fnum_key if isinstance(fnum_key, int) else 0
         # Legacy logs only had `elapsed_secs`; fall back so old sessions still load.
@@ -167,6 +187,12 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
             is_animating=bool(sr.get("is_animating", False)),
             win_elapsed_secs=float(sr.get("win_elapsed_secs", 0.0)),
             render_frame_number=int(sr.get("render_frame_number", 0)),
+            cmd_rotate_left=bool(cs.get("rotate_left", False)),
+            cmd_rotate_right=bool(cs.get("rotate_right", False)),
+            cmd_check=bool(cs.get("check", False)),
+            cmd_reset=bool(cs.get("reset", False)),
+            cmd_toggle_blank_or_stop=bool(cs.get("toggle_blank", False)) or bool(cs.get("toggle_stop_rendering", False)),
+            cmd_animation_door=bool(cs.get("animation_door", False)),
         ))
 
     # Sort by frame_number for consistent analysis
@@ -239,18 +265,18 @@ def load_path(path: str, platform: str) -> list[TrialInfo]:
 # ──────────────────────────────────────────────────────────────────────────────
 # Analysis
 # ──────────────────────────────────────────────────────────────────────────────
-def _active_drift_series(frames) -> list[float]:
-    """`(present - present[0]) - active_tick_count / 60`, animation pauses excluded."""
+def _drift_series(frames) -> list[float]:
+    """`(present - present[0]) - row_count / 60`, animation pauses included.
+
+    Naive drift matching what the controller writes in its level summary —
+    every logged frame counts as one 60 Hz tick, including the rows captured
+    during door animations. This intentionally absorbs the animation pauses
+    into the reported drift rather than excluding them.
+    """
     if not frames:
         return []
     t0 = frames[0].present_elapsed_secs
-    active = 0
-    out: list[float] = []
-    for f in frames:
-        if not f.is_animating:
-            active += 1
-        out.append((f.present_elapsed_secs - t0) - active / 60.0)
-    return out
+    return [(f.present_elapsed_secs - t0) - i / 60.0 for i, f in enumerate(frames)]
 
 
 def analyse_trial(trial: TrialInfo) -> TrialStats:
@@ -302,7 +328,7 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
 
     stats.game_elapsed_final = times[-1] if times else 0.0
     stats.wall_elapsed = trial.elapsed_time
-    drift_series = _active_drift_series(frames)
+    drift_series = _drift_series(frames)
     stats.timing_drift = max(abs(d) for d in drift_series) if drift_series else 0.0
 
     # 3+ consecutive frozen frame_numbers outside an animation = a stall.
@@ -324,11 +350,24 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
 # Plotting
 # ──────────────────────────────────────────────────────────────────────────────
 def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
-    """Generate six plots for a single trial and save as a single PNG."""
+    """Generate six plots for a single trial and save as a single PNG.
+
+    Layout (2 rows × 3 cols):
+        col 0 (sharex):  Camera angle  / Commands raster
+        col 1 (sharex):  FPS timeline  / Drift
+        col 2:           Presentation Δt histogram / Present Δt timeline
+    Cols 0–1 share the x-axis (`present_elapsed_secs`) between top and bottom,
+    so events in the raster line up vertically with the angle / fps / drift
+    series above and beside them.
+    """
     if len(trial.frames) < 2:
         return
 
-    fig, axes = plt.subplots(2, 3, figsize=(20, 9))
+    fig, axes = plt.subplots(2, 3, figsize=(20, 10))
+    # Share x within each of col 0 and col 1 — top/bottom of each column are
+    # both indexed on present_elapsed_secs. Col 2 has its own x for each plot.
+    axes[0, 0].sharex(axes[1, 0])
+    axes[0, 1].sharex(axes[1, 1])
     fig.suptitle(
         f"{trial.label}  [{trial.platform}]  outcome={trial.outcome}  "
         f"attempts={trial.nr_attempts}  frames={stats.n_frames}",
@@ -337,6 +376,8 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
 
     times = [f.present_elapsed_secs for f in trial.frames]
     angles = [f.current_angle for f in trial.frames]
+    t0 = times[0] if times else 0.0
+    t_end = times[-1] if times else 1.0
 
     # Find animation intervals and attempt indices for annotations
     anim_intervals = []
@@ -355,175 +396,189 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
         if trial.frames[i].attempts > trial.frames[i - 1].attempts:
             attempt_indices.append(i)
 
-    # ── Plot 1: Camera angle vs target over time ─────────────────────────────
-    ax1 = axes[0, 0]
-    ax1.plot(times, angles, linewidth=0.8, color="#2196F3", label="current_angle (rad)")
+    # ── [0,0] Camera angle trajectory ─────────────────────────────────────────
+    ax_cam = axes[0, 0]
+    ax_cam.plot(times, angles, linewidth=0.8, color="#2196F3", label="current_angle (rad)")
     if trial.cosine_threshold > 0:
-        # Convert cosine threshold to angle for visualization
         thresh_angle = math.acos(min(trial.cosine_threshold, 1.0))
-        ax1.axhline(thresh_angle, color="#4CAF50", linestyle="--", linewidth=1,
-                     label=f"cos_threshold → {thresh_angle:.3f} rad")
-        ax1.axhline(-thresh_angle, color="#4CAF50", linestyle="--", linewidth=1)
-    
-    # Annotate animations and checked attempts
+        ax_cam.axhline(thresh_angle, color="#4CAF50", linestyle="--", linewidth=1,
+                       label=f"cos_threshold → {thresh_angle:.3f} rad")
+        ax_cam.axhline(-thresh_angle, color="#4CAF50", linestyle="--", linewidth=1)
     for i, (start, end) in enumerate(anim_intervals):
-        ax1.axvspan(start, end, color='green', alpha=0.15, label="animation" if i == 0 else "")
+        ax_cam.axvspan(start, end, color="green", alpha=0.15,
+                       label="animation" if i == 0 else "")
     if attempt_indices:
-        a_t = [times[i] for i in attempt_indices]
-        a_y = [angles[i] for i in attempt_indices]
-        ax1.scatter(a_t, a_y, color='red', marker='o', s=30, zorder=5, label="checked attempt")
+        ax_cam.scatter([times[i] for i in attempt_indices],
+                       [angles[i] for i in attempt_indices],
+                       color="red", marker="o", s=30, zorder=5,
+                       label="checked attempt")
+    ax_cam.set_ylabel("current_angle (rad)")
+    ax_cam.set_title("Camera Angle Trajectory")
+    ax_cam.legend(fontsize=8)
+    ax_cam.grid(True, alpha=0.3)
 
-    ax1.set_xlabel("present_elapsed_secs (s)")
-    ax1.set_ylabel("current_angle (rad)")
-    ax1.set_title("Camera Angle Trajectory")
-    ax1.legend(fontsize=8)
-    ax1.grid(True, alpha=0.3)
-
-    # ── Plot 2: Frame delta histogram ────────────────────────────────────────
-    ax2 = axes[0, 1]
+    # ── [0,1] Instantaneous FPS timeline ─────────────────────────────────────
+    ax_fps = axes[0, 1]
     deltas = [times[i] - times[i - 1] for i in range(1, len(times)) if times[i] - times[i - 1] > 0]
-    if deltas:
-        deltas_ms = [d * 1000 for d in deltas]
-        n_bins = min(80, max(20, len(deltas_ms) // 5))
-        ax2.hist(deltas_ms, bins=n_bins, color="#FF9800", edgecolor="#E65100", alpha=0.8)
-        ax2.axvline(EXPECTED_DT * 1000, color="#F44336", linestyle="--", linewidth=1.5,
-                     label=f"ideal {EXPECTED_DT * 1000:.2f} ms")
-        ax2.axvline(stats.dt_mean * 1000, color="#2196F3", linestyle="-", linewidth=1.5,
-                     label=f"mean {stats.dt_mean * 1000:.2f} ms")
-        ax2.set_xlabel("Δt (ms)")
-        ax2.set_ylabel("count")
-        ax2.set_title(f"Frame Delta Distribution  (σ={stats.dt_std * 1000:.2f} ms, outliers={stats.outlier_pct:.1f}%)")
-        ax2.legend(fontsize=8)
-    ax2.grid(True, alpha=0.3)
-
-    # ── Plot 3: FPS timeline ─────────────────────────────────────────────────
-    ax3 = axes[1, 0]
     if deltas:
         fps_vals = [1.0 / d for d in deltas]
         fps_times = times[1:len(deltas) + 1]
-        ax3.plot(fps_times, fps_vals, linewidth=0.5, color="#9C27B0", alpha=0.7)
-        ax3.axhline(60, color="#4CAF50", linestyle="--", linewidth=1, label="60 FPS target")
-        ax3.set_ylim(0, max(120, max(fps_vals) * 1.1) if fps_vals else 120)
-        
-        # Annotate animations and checked attempts
+        ax_fps.plot(fps_times, fps_vals, linewidth=0.5, color="#9C27B0", alpha=0.7)
+        ax_fps.axhline(60, color="#4CAF50", linestyle="--", linewidth=1, label="60 FPS target")
+        ax_fps.set_ylim(0, max(120, max(fps_vals) * 1.1) if fps_vals else 120)
         for i, (start, end) in enumerate(anim_intervals):
-            ax3.axvspan(start, end, color='green', alpha=0.15, label="animation" if i == 0 else "")
+            ax_fps.axvspan(start, end, color="green", alpha=0.15,
+                           label="animation" if i == 0 else "")
         if attempt_indices:
-            a_t = []
-            a_y = []
+            a_t, a_y = [], []
             for i in attempt_indices:
                 if i >= 1 and (i - 1) < len(fps_vals):
                     a_t.append(times[i])
                     a_y.append(fps_vals[i - 1])
             if a_t:
-                ax3.scatter(a_t, a_y, color='red', marker='o', s=30, zorder=5, label="checked attempt")
+                ax_fps.scatter(a_t, a_y, color="red", marker="o", s=30, zorder=5,
+                               label="checked attempt")
+        ax_fps.set_ylabel("FPS")
+        ax_fps.set_title(f"Instantaneous FPS (avg={stats.avg_fps:.1f})")
+        ax_fps.legend(fontsize=8)
+    ax_fps.grid(True, alpha=0.3)
 
-        ax3.set_xlabel("present_elapsed_secs (s)")
-        ax3.set_ylabel("FPS")
-        ax3.set_title(f"Instantaneous FPS (avg={stats.avg_fps:.1f})")
-        ax3.legend(fontsize=8)
-    ax3.grid(True, alpha=0.3)
-
-    # ── Plot 4: Active-time drift (ignores animation pauses) ─────────────────
-    # `elapsed_secs` is frozen during door animations by design, so naive
-    # drift = elapsed - frame/60 gets a −1.5 s step per attempt. Here we
-    # count only frames where `is_animating == False` to expose only real
-    # stalls (Bevy's FixedUpdate falling behind its 60 Hz cadence).
-    ax4 = axes[1, 1]
-    drift = _active_drift_series(trial.frames)
-    if drift:
-        ax4.plot(times, drift, linewidth=0.8, color="#F44336", label="active-time drift")
-        ax4.axhline(0, color="#888", linestyle=":", linewidth=0.8)
-        
-        # Annotate animations and checked attempts
-        for i, (start, end) in enumerate(anim_intervals):
-            ax4.axvspan(start, end, color='green', alpha=0.15, label="animation" if i == 0 else "")
-        if attempt_indices:
-            a_t = [times[i] for i in attempt_indices]
-            a_y = [drift[i] for i in attempt_indices]
-            ax4.scatter(a_t, a_y, color='red', marker='o', s=30, zorder=5, label="checked attempt")
-            
-        if anim_intervals or attempt_indices:
-            ax4.legend(fontsize=8)
-
-        ax4.set_xlabel("present_elapsed_secs (s)")
-        ax4.set_ylabel("(present − t0) − active_ticks/60 [s]")
-        ax4.set_title("Active-time drift (animation pauses excluded)")
-        ax4.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
-    ax4.grid(True, alpha=0.3)
-
-    # ── Plot 5: Presentation Δt distribution (real flip-time intervals) ──────
-    # `present_elapsed_secs` is wall-clock at the next frame's `First`, which
-    # under Fifo equals the vsync at which this frame was latched. Deltas
-    # between consecutive rows reconstruct the actual frame interval as seen
-    # by the display. Compare to plot 2 which uses `elapsed_secs` (fixed-tick
-    # game clock) — divergence indicates fixed-loop catch-up / dropped renders.
-    ax5 = axes[0, 2]
+    # ── [0,2] Presentation Δt distribution ───────────────────────────────────
+    # Real flip-time intervals reconstructed from `present_elapsed_secs`.
+    ax_hist = axes[0, 2]
     present = [f.present_elapsed_secs for f in trial.frames]
     rfn = [f.render_frame_number for f in trial.frames]
-    p_deltas = []
-    for i in range(1, len(present)):
-        d = present[i] - present[i - 1]
-        # rAF can produce a tiny negative skew at trial boundaries; drop those
-        if d > 0:
-            p_deltas.append(d)
-    if any(present):
-        if p_deltas:
-            p_ms = [d * 1000 for d in p_deltas]
-            n_bins = min(80, max(20, len(p_ms) // 5))
-            ax5.hist(p_ms, bins=n_bins, color="#00ACC1", edgecolor="#006064", alpha=0.85)
-            ax5.axvline(EXPECTED_DT * 1000, color="#F44336", linestyle="--", linewidth=1.5,
+    p_deltas = [present[i] - present[i - 1] for i in range(1, len(present))
+                if present[i] - present[i - 1] > 0]
+    if any(present) and p_deltas:
+        p_ms = [d * 1000 for d in p_deltas]
+        n_bins = min(80, max(20, len(p_ms) // 5))
+        ax_hist.hist(p_ms, bins=n_bins, color="#00ACC1", edgecolor="#006064", alpha=0.85)
+        ax_hist.axvline(EXPECTED_DT * 1000, color="#F44336", linestyle="--", linewidth=1.5,
                         label=f"ideal {EXPECTED_DT * 1000:.2f} ms")
-            mean_p = sum(p_deltas) / len(p_deltas)
-            std_p = (sum((d - mean_p) ** 2 for d in p_deltas) / len(p_deltas)) ** 0.5
-            ax5.axvline(mean_p * 1000, color="#2196F3", linestyle="-", linewidth=1.5,
+        mean_p = sum(p_deltas) / len(p_deltas)
+        std_p = (sum((d - mean_p) ** 2 for d in p_deltas) / len(p_deltas)) ** 0.5
+        ax_hist.axvline(mean_p * 1000, color="#2196F3", linestyle="-", linewidth=1.5,
                         label=f"mean {mean_p * 1000:.2f} ms")
-            # Tail markers: avg Δt of the worst 1% / 0.1% of frames.
-            # 1/x ⇒ "1% low FPS", the standard stutter metric.
-            sorted_desc = sorted(p_deltas, reverse=True)
-            n = len(sorted_desc)
-            n_1pct = max(1, n // 100)
-            n_01pct = max(1, n // 1000)
-            dt_1 = sum(sorted_desc[:n_1pct]) / n_1pct
-            dt_01 = sum(sorted_desc[:n_01pct]) / n_01pct
-            ax5.axvline(dt_1 * 1000, color="#FF9800", linestyle="--", linewidth=1.2,
+        out_count = sum(1 for d in p_deltas if d < OUTLIER_LO or d > OUTLIER_HI)
+        out_pct = 100.0 * out_count / len(p_deltas)
+        sorted_desc = sorted(p_deltas, reverse=True)
+        n = len(sorted_desc)
+        dt_1 = sum(sorted_desc[:max(1, n // 100)]) / max(1, n // 100)
+        dt_01 = sum(sorted_desc[:max(1, n // 1000)]) / max(1, n // 1000)
+        ax_hist.axvline(dt_1 * 1000, color="#FF9800", linestyle="--", linewidth=1.2,
                         label=f"1% low {dt_1 * 1000:.2f} ms ({1.0 / dt_1:.1f} fps)")
-            ax5.axvline(dt_01 * 1000, color="#D32F2F", linestyle="--", linewidth=1.2,
+        ax_hist.axvline(dt_01 * 1000, color="#D32F2F", linestyle="--", linewidth=1.2,
                         label=f"0.1% low {dt_01 * 1000:.2f} ms ({1.0 / dt_01:.1f} fps)")
-            ax5.set_xlabel("present Δt (ms)")
-            ax5.set_ylabel("count")
-            ax5.set_title(f"Presentation Δt  (σ={std_p * 1000:.2f} ms, n={len(p_deltas)})")
-            ax5.legend(fontsize=8)
+        ax_hist.set_xlabel("present Δt (ms)")
+        ax_hist.set_ylabel("count")
+        ax_hist.set_title(
+            f"Presentation Δt  (σ={std_p * 1000:.2f} ms, outliers={out_pct:.1f}%, n={len(p_deltas)})"
+        )
+        ax_hist.legend(fontsize=8)
     else:
-        ax5.text(0.5, 0.5, "no present_elapsed_secs in log",
-                 ha="center", va="center", transform=ax5.transAxes, fontsize=10, color="#888")
-        ax5.set_title("Presentation Δt")
-    ax5.grid(True, alpha=0.3)
+        ax_hist.text(0.5, 0.5, "no present_elapsed_secs in log",
+                     ha="center", va="center", transform=ax_hist.transAxes,
+                     fontsize=10, color="#888")
+        ax_hist.set_title("Presentation Δt")
+    ax_hist.grid(True, alpha=0.3)
 
-    # ── Plot 6: Present Δt timeline + render gap markers ─────────────────────
-    ax6 = axes[1, 2]
+    # ── [1,0] Commands raster (60 Hz-snapped event ticks) ───────────────────
+    # One row per command channel; each frame where the controller emitted the
+    # command produces a tick snapped to the 60 Hz grid (`round((t-t0)/dt)*dt`)
+    # so the spacing reads as discrete fixed-tick slots even when the logged
+    # present_elapsed_secs jitters. toggle_blank / toggle_stop_rendering share
+    # a row since the FSM always fires them as a pair at trial boundaries.
+    ax_cmds = axes[1, 0]
+    cmd_channels = [
+        ("rotate_left",        "cmd_rotate_left",          "#1976D2"),
+        ("rotate_right",       "cmd_rotate_right",         "#0D47A1"),
+        ("check",              "cmd_check",                "#7B1FA2"),
+        ("reset",              "cmd_reset",                "#C62828"),
+        ("toggle_blank/stop",  "cmd_toggle_blank_or_stop", "#455A64"),
+        ("animation_door",     "cmd_animation_door",       "#2E7D32"),
+    ]
+    positions = list(range(len(cmd_channels)))
+
+    def _snap(t: float) -> float:
+        return round((t - t0) / EXPECTED_DT) * EXPECTED_DT + t0
+
+    event_times = [
+        [_snap(f.present_elapsed_secs) for f in trial.frames if getattr(f, attr)]
+        for _, attr, _ in cmd_channels
+    ]
+    colors = [c for _, _, c in cmd_channels]
+    if any(event_times):
+        ax_cmds.eventplot(event_times, lineoffsets=positions,
+                          linelengths=0.7, colors=colors)
+    else:
+        ax_cmds.text(0.5, 0.5, "no commands_sent in log",
+                     ha="center", va="center", transform=ax_cmds.transAxes,
+                     fontsize=10, color="#888")
+    for start, end in anim_intervals:
+        ax_cmds.axvspan(start, end, color="green", alpha=0.08)
+    ax_cmds.set_yticks(positions)
+    ax_cmds.set_yticklabels([name for name, _, _ in cmd_channels], fontsize=9)
+    ax_cmds.set_ylim(-0.6, len(cmd_channels) - 0.4)
+    ax_cmds.set_xlabel("present_elapsed_secs (s)")
+    ax_cmds.set_title("Commands sent (60 Hz-snapped)")
+    ax_cmds.grid(True, axis="x", alpha=0.3)
+
+    # ── [1,1] Drift (naive: animation pauses included) ──────────────────────
+    # `(present − t0) − row_count/60`. Animation rows are counted just like
+    # play rows, so intentional pauses show up as drift — matching what the
+    # controller writes into its level summary.
+    ax_drift = axes[1, 1]
+    drift = _drift_series(trial.frames)
+    if drift:
+        ax_drift.plot(times, drift, linewidth=0.8, color="#F44336", label="drift")
+        ax_drift.axhline(0, color="#888", linestyle=":", linewidth=0.8)
+        for i, (start, end) in enumerate(anim_intervals):
+            ax_drift.axvspan(start, end, color="green", alpha=0.15,
+                             label="animation" if i == 0 else "")
+        if attempt_indices:
+            ax_drift.scatter([times[i] for i in attempt_indices],
+                             [drift[i] for i in attempt_indices],
+                             color="red", marker="o", s=30, zorder=5,
+                             label="checked attempt")
+        if anim_intervals or attempt_indices:
+            ax_drift.legend(fontsize=8)
+        ax_drift.set_xlabel("present_elapsed_secs (s)")
+        ax_drift.set_ylabel("(present − t0) − ticks/60 [s]")
+        ax_drift.set_title("Drift (animation included)")
+        ax_drift.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+    ax_drift.grid(True, alpha=0.3)
+
+    # ── [1,2] Present Δt timeline (x = present_elapsed_secs) ────────────────
+    ax_dtt = axes[1, 2]
     if any(present) and len(trial.frames) > 1:
         idx = list(range(1, len(trial.frames)))
-        p_dt = [(present[i] - present[i - 1]) * 1000 for i in idx]
-        ax6.plot(idx, p_dt, linewidth=0.6, color="#00ACC1", alpha=0.8, label="present Δt")
-        ax6.axhline(EXPECTED_DT * 1000, color="#888", linestyle=":", linewidth=0.8)
-        gap_idx = [i for i in idx if rfn[i] - rfn[i - 1] > 1]
-        if gap_idx:
-            ax6.scatter(gap_idx, [p_dt[i - 1] for i in gap_idx],
-                        s=18, color="#F44336", zorder=5,
-                        label=f"render gap (n={len(gap_idx)})")
-        ax6.set_xlabel("log row index")
-        ax6.set_ylabel("Δt (ms)")
-        ax6.set_title("Present Δt timeline  (gaps = dropped renders)")
-        ax6.legend(fontsize=8, loc="upper right")
-        # Clamp y to keep huge stop_rendering jumps from squashing the plot
-        if p_dt:
-            ax6.set_ylim(0, min(max(p_dt) * 1.1, 200))
+        p_dt_ms = [(present[i] - present[i - 1]) * 1000 for i in idx]
+        x_times = [present[i] for i in idx]
+        ax_dtt.plot(x_times, p_dt_ms, linewidth=0.6, color="#00ACC1", alpha=0.8,
+                    label="present Δt")
+        ax_dtt.axhline(EXPECTED_DT * 1000, color="#888", linestyle=":", linewidth=0.8)
+        gap_pos = [(present[i], p_dt_ms[k]) for k, i in enumerate(idx) if rfn[i] - rfn[i - 1] > 1]
+        if gap_pos:
+            ax_dtt.scatter([x for x, _ in gap_pos], [y for _, y in gap_pos],
+                           s=18, color="#F44336", zorder=5,
+                           label=f"render gap (n={len(gap_pos)})")
+        ax_dtt.set_xlabel("present_elapsed_secs (s)")
+        ax_dtt.set_ylabel("Δt (ms)")
+        ax_dtt.set_title(f"Present Δt timeline (gaps = dropped renders) — duration {t_end - t0:.6f}s")
+        ax_dtt.legend(fontsize=8, loc="upper right")
+        if p_dt_ms:
+            ax_dtt.set_ylim(0, min(max(p_dt_ms) * 1.1, 200))
     else:
-        ax6.text(0.5, 0.5, "no present_elapsed_secs in log",
-                 ha="center", va="center", transform=ax6.transAxes, fontsize=10, color="#888")
-        ax6.set_title("Present Δt timeline")
-    ax6.grid(True, alpha=0.3)
+        ax_dtt.text(0.5, 0.5, "no present_elapsed_secs in log",
+                    ha="center", va="center", transform=ax_dtt.transAxes,
+                    fontsize=10, color="#888")
+        ax_dtt.set_title("Present Δt timeline")
+    ax_dtt.grid(True, alpha=0.3)
+
+    # Clamp the shared-x columns so axvspan/eventplot extent stays bounded.
+    for ax in (ax_cam, ax_cmds, ax_fps, ax_drift, ax_dtt):
+        ax.set_xlim(t0, t_end)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
     # Mirror the input layout: out/analysis/<platform>/<source_rel_path>.png
@@ -535,104 +590,194 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     print(f"  → {out_path}")
 
 
-def plot_session(trials: list, out_path: Path, title_suffix: str = "") -> None:
-    """5-panel session overview: outcomes, attempts, durations, alignment, present Δt."""
+def plot_session(trials: list, out_path: Path, title_suffix: str = "",
+                 mark_level_breaks: bool = False) -> None:
+    """Session overview. X axis = cumulative elapsed time (s) across trials."""
     if not trials:
         return
 
     trials = sorted(trials, key=lambda t: t.label)
 
-    fig, axes = plt.subplots(5, 1, figsize=(14, 13), sharex=True)
+    fig, axes = plt.subplots(5, 1, figsize=(16, 14), sharex=True)
     suffix = f" — {title_suffix}" if title_suffix else ""
     fig.suptitle(
         f"Session overview{suffix} — {len(trials)} trial{'s' if len(trials) != 1 else ''}",
         fontsize=12, fontweight="bold",
     )
 
-    xs = list(range(len(trials)))
-    labels = [t.label for t in trials]
+    widths = [max(0.05, float(t.elapsed_time)) for t in trials]
+    lefts = []
+    cum = 0.0
+    for w in widths:
+        lefts.append(cum)
+        cum += w
+    total_span = cum if cum > 0 else 1.0
+
+    level_break_xs = []
+    if mark_level_breaks:
+        for i in range(1, len(trials)):
+            if trials[i].level_index != trials[i - 1].level_index:
+                level_break_xs.append(lefts[i])
+
+    def _draw_level_breaks(ax):
+        for x in level_break_xs:
+            ax.axvline(x, color="#111", linewidth=1.8, linestyle="-", alpha=0.9, zorder=10)
+
+    def _draw_trial_breaks(ax):
+        for x in lefts[1:]:
+            ax.axvline(x, color="#bbb", linewidth=0.5, linestyle="-", alpha=0.6, zorder=1)
+
+    def _trial_x(left, w, t, p):
+        """Map a trial-internal present_elapsed_secs to session-cumulative x."""
+        if len(t.frames) < 2:
+            return left
+        t0 = t.frames[0].present_elapsed_secs
+        tN = t.frames[-1].present_elapsed_secs
+        span = tN - t0 if tN > t0 else 1.0
+        return left + (p - t0) / span * w
 
     # ── Panel 1: outcome strip ────────────────────────────────────────────
     ax = axes[0]
-    for i, t in enumerate(trials):
+    for left, w, t in zip(lefts, widths, trials):
         color = OUTCOME_COLORS.get(t.outcome, "#888")
-        ax.barh(0, 1, left=i - 0.5, height=0.8, color=color, edgecolor="#222")
+        ax.barh(0, w, left=left, height=0.8, color=color, edgecolor="#222", linewidth=0.4)
     ax.set_yticks([])
-    ax.set_xlim(-0.5, len(trials) - 0.5)
+    ax.set_xlim(0, total_span)
     ax.set_title("Outcome")
-    handles = [
-        plt.Rectangle((0, 0), 1, 1, color=c, label=name)
-        for name, c in OUTCOME_COLORS.items()
-    ]
+    handles = [plt.Rectangle((0, 0), 1, 1, color=c, label=name)
+               for name, c in OUTCOME_COLORS.items()]
     ax.legend(handles=handles, loc="upper right", fontsize=8, ncol=3)
+    _draw_trial_breaks(ax)
+    _draw_level_breaks(ax)
 
-    # ── Panel 2: attempts per trial ───────────────────────────────────────
+    # ── Panel 2: attempts CDF (step plot of cumulative attempts) ──────────
     ax = axes[1]
-    ax.bar(xs, [t.nr_attempts for t in trials], color="#7c6ff7", edgecolor="#3a2f99")
-    ax.set_ylabel("nr_attempts")
-    ax.set_title("Attempts per trial")
+    cdf_x, cdf_y = [0.0], [0]
+    cum_attempts = 0
+    for left, w, t in zip(lefts, widths, trials):
+        for i in range(1, len(t.frames)):
+            if t.frames[i].attempts > t.frames[i - 1].attempts:
+                cum_attempts += 1
+                cdf_x.append(_trial_x(left, w, t, t.frames[i].present_elapsed_secs))
+                cdf_y.append(cum_attempts)
+    cdf_x.append(total_span)
+    cdf_y.append(cum_attempts)
+    ax.step(cdf_x, cdf_y, where="post", color="#7c6ff7", linewidth=1.2)
+    ax.fill_between(cdf_x, cdf_y, step="post", color="#7c6ff7", alpha=0.18)
+    ax.set_ylabel("attempts (cumulative)")
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+    ax.set_title("Attempts CDF")
     ax.grid(True, alpha=0.3, axis="y")
+    _draw_trial_breaks(ax)
+    _draw_level_breaks(ax)
 
-    # ── Panel 3: elapsed time per trial ───────────────────────────────────
+    # ── Panel 3: activity strip (blue active / green animating) ───────────
     ax = axes[2]
-    ax.bar(xs, [t.elapsed_time for t in trials], color="#4a8fd4", edgecolor="#26568a")
-    ax.set_ylabel("elapsed (s)")
-    ax.set_title("Wall-clock duration per trial")
-    ax.grid(True, alpha=0.3, axis="y")
+    for left, w, t in zip(lefts, widths, trials):
+        if len(t.frames) < 2:
+            ax.axvspan(left, left + w, color="#4a8fd4", alpha=0.6)
+            continue
+        seg_start = t.frames[0].present_elapsed_secs
+        cur_anim = t.frames[0].is_animating
+        for f in t.frames[1:]:
+            if f.is_animating != cur_anim:
+                color = "#9fbf86" if cur_anim else "#4a8fd4"
+                ax.axvspan(_trial_x(left, w, t, seg_start),
+                           _trial_x(left, w, t, f.present_elapsed_secs),
+                           color=color, alpha=0.85)
+                seg_start = f.present_elapsed_secs
+                cur_anim = f.is_animating
+        color = "#9fbf86" if cur_anim else "#4a8fd4"
+        ax.axvspan(_trial_x(left, w, t, seg_start),
+                   _trial_x(left, w, t, t.frames[-1].present_elapsed_secs),
+                   color=color, alpha=0.85)
+    ax.set_yticks([])
+    ax.set_title("Activity (blue = active, green = animation)")
+    handles = [
+        plt.Rectangle((0, 0), 1, 1, color="#4a8fd4", label="active"),
+        plt.Rectangle((0, 0), 1, 1, color="#9fbf86", label="animation"),
+    ]
+    ax.legend(handles=handles, loc="upper right", fontsize=8, ncol=2)
+    _draw_trial_breaks(ax)
+    _draw_level_breaks(ax)
 
-    # ── Panel 4: cosine alignment trajectory (concatenated) ───────────────
+    # ── Panel 4: alignment trajectory + attempt dots + animation shading ──
     ax = axes[3]
-    for i, t in enumerate(trials):
+    for left, w, t in zip(lefts, widths, trials):
         if len(t.frames) < 2:
             continue
-        n = len(t.frames)
-        xs_t = [i + k / (n - 1) for k in range(n)]
+        xs_t = [_trial_x(left, w, t, f.present_elapsed_secs) for f in t.frames]
         ys_t = [f.current_alignment for f in t.frames]
-        ax.plot(xs_t, ys_t, linewidth=0.6, alpha=0.8,
+        ax.plot(xs_t, ys_t, linewidth=0.6, alpha=0.85,
                 color=OUTCOME_COLORS.get(t.outcome, "#888"))
+
+        a_start = None
+        for f in t.frames:
+            if f.is_animating and a_start is None:
+                a_start = f.present_elapsed_secs
+            elif (not f.is_animating) and a_start is not None:
+                ax.axvspan(_trial_x(left, w, t, a_start),
+                           _trial_x(left, w, t, f.present_elapsed_secs),
+                           color="green", alpha=0.10)
+                a_start = None
+        if a_start is not None:
+            ax.axvspan(_trial_x(left, w, t, a_start),
+                       _trial_x(left, w, t, t.frames[-1].present_elapsed_secs),
+                       color="green", alpha=0.10)
+
+        for i in range(1, len(t.frames)):
+            if t.frames[i].attempts > t.frames[i - 1].attempts:
+                ax.scatter([_trial_x(left, w, t, t.frames[i].present_elapsed_secs)],
+                           [t.frames[i].current_alignment],
+                           color="red", marker="o", s=14, zorder=5)
     if trials and trials[0].cosine_threshold > 0:
         ax.axhline(trials[0].cosine_threshold, color="#222", linestyle="--",
                    linewidth=1, label=f"threshold {trials[0].cosine_threshold:.2f}")
         ax.legend(fontsize=8, loc="lower right")
     ax.set_ylabel("cosine_alignment")
-    ax.set_title("Alignment trajectory (one curve per trial, coloured by outcome)")
+    ax.set_title("Alignment trajectory")
     ax.grid(True, alpha=0.3)
+    _draw_trial_breaks(ax)
+    _draw_level_breaks(ax)
 
-    # ── Panel 5: per-trial presentation Δt summary ────────────────────────
-    # Mean Δt should sit at 16.67 ms on a healthy 60 Hz display; p95 reveals
-    # stalls (dropped frames, GC, compositor contention).
+    # ── Panel 5: per-frame Δt timeline across the session ─────────────────
     ax = axes[4]
-    means_ms, p95_ms = [], []
-    for t in trials:
-        present = [f.present_elapsed_secs for f in t.frames]
-        deltas = [b - a for a, b in zip(present, present[1:]) if b - a > 0]
-        if deltas:
-            mean = sum(deltas) / len(deltas)
-            sorted_d = sorted(deltas)
-            p95 = sorted_d[int(len(sorted_d) * 0.95)]
-            means_ms.append(mean * 1000)
-            p95_ms.append(p95 * 1000)
-        else:
-            means_ms.append(0.0)
-            p95_ms.append(0.0)
-    if any(means_ms):
-        ax.bar(xs, means_ms, color="#00ACC1", edgecolor="#006064", label="mean")
-        ax.plot(xs, p95_ms, "o-", color="#F44336", markersize=4, linewidth=1, label="95th pct")
+    dt_x, dt_y = [], []
+    for left, w, t in zip(lefts, widths, trials):
+        for i in range(1, len(t.frames)):
+            dt = t.frames[i].present_elapsed_secs - t.frames[i - 1].present_elapsed_secs
+            if dt <= 0:
+                continue
+            dt_x.append(_trial_x(left, w, t, t.frames[i].present_elapsed_secs))
+            dt_y.append(dt * 1000)
+    if dt_x:
+        ax.plot(dt_x, dt_y, linewidth=0.5, color="#00ACC1", alpha=0.85)
         ax.axhline(EXPECTED_DT * 1000, color="#4CAF50", linestyle="--",
                    linewidth=1, label=f"ideal {EXPECTED_DT * 1000:.2f} ms")
-        ax.set_ylabel("present Δt (ms)")
-        ax.set_title("Real flip-time interval per trial (mean + 95th percentile)")
         ax.legend(fontsize=8, loc="upper right")
+        ax.set_ylim(0, min(max(dt_y) * 1.1, 200))
     else:
         ax.text(0.5, 0.5, "no present_elapsed_secs in logs",
                 ha="center", va="center", transform=ax.transAxes, fontsize=10, color="#888")
-        ax.set_title("Real flip-time interval per trial")
+    ax.set_ylabel("present Δt (ms)")
+    ax.set_title("Per-frame Δt timeline")
     ax.grid(True, alpha=0.3, axis="y")
+    _draw_trial_breaks(ax)
+    _draw_level_breaks(ax)
 
-    step = max(1, len(trials) // 20)
-    axes[-1].set_xticks(xs[::step])
-    axes[-1].set_xticklabels(labels[::step], rotation=45, ha="right", fontsize=7)
-    axes[-1].set_xlabel("trial index")
+    axes[-1].set_xlim(0, total_span)
+
+    centers = [l + w / 2 for l, w in zip(lefts, widths)]
+    short_labels = [
+        f"level_{t.level_index:03d}_trial_{t.trial_index:03d}"
+        f"_run_{t.trial_run_counter:04d}_object_{t.active_chain:03d}"
+        for t in trials
+    ]
+    step = max(1, len(trials) // 30)
+    axes[-1].set_xticks(centers[::step])
+    axes[-1].set_xticklabels(short_labels[::step],
+                             rotation=45, ha="right", fontsize=6)
+    axes[-1].set_xlabel("trial")
 
     plt.tight_layout(rect=[0, 0, 1, 0.96])
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -840,26 +985,52 @@ Examples:
         if not args.no_plots:
             plot_trial(trial, stats, out_dir)
 
-    # Session overview — one per (platform, input-root) group, mirroring the
-    # input layout so cross-platform / multi-zip runs each get their own.
     if not args.no_plots:
-        groups: dict[tuple[str, str], list] = {}
+        def _level_run_key(t):
+            parts = t.source_rel_path.split("/") if t.source_rel_path else []
+            if len(parts) >= 3 and parts[-2] == "trials":
+                return "/".join(parts[:-2])
+            return None
+
+        level_groups: dict[tuple[str, str], list] = {}
+        for t in all_trials:
+            key = _level_run_key(t)
+            if key is not None:
+                level_groups.setdefault((t.platform, key), []).append(t)
+        for (plat, key), group_trials in sorted(level_groups.items()):
+            sess_path = out_dir / plat / key / "session_overview.png"
+            sess_path.parent.mkdir(parents=True, exist_ok=True)
+            plot_session(group_trials, sess_path, title_suffix=f"{plat}/{key}")
+
+        root_groups: dict[tuple[str, str], list] = {}
         for t in all_trials:
             root_label = t.source_rel_path.split("/", 1)[0] if t.source_rel_path else t.label
-            groups.setdefault((t.platform, root_label), []).append(t)
-        for (plat, root_label), group_trials in sorted(groups.items()):
+            root_groups.setdefault((t.platform, root_label), []).append(t)
+        for (plat, root_label), group_trials in sorted(root_groups.items()):
             sess_path = out_dir / plat / root_label / "session_overview.png"
             sess_path.parent.mkdir(parents=True, exist_ok=True)
-            plot_session(group_trials, sess_path, title_suffix=f"{plat}/{root_label}")
+            plot_session(group_trials, sess_path,
+                         title_suffix=f"{plat}/{root_label}",
+                         mark_level_breaks=True)
 
-    # Summary
+    # Summary — one per platform, written under that platform's output dir
+    # alongside the per-trial PNGs and session overviews.
     summary = format_summary(all_stats)
     print("\n" + summary)
 
-    summary_path = out_dir / "summary.txt"
-    with open(summary_path, "w") as f:
-        f.write(summary)
-    print(f"\nSummary saved to {summary_path}")
+    # Write summary.txt next to the cross-level session_overview.png, i.e.
+    # under <out_dir>/<platform>/<root_label>/.
+    by_group: dict[tuple[str, str], list[TrialStats]] = {}
+    for t, s in zip(all_trials, all_stats):
+        root_label = t.source_rel_path.split("/", 1)[0] if t.source_rel_path else t.label
+        by_group.setdefault((t.platform, root_label), []).append(s)
+    for (plat, root_label), grp_stats in by_group.items():
+        grp_dir = out_dir / plat / root_label
+        grp_dir.mkdir(parents=True, exist_ok=True)
+        grp_summary_path = grp_dir / "summary.txt"
+        with open(grp_summary_path, "w") as f:
+            f.write(format_summary(grp_stats))
+        print(f"Summary saved to {grp_summary_path}")
     print(f"Plots saved to   {out_dir}/")
 
 

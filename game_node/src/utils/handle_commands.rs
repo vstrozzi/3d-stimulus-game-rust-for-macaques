@@ -29,7 +29,7 @@ pub fn handle_reset_command(
     round_start: ResMut<RoundStartTimestamp>,
     mut door_win_entities: ResMut<DoorWinEntities>,
     time: Res<Time>,
-) {    
+) {
 
     if !pending.reset {
         return;

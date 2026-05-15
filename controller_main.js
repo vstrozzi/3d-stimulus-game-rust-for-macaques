@@ -98,7 +98,10 @@ let commandSeqCounter = 0;
 // Per-trial tracking
 let nrAttempts = 0;
 let trialStartTime = 0;
+let trialStartOrient = null;
 let frameLog = {};
+let frameZero = null;
+let renderFrameZero = null;
 let winEvent = null;
 let trialRunCounter = 0;
 
@@ -659,11 +662,20 @@ function resyncSeq() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function logFrame(stateRead, commandsSent) {
+  const rawFn = Number(stateRead?.frame_number ?? currentFrame);
+  const rawRfn = Number(stateRead?.render_frame_number ?? 0);
+
+  if (frameZero === null) frameZero = rawFn;
+  if (renderFrameZero === null) renderFrameZero = rawRfn;
+
+  const loggedFn = rawFn - frameZero;
+  const loggedRfn = rawRfn - renderFrameZero;
+
   const winSecs = stateRead?.win_elapsed_secs ?? 0;
   if (winSecs !== 0 && winEvent === null) {
     winEvent = {
       win_elapsed_secs: winSecs,
-      frame_number: stateRead?.frame_number ?? -1,
+      win_frame_number: loggedFn,
       present_elapsed_secs: stateRead?.present_elapsed_secs ?? 0,
     };
   }
@@ -671,8 +683,9 @@ function logFrame(stateRead, commandsSent) {
   for (const [k, v] of Object.entries(stateRead)) {
     if (LOGGED_STATE_FIELDS.has(k)) filtered[k] = v;
   }
-  const key = String(stateRead?.frame_number ?? currentFrame);
-  frameLog[key] = { state_read: filtered, commands_sent: commandsSent };
+  if ("frame_number" in filtered) filtered.frame_number = loggedFn;
+  if ("render_frame_number" in filtered) filtered.render_frame_number = loggedRfn;
+  frameLog[String(loggedFn)] = { state_read: filtered, commands_sent: commandsSent };
 }
 
 function _participantName() {
@@ -731,21 +744,20 @@ function _startLevelRunIfNeeded() {
   if (currentLevelSummary !== null) return;
   const started = new Date();
   const filename = _summaryFilename(currentLevelIndex, started);
+  const { fixed: _dropFixed, ...levelCfg } = currentLevel();
   currentLevelSummary = {
     participant: _participantName(),
     level_index: currentLevelIndex,
     level_name: _levelName(currentLevelIndex),
     level_run_counter: levelRunCounter,
     session_info: _sessionInfo(),
-    level_config: currentLevel(),
+    level_config: levelCfg,
     timestamp_start: started.toISOString(),
     timestamp_end: null,
-    duration_s: null,
+    elapsed_time_no_anim: null,
+    elapsed_time_anim: null,
     level_completed: null,
-    trials: [],
-    outcomes: {},
-    total_attempts: 0,
-    chain_idxs_end: null,
+    trials_runs: [],
     timing_health: null,
     prev_file: lastSummaryFilename,
     next_file: null,
@@ -763,7 +775,7 @@ function _computeTimingHealth(summary) {
   const present = [];
   let renderGaps = 0;
   let lastRfn = null;
-  for (const t of summary.trials) {
+  for (const t of summary.trials_runs) {
     for (const fr of (t._frames_for_health || [])) {
       if (fr.present_elapsed_secs != null) present.push(fr.present_elapsed_secs);
       const rfn = fr.render_frame_number;
@@ -794,11 +806,14 @@ function _finalizeLevelRun(status) {
   if (currentLevelSummary === null) return;
   const end = new Date();
   currentLevelSummary.timestamp_end = end.toISOString();
-  currentLevelSummary.duration_s = (end.getTime() - currentLevelSummary._startedMs) / 1000;
+  const runs = currentLevelSummary.trials_runs;
+  const noAnim = runs.reduce((s, t) => s + (t.elapsed_time_no_anim || 0), 0);
+  const anim = runs.reduce((s, t) => s + (t.elapsed_time_anim || 0), 0);
+  currentLevelSummary.elapsed_time_no_anim = noAnim;
+  currentLevelSummary.elapsed_time_anim = anim;
   currentLevelSummary.level_completed = status;
-  currentLevelSummary.chain_idxs_end = chainIdxs.slice();
   currentLevelSummary.timing_health = _computeTimingHealth(currentLevelSummary);
-  for (const t of currentLevelSummary.trials) delete t._frames_for_health;
+  for (const t of runs) delete t._frames_for_health;
   lastSummaryFilename = currentLevelSummary._filename;
   currentLevelSummary = null;
   levelRunCounter += 1;
@@ -823,17 +838,38 @@ function saveTrialLog(outcome) {
   _startLevelRunIfNeeded();
   const trialStartDt = new Date(trialStartTime);
   const trialEndDt = new Date();
-  const elapsed = (trialEndDt.getTime() - trialStartDt.getTime()) / 1000;
   const filename = _trialFilename(currentLevelIndex, _trialIdx(), activeChain, trialRunCounter, trialStartDt);
+
+  // Bucket present_elapsed_secs deltas by preceding frame's is_animating.
+  const rows = Object.entries(frameLog)
+    .map(([k, fr]) => [Number(k), fr])
+    .filter(([_, fr]) => fr && fr.state_read)
+    .sort((a, b) => a[0] - b[0]);
+  let elapsedAnim = 0;
+  let elapsedNoAnim = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const prev = rows[i - 1][1].state_read;
+    const cur = rows[i][1].state_read;
+    const p0 = prev?.present_elapsed_secs;
+    const p1 = cur?.present_elapsed_secs;
+    if (p0 == null || p1 == null) continue;
+    const dt = p1 - p0;
+    if (dt <= 0) continue;
+    if (prev.is_animating) elapsedAnim += dt;
+    else elapsedNoAnim += dt;
+  }
+
   const log = {
     level_index: currentLevelIndex,
     active_chain: activeChain,
     trial_index_in_chain: _trialIdx(),
     trial_run_counter: trialRunCounter,
-    trial_config: flatTrial(),
+    trial_config: (() => { const { start_orient: _drop, ...rest } = flatTrial(); return rest; })(),
+    start_orient: trialStartOrient,
     outcome,
     nr_attempts: nrAttempts,
-    elapsed_time: Math.round(elapsed * 10000) / 10000,
+    elapsed_time_no_anim: elapsedNoAnim,
+    elapsed_time_anim: elapsedAnim,
     timestamp_start: trialStartDt.toISOString(),
     timestamp_end: trialEndDt.toISOString(),
     session_info: _sessionInfo(),
@@ -844,13 +880,15 @@ function saveTrialLog(outcome) {
   };
   allTrialLogs.push(log);
 
-  currentLevelSummary.trials.push({
+  currentLevelSummary.trials_runs.push({
     trial_index_in_chain: _trialIdx(),
     active_chain: activeChain,
     trial_run_counter: trialRunCounter,
     outcome,
     nr_attempts: nrAttempts,
-    elapsed_time: log.elapsed_time,
+    elapsed_time_no_anim: elapsedNoAnim,
+    elapsed_time_anim: elapsedAnim,
+    start_orient: trialStartOrient,
     win_event: winEvent,
     file: filename,
     _frames_for_health: Object.values(frameLog).map(fr => ({
@@ -858,9 +896,7 @@ function saveTrialLog(outcome) {
       render_frame_number:  fr?.state_read?.render_frame_number ?? null,
     })),
   });
-  currentLevelSummary.outcomes[outcome] = (currentLevelSummary.outcomes[outcome] ?? 0) + 1;
-  currentLevelSummary.total_attempts += nrAttempts;
-  console.log(`[LOG] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, ${elapsed.toFixed(1)}s`);
+  console.log(`[LOG] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, no_anim=${elapsedNoAnim.toFixed(6)}s anim=${elapsedAnim.toFixed(6)}s`);
 }
 
 /** Sanitize a session name for use in a filename: strip path separators,
@@ -956,8 +992,12 @@ function handleInit(state) {
   // Build fresh default state and overlay trial config (raw u32 format)
   const trialState = buildTrialState(trialCfg);
 
-  // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS))
-  trialState.start_orient = floatToU32Bits(START_ORIENTS[Math.floor(Math.random() * START_ORIENTS.length)]);
+  // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS)).
+  // Editor stores a sentinel (-1) for this field; the real value is chosen
+  // here and recorded into the trial log so analyses can recover it.
+  const chosenStartOrient = START_ORIENTS[Math.floor(Math.random() * START_ORIENTS.length)];
+  trialState.start_orient = floatToU32Bits(chosenStartOrient);
+  trialStartOrient = chosenStartOrient;
 
   // Camera position from fixed — written directly into the SHM-layout
   // camera_x/y/z fields (no array intermediate, matches Python).
@@ -1005,6 +1045,8 @@ function handleInit(state) {
   nrAttempts = 0;
   trialStartTime = Date.now();
   frameLog = {};
+  frameZero = null;
+  renderFrameZero = null;
   winEvent = null;
 
   // Re-sync frame tracking with the game's fresh counter. handle_reset_command

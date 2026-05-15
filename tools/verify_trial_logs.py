@@ -346,6 +346,16 @@ def analyse_trial(trial: TrialInfo) -> TrialStats:
     return stats
 
 
+def _strip_platform_prefix(path: str, platform: str) -> str:
+    """Drop a leading `{platform}/` segment so out paths don't double-nest."""
+    if not path:
+        return path
+    if path == platform:
+        return ""
+    prefix = platform + "/"
+    return path[len(prefix):] if path.startswith(prefix) else path
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Plotting
 # ──────────────────────────────────────────────────────────────────────────────
@@ -368,9 +378,16 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     # both indexed on present_elapsed_secs. Col 2 has its own x for each plot.
     axes[0, 0].sharex(axes[1, 0])
     axes[0, 1].sharex(axes[1, 1])
+    short = (
+        f"level_{trial.level_index:03d}_trial_{trial.trial_index:03d}"
+        f"_run_{trial.trial_run_counter:04d}_object_{trial.active_chain:03d}"
+    )
     fig.suptitle(
-        f"{trial.label}  [{trial.platform}]  outcome={trial.outcome}  "
-        f"attempts={trial.nr_attempts}  frames={stats.n_frames}",
+        f"{short}  [{trial.platform}]  outcome={trial.outcome}  "
+        f"attempts={trial.nr_attempts}  frames={stats.n_frames}  "
+        f"(no_anim={trial.elapsed_time_no_anim:.2f}s, "
+        f"anim={trial.elapsed_time_anim:.2f}s, "
+        f"total={trial.elapsed_time:.2f}s)",
         fontsize=11, fontweight="bold",
     )
 
@@ -581,8 +598,7 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
         ax.set_xlim(t0, t_end)
 
     plt.tight_layout(rect=[0, 0, 1, 0.95])
-    # Mirror the input layout: out/analysis/<platform>/<source_rel_path>.png
-    rel = trial.source_rel_path or trial.label
+    rel = _strip_platform_prefix(trial.source_rel_path or trial.label, trial.platform)
     out_path = out_dir / trial.platform / f"{rel}.png"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -590,7 +606,7 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     print(f"  → {out_path}")
 
 
-def plot_session(trials: list, out_path: Path, title_suffix: str = "",
+def plot_session(trials: list, out_path: Path, title: str = "level",
                  mark_level_breaks: bool = False) -> None:
     """Session overview. X axis = cumulative elapsed time (s) across trials."""
     if not trials:
@@ -599,9 +615,12 @@ def plot_session(trials: list, out_path: Path, title_suffix: str = "",
     trials = sorted(trials, key=lambda t: t.label)
 
     fig, axes = plt.subplots(5, 1, figsize=(16, 14), sharex=True)
-    suffix = f" — {title_suffix}" if title_suffix else ""
+    total_no_anim = sum(t.elapsed_time_no_anim or 0.0 for t in trials)
+    total_anim = sum(t.elapsed_time_anim or 0.0 for t in trials)
     fig.suptitle(
-        f"Session overview{suffix} — {len(trials)} trial{'s' if len(trials) != 1 else ''}",
+        f"{title} — {len(trials)} trial{'s' if len(trials) != 1 else ''}  "
+        f"(no_anim={total_no_anim:.2f}s, anim={total_anim:.2f}s, "
+        f"total={total_no_anim + total_anim:.2f}s)",
         fontsize=12, fontweight="bold",
     )
 
@@ -625,7 +644,8 @@ def plot_session(trials: list, out_path: Path, title_suffix: str = "",
 
     def _draw_trial_breaks(ax):
         for x in lefts[1:]:
-            ax.axvline(x, color="#bbb", linewidth=0.5, linestyle="-", alpha=0.6, zorder=1)
+            ax.axvline(x, color="#666", linewidth=1.0, linestyle=(0, (3, 2)),
+                       alpha=0.85, zorder=9)
 
     def _trial_x(left, w, t, p):
         """Map a trial-internal present_elapsed_secs to session-cumulative x."""
@@ -998,19 +1018,20 @@ Examples:
             if key is not None:
                 level_groups.setdefault((t.platform, key), []).append(t)
         for (plat, key), group_trials in sorted(level_groups.items()):
-            sess_path = out_dir / plat / key / "session_overview.png"
+            sess_path = out_dir / plat / _strip_platform_prefix(key, plat) / "session_overview.png"
             sess_path.parent.mkdir(parents=True, exist_ok=True)
-            plot_session(group_trials, sess_path, title_suffix=f"{plat}/{key}")
+            lvl_name = next((p for p in key.split("/") if p.startswith("level_")), "level")
+            plot_session(group_trials, sess_path, title=lvl_name)
 
         root_groups: dict[tuple[str, str], list] = {}
         for t in all_trials:
             root_label = t.source_rel_path.split("/", 1)[0] if t.source_rel_path else t.label
             root_groups.setdefault((t.platform, root_label), []).append(t)
         for (plat, root_label), group_trials in sorted(root_groups.items()):
-            sess_path = out_dir / plat / root_label / "session_overview.png"
+            sess_path = out_dir / plat / _strip_platform_prefix(root_label, plat) / "session_overview.png"
             sess_path.parent.mkdir(parents=True, exist_ok=True)
             plot_session(group_trials, sess_path,
-                         title_suffix=f"{plat}/{root_label}",
+                         title="all levels",
                          mark_level_breaks=True)
 
     # Summary — one per platform, written under that platform's output dir
@@ -1025,7 +1046,7 @@ Examples:
         root_label = t.source_rel_path.split("/", 1)[0] if t.source_rel_path else t.label
         by_group.setdefault((t.platform, root_label), []).append(s)
     for (plat, root_label), grp_stats in by_group.items():
-        grp_dir = out_dir / plat / root_label
+        grp_dir = out_dir / plat / _strip_platform_prefix(root_label, plat)
         grp_dir.mkdir(parents=True, exist_ok=True)
         grp_summary_path = grp_dir / "summary.txt"
         with open(grp_summary_path, "w") as f:

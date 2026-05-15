@@ -1042,7 +1042,7 @@ function handleWaitingForStart(state) {
 
   if (_start) {
     _start = false;
-    const cmds = makeCmd({ reset: false, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
+    const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();

@@ -30,6 +30,7 @@ pub fn handle_reset_command(
     mut door_win_entities: ResMut<DoorWinEntities>,
     time: Res<Time>,
 ) {    
+
     if !pending.reset {
         return;
     }

@@ -411,7 +411,7 @@ class MonkeyGameController:
         return cmds
 
     # Fields that are game→controller only (written by the game, not the controller)
-    READ_ONLY_FIELDS = {"render_frame_number", "render_elapsed_secs", "present_elapsed_secs", "photodiode_white"}
+    READ_ONLY_FIELDS = {"render_frame_number", "render_elapsed_secs", "present_elapsed_secs", "photodiode_white", "_type"}
 
     def write_game_state(self, state):
         filtered = {k: v for k, v in state.items() if k not in self.READ_ONLY_FIELDS}
@@ -458,8 +458,8 @@ class MonkeyGameController:
         level_name = f"level_{level_index:03d}"
         return (
             f"{PARTICIPANT_NAME}_{level_name}"
-            f"_trial_{trial_idx_in_chain:03d}_object_{active_chain:03d}"
-            f"_run_{self.trial_run_counter:04d}_{self._stamp(trial_start_dt)}.json"
+            f"_trial_{trial_idx_in_chain:03d}_run_{self.trial_run_counter:04d}"
+            f"_object_{active_chain:03d}_{self._stamp(trial_start_dt)}.json"
         )
 
     def _atomic_write_json(self, path, payload):
@@ -755,7 +755,6 @@ class MonkeyGameController:
         self.trial_start_time = time.time()
         self.frame_log = {}
         self.win_event = None
-        self.trial_run_counter += 1
         self._time_win_expired = False
 
         # Re-sync frame tracking with the game's fresh counter.
@@ -941,6 +940,9 @@ class MonkeyGameController:
             new_idx = max(0, idx - 1)
         else:  # STAY
             new_idx = idx
+
+        # Update trial counter
+        self.trial_run_counter += 1
 
         self._set_trial_idx(new_idx)
 

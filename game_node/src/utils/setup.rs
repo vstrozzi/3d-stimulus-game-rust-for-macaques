@@ -111,6 +111,7 @@ pub fn setup_round(
     door_win_entities.winning_light = winning_light;
     door_win_entities.winning_emissive = winning_emissive;
     door_win_entities.animation_start_time = Some(time.elapsed());
+
 }
 
 /// Constructs a `PyramidConfig` from the current local game state

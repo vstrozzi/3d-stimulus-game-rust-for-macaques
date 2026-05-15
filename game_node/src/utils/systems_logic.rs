@@ -58,13 +58,13 @@ impl Plugin for SystemsLogicPlugin {
                 FixedUpdate,
                 (
                     handle_reset_command,
-                    handle_animation_door_command,
+                    handle_check_alignment,
                     handle_blank_screen,
                     handle_stop_rendering,
                     handle_rotation,
                     handle_zoom,
-                    handle_check_alignment,
                     handle_door_animation,
+                    handle_animation_door_command,
                     update_score_bar,
                     ).chain(),
             )

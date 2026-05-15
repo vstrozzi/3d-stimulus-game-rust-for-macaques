@@ -233,7 +233,7 @@ pub fn spawn_pyramid_base(
             .spawn((
                 SpotLight {
                     intensity: 0.0,
-                    shadows_enabled: true,
+                    shadows_enabled: false,
                     inner_angle: std::f32::consts::PI / 6.0,
                     outer_angle: std::f32::consts::PI / 4.0,
                     range: 25.0,

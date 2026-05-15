@@ -718,8 +718,8 @@ function _summaryFilename(idx, startedAt) {
 function _trialFilename(idx, trialIdxInChain, activeChainIdx, trialRunCtr, startedAt) {
   return `${_participantName()}_${_levelName(idx)}` +
          `_trial_${String(trialIdxInChain).padStart(3, "0")}` +
-         `_object_${String(activeChainIdx).padStart(3, "0")}` +
          `_run_${String(trialRunCtr).padStart(4, "0")}` +
+          `_object_${String(activeChainIdx).padStart(3, "0")}` +
          `_${_stampCompact(startedAt)}.json`;
 }
 
@@ -1006,7 +1006,6 @@ function handleInit(state) {
   trialStartTime = Date.now();
   frameLog = {};
   winEvent = null;
-  trialRunCounter += 1;
 
   // Re-sync frame tracking with the game's fresh counter. handle_reset_command
   // zeros frame_number (and elapsed_secs) on the game side via setup_round.
@@ -1043,14 +1042,7 @@ function handleWaitingForStart(state) {
 
   if (_start) {
     _start = false;
-    // No `reset` here. handleInit already issued a reset that spawned the
-    // trial's pyramid; respawning on START would despawn ~200 entities and
-    // recreate them — ~1.3 s of work on the first trial (cold heap +
-    // first-render buffer allocations) and the source of trial_000's huge
-    // Δt outlier. The pyramid is already correctly configured; we just
-    // unblank and resume rendering here.
-
-    const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
+    const cmds = makeCmd({ reset: false, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
@@ -1180,7 +1172,7 @@ function handleWaitingAnimationEnd(state) {
   }
   // Still animating – send no commands
   const cmds = makeCmd();
-  writeCommands(cmds);
+  console.log("[FSM] Waiting for animation to end (still animating)...");
   logFrame(state, cmds);
 }
 
@@ -1193,6 +1185,8 @@ function handleTrialIndexUpdate() {
   if (trialProceeding === PROCEEDING.ADVANCE) newIdx = idx + 1;
   else if (trialProceeding === PROCEEDING.RETROCEED) newIdx = Math.max(0, idx - 1);
   else newIdx = idx; // STAY
+
+  trialRunCounter += 1;
 
   _setTrialIdx(newIdx);
 
@@ -1273,14 +1267,13 @@ const CONTROLLER_TICK_INTERVAL_S_ESTIMATE = 1 / 60;
 
 function controllerLoop() {
   if (!memory || !_running) return;
-
   const { newHead, states } = readGameStateSince();
 
   if (states.length === 0) {
     gameTimeUnresponsive += CONTROLLER_TICK_INTERVAL_S_ESTIMATE;
     if ((gameTimeUnresponsive >= GAME_UNRESPONSIVENESS_THRESHOLD_S || currentFrame === 0)) {
       console.log(`[FSM] Game unresponsive for ${gameTimeUnresponsive.toFixed(1)}s, resyncing...`);
-      resyncWithGame();
+    resyncWithGame();  
     }
     return;
   }
@@ -1835,20 +1828,7 @@ async function start() {
   if (dlBtn) {
     dlBtn.addEventListener("click", downloadLogs);
   }
-
-  // Setup start-trial overlay: tap/click anywhere on it to start
-  const startOverlay = document.getElementById("start-trial-overlay");
-  if (startOverlay) {
-    startOverlay.addEventListener("click", () => {
-      if (fsmState === FSM.WAITING_FOR_START) _start = true;
-    });
-    startOverlay.addEventListener("touchend", (e) => {
-      e.preventDefault();
-      e.stopPropagation();  // prevent global touchend from firing a false tap→check
-      if (fsmState === FSM.WAITING_FOR_START) _start = true;
-    }, { passive: false });
-  }
-
+  
   _running = true;
   setLoadingStep("Ready!");
   setLoadingProgress(100);
@@ -1856,27 +1836,9 @@ async function start() {
   setTimeout(hideLoadingOverlay, 300);
   updateStatusBar("Ready");
 
-  // Mirror controller.py:643 `self._resync_with_game()` before the loop:
-  // - skip any ring entries the game pushed during warmup (else lastWriteHead=0
-  //   makes the first read return stale pre-controller frames, and the
-  //   `currentFrame === 0` clause in controllerLoop will keep firing
-  //   resyncWithGame -> INIT -> re-fire `reset` mid-first-trial, killing the
-  //   first animation's emissive cleanup).
-  // - align commandSeqCounter with the game's command_ack so the first
-  //   incrementCommandSeq actually produces a "new" seq the game will act on.
+
   resyncWithGame();
 
-  // Start the controller FSM loop on requestAnimationFrame instead of a
-  // high-frequency setInterval. Rationale:
-  //   - The browser fires rAF callbacks once per vsync (~16.67 ms at 60 Hz),
-  //     which is exactly the rate at which Bevy's FixedUpdate produces new
-  //     game state. Polling faster than that just contends with the
-  //     renderer for the single JS thread without ever seeing new data.
-  //   - Each rAF callback runs immediately after the renderer's own rAF
-  //     handler in the same animation-frame turn, so the controller is
-  //     naturally vsync-aligned and reads the just-pushed state.
-  //   - Eliminates the ~250 Hz setInterval wakeups that were starving the
-  //     renderer and causing dropped frames + 21 ms mean Δt.
   function rafLoop() {
     if (!_running) return;
     try { controllerLoop(); } catch (e) { console.error("[FSM] controllerLoop threw:", e); }

@@ -782,7 +782,7 @@ class MonkeyGameController:
                 "zoom_in": False,
                 "zoom_out": False,
                 "check": False,
-                "reset": True,
+                "reset": False,
                 "toggle_blank": True,
                 "toggle_stop_rendering": self.current_state.get("is_rendering_stopped", False), # resume rendering
                 "animation_door": False,

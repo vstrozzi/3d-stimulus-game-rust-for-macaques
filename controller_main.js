@@ -1050,7 +1050,7 @@ function handleWaitingForStart(state) {
     // Δt outlier. The pyramid is already correctly configured; we just
     // unblank and resume rendering here.
 
-    const cmds = makeCmd({ reset: false, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
+    const cmds = makeCmd({ reset: true, toggle_blank: true, toggle_stop_rendering: state.is_rendering_stopped });
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();

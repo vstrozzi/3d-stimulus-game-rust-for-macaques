@@ -1512,6 +1512,10 @@ function setupInput() {
   // ── TOUCH ──────────────────────────────────────────────────────────────
   window.addEventListener("touchstart", (e) => {
     e.preventDefault();
+    if (fsmState === FSM.WAITING_FOR_START) {
+      _start = true;
+      return;
+    }
     if (fsmState !== FSM.PLAYING) return;
     const now = performance.now();
     if (e.touches.length >= 2) {

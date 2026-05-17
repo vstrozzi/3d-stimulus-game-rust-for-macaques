@@ -903,7 +903,7 @@ class MonkeyGameController:
                 cmds["animation_colored"] = colored_light
                 cmds = self.write_commands(cmds)
             # Won: animate green light
-            elif in_win_budget and cosine_current > cosine_threshold and self.nr_attempts < suggestion_threshold:
+            elif in_win_budget and cosine_current > cosine_threshold:
                 cmds["animation_colored"] = True
                 cmds = self.write_commands(cmds)
             # No suggestions available but can still play: animate all lights with red

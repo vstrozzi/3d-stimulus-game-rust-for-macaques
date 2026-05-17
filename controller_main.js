@@ -1158,7 +1158,7 @@ function handlePlaying(state) {
       cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: coloredLight });
     }
     // Branch 3: Single green (in win budget & correct & below suggestion)
-    else if (inWinBudget && cosineAlignment > cosineThreshold && nrAttempts < suggestionThreshold) {
+    else if (inWinBudget && cosineAlignment > cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: true });
     }

@@ -249,12 +249,16 @@ def load_path(path: str, platform: str) -> list[TrialInfo]:
         return []
 
     if p.is_file() and p.suffix.lower() == ".zip":
-        # Web download bundle: zip of per-level folders with per-trial JSON
-        # files matching controller.py's on-disk schema. The zip's stem
-        # (e.g. "monkeyA_2026-05-12_14-32-08") becomes the session root.
         with zipfile.ZipFile(p) as zf, tempfile.TemporaryDirectory() as tmp:
             zf.extractall(tmp)
-            return _load_dir_recursive(Path(tmp), Path(tmp), p.stem, platform)
+            root = Path(tmp)
+            # Many bundles wrap everything in a single top-level dir named
+            # like the zip itself; descend into it so the zip-stem doesn't
+            # appear twice in source_rel_path.
+            children = [c for c in root.iterdir() if not c.name.startswith(".")]
+            if len(children) == 1 and children[0].is_dir():
+                root = children[0]
+            return _load_dir_recursive(root, root, p.stem, platform)
 
     if p.is_file():
         return _load_json_file(p, p.stem, platform)

@@ -1759,10 +1759,10 @@ async function start() {
   setLoadingProgress(0);
   updateStatusBar("Loading WASM...");
 
-  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm", import.meta.url);
+  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz", import.meta.url);
   let wasmBuffer;
   try {
-    wasmBuffer = await fetchWithProgress(wasmUrl, (loaded, total) => {
+    const gzBuffer = await fetchWithProgress(wasmUrl, (loaded, total) => {
       const mb = (loaded / 1048576).toFixed(1);
       if (total > 0) {
         const pct = Math.min(99, Math.round((loaded / total) * 100));
@@ -1772,6 +1772,10 @@ async function start() {
         setLoadingStep(`Downloading game (WASM) — ${mb} MB`);
       }
     });
+    // Decompress gzip in-browser (GitHub Pages does not gzip .wasm responses).
+    wasmBuffer = await new Response(
+      new Blob([gzBuffer]).stream().pipeThrough(new DecompressionStream("gzip"))
+    ).arrayBuffer();
   } catch (e) {
     setLoadingStep("Failed to download game: " + e.message);
     console.error(e);

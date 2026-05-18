@@ -47,7 +47,10 @@ python controller_python/controller.py
 
 #### Web Controller
 1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`) #add --dev for no optimizations
-2. Launch
+2. Gzip the wasm (decompressed in JS via `DecompressionStream`; GitHub Pages doesn't gzip `.wasm`):
+   `gzip -9 -k -f game_node/pkg/game_node_bg.wasm`
+3. npx terser controller_main.js -c drop_console=true,drop_debugger=true -m -o controller_main.min.js # crate min version of controller without debug pring
+3. Launch (replace in game.html the right controller file)
 
 ## How to create levels
 

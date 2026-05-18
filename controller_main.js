@@ -1511,6 +1511,7 @@ function updateStatusBar(text) {
 function setupInput() {
   // ── TOUCH ──────────────────────────────────────────────────────────────
   window.addEventListener("touchstart", (e) => {
+    if (e.target.closest("#download-popup")) return;
     e.preventDefault();
     if (fsmState === FSM.WAITING_FOR_START) {
       _start = true;
@@ -1561,6 +1562,7 @@ function setupInput() {
   }, { passive: false });
 
   window.addEventListener("touchend", (e) => {
+    if (e.target.closest("#download-popup")) return;
     e.preventDefault();
     const now = performance.now();
     if (e.touches.length === 0) {

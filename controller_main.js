@@ -973,12 +973,19 @@ async function downloadLogs() {
   }
   if (!saved) {
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+    if (isIOS) {
+      // canShare returned false (or share failed non-cancel). The <a download>
+      // path is broken on iOS WebKit for blob: URLs — opening the blob in a
+      // new tab makes Safari show its built-in download/preview UI instead.
+      window.open(url, "_blank");
+    } else {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 

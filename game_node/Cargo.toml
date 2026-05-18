@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { version = "0.18", features = ["pbr_specular_textures", "jpeg"] }
+bevy = { version = "0.18", features = ["pbr_specular_textures", "webgpu", "jpeg"] }
 console = "0.16.1"
 noise = "0.9"
 log = { version = "*", features = ["max_level_debug", "release_max_level_warn"] }

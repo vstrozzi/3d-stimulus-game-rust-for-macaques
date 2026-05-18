@@ -1511,6 +1511,7 @@ function setupInput() {
   // ── TOUCH ──────────────────────────────────────────────────────────────
   window.addEventListener("touchstart", (e) => {
     if (e.target.closest("#download-popup")) return;
+    if (e.target.tagName !== "CANVAS") return;
     e.preventDefault();
     if (fsmState === FSM.WAITING_FOR_START) {
       _start = true;
@@ -1537,6 +1538,7 @@ function setupInput() {
   }, { passive: false });
 
   window.addEventListener("touchmove", (e) => {
+    if (e.target.tagName !== "CANVAS") return;
     e.preventDefault();
     if (fsmState !== FSM.PLAYING) return;
     const now = performance.now();
@@ -1562,6 +1564,7 @@ function setupInput() {
 
   window.addEventListener("touchend", (e) => {
     if (e.target.closest("#download-popup")) return;
+    if (e.target.tagName !== "CANVAS") return;
     e.preventDefault();
     const now = performance.now();
     if (e.touches.length === 0) {

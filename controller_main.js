@@ -951,43 +951,11 @@ async function downloadLogs() {
   }
 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  const filename = `${baseName}.zip`;
-
-  // iOS WebKit ignores <a download> for blob: URLs (every browser on iOS
-  // is WebKit). Use the Web Share API so the user can save to Files /
-  // AirDrop / hand off to another app. Fall back to the anchor pattern
-  // everywhere else.
-  const file = new File([blob], filename, { type: "application/zip" });
-  const isIOS =
-    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  let saved = false;
-  if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      saved = true;
-    } catch (e) {
-      if (e.name === "AbortError") return; // user cancelled — keep logs for retry
-      // any other error: fall through to anchor fallback
-    }
-  }
-  if (!saved) {
-    const url = URL.createObjectURL(blob);
-    if (isIOS) {
-      // canShare returned false (or share failed non-cancel). The <a download>
-      // path is broken on iOS WebKit for blob: URLs — opening the blob in a
-      // new tab makes Safari show its built-in download/preview UI instead.
-      window.open(url, "_blank");
-    } else {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    }
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  }
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob),
+    download: `${baseName}.zip`,
+  });
+  a.click();
 
   allTrialLogs.length = 0;
   levelSummaries.length = 0;

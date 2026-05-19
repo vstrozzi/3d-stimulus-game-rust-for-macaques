@@ -1353,8 +1353,13 @@ function controllerLoop() {
   currentFrame = state.frame_number;
   gameTimeUnresponsive = 0;
 
-  console.log(`[DEBUG] elapsed_secs=${state.elapsed_secs}, nrAttempts=${nrAttempts}, retroThreshold=${flatTrial().elapsed_time_to_retroceed}`);
-  
+  // PERF: this used to run every rAF (60×/s) and was a primary source of
+  // browser-side allocation churn → GC pauses showing as 100–200 ms
+  // hitches in safari_ipad / native_chrome traces. See
+  // documentation_performance.md §F4. Re-enable behind a DEBUG flag only.
+  // console.log(`[DEBUG] elapsed_secs=${state.elapsed_secs}, nrAttempts=${nrAttempts}, retroThreshold=${flatTrial().elapsed_time_to_retroceed}`);
+
+
   // Set progress bar on state (mirrors Python lines 413-414)
   state.progress_bar_cur_size = _progressBarCur();
   state.progress_bar_size = _progressBarSize();

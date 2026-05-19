@@ -164,13 +164,13 @@ FixedPreUpdate: read_shared_memory_commands
                 read_shared_memory_game_state_local
 
 FixedUpdate:    handle_reset_command
-                handle_animation_door_command
+                handle_check_alignment
                 handle_blank_screen
                 handle_stop_rendering
                 handle_rotation
                 handle_zoom
-                handle_check_alignment
                 handle_door_animation
+                handle_animation_door_command
                 update_score_bar
 
 FixedPostUpdate: clear_pending_commands
@@ -522,6 +522,116 @@ clock. Causes:
 - **1% / 0.1% low FPS metrics**: added to the per-trial summary table,
   per-platform aggregate, and cross-platform comparison. Visualized in
   the presentation-Δt histogram (plot 5) as orange/red vertical lines.
+
+---
+
+## 14b. Subsequent Changes (post-2026-05-12, undocumented prior to this pass)
+
+### Build / deployment
+- **Gzipped WASM shipped**. `game_node/pkg/game_node_bg.wasm.gz` is the
+  artefact loaded in production; `controller_main.js::start()` fetches
+  the `.wasm.gz` URL and decompresses in-browser via
+  `new Response(blob.stream().pipeThrough(new DecompressionStream("gzip")))`.
+  Reason: GitHub Pages does not gzip `.wasm` responses, so we
+  pre-compress and inflate client-side. Build step:
+  `gzip -9 -k -f game_node/pkg/game_node_bg.wasm`.
+- **WebGPU feature enabled** in `game_node/Cargo.toml`
+  (Bevy features: `pbr_specular_textures, webgpu, jpeg`). Browsers
+  without WebGPU still fall back to WebGL2 inside wgpu.
+- **Minified controller**. `controller_main.min.js` is the served file;
+  produced by
+  `npx terser controller_main.js -c drop_console=true,drop_debugger=true -m`.
+  `game.html` loads `./controller_main.min.js` (no `?v=` query).
+- **Page title** changed in `index.html` from "Monkey 3D Game" /
+  "Monkey 3D" → "3D Stimulus Game".
+
+### Input handling (web)
+- **Touch from WAITING_FOR_START starts the trial.** `touchstart`
+  branch sets `_start = true` when `fsmState === FSM.WAITING_FOR_START`,
+  mirroring the keyboard "R" path (PR #1, copilot fix).
+- **Touch listeners ignore non-canvas / popup targets.** All three
+  (`touchstart` / `touchmove` / `touchend`) early-return when
+  `e.target.tagName !== "CANVAS"` and skip events inside
+  `#download-popup`. Stops the download-popup buttons from being
+  swallowed by `preventDefault`.
+
+### Download / logs (web)
+- **Auto-download on level finish.** `showDownloadPopup()` now calls
+  `downloadLogs()` immediately, so the ZIP is offered without the user
+  pressing the button. The button remains as a manual fallback.
+- **iOS / Safari download path explored, then reverted.** Several
+  commits tried `navigator.share({ files })`, `window.open(url)`, and
+  `document.body.appendChild(a)` to work around iOS WebKit's broken
+  `<a download>` for blob URLs. Final state (commit 952ac9a → 6c918d8):
+  back to a minimal `Object.assign(document.createElement("a"), { href,
+  download }).click()` — works once auto-download is fired from a user
+  gesture (`touchend` → `showDownloadPopup` → `downloadLogs`).
+
+### Game (Rust)
+- **`handle_door_animation` respects `intensity_factor`.** The emissive
+  colour is now scaled per-channel by `intensity_factor` (was hard-coded
+  to `color.to_linear()`). Fix for "green light not visible on win" on
+  some hardware (commit bfb6fb7 prerequisite).
+- **Pyramid spotlights: `shadows_enabled = false`** in
+  `spawn_pyramid_base` (`pyramid.rs`). Perf — shadow maps cost more than
+  the visual gain.
+- **FixedUpdate ordering changed** (commit bc13967): `handle_check_alignment`
+  moved up to run right after `handle_reset_command`, and
+  `handle_animation_door_command` moved to run after `handle_door_animation`.
+  Schedule diagram in §4 has been updated. Rationale: the win/animation
+  command must be issued from the same tick that detects alignment, and
+  door-animation state must be visible before the door-animation command
+  is processed.
+
+### Controller logic
+- **Single-green branch no longer gated on `nrAttempts < suggestionThreshold`**
+  in both `controller_main.js` and `controller_python/controller.py`.
+  Previously a correct alignment past the suggestion threshold did not
+  trigger the green light (`bfb6fb7`). Now: `in_win_budget AND
+  cosine > threshold` ⇒ single green, regardless of attempt count.
+
+### Trial-log schema (controller, both platforms)
+- **`elapsed_time` → `elapsed_time_no_anim` + `elapsed_time_anim`.**
+  Per-trial durations are bucketed by the preceding frame's
+  `is_animating` flag, summed over `present_elapsed_secs` deltas.
+  Verifier and per-trial PNG titles report both. Old `elapsed_time`
+  is removed (legacy logs still work via the verifier's fallbacks).
+- **Per-trial frame-number rebasing.** `frame_number` and
+  `render_frame_number` in logged frames (and the `frameLog` keys) are
+  zero-based per trial. `_frame_zero` / `_render_frame_zero` are
+  captured on the first logged frame; raw SHM values minus the zero are
+  written into the log. `win_event` now stores `win_frame_number`
+  (rebased) instead of `frame_number`.
+- **Level summary rename + slim**. `trials` → `trials_runs`;
+  `duration_s` → `elapsed_time_no_anim` + `elapsed_time_anim` (summed
+  from member runs). Removed aggregates: `outcomes`, `total_attempts`,
+  `chain_idxs_end`. `level_config` no longer includes the `fixed`
+  block (it duplicates the per-trial config).
+- **`start_orient` is a sentinel in trial JSON** (editor and saved
+  levels store `-1`); the controller randomly picks from
+  `START_ORIENTS` at trial init, writes the chosen value into SHM,
+  AND records it as a top-level `start_orient` field in the trial log
+  and `trials_runs[]` entry. `trial_config` no longer carries
+  `start_orient`. Trial editor (`trial_editor.html`) sets and force-
+  rewrites `fixed.start_orient = -1` on import so old files don't look
+  editable.
+
+### Verifier (`tools/verify_trial_logs.py`)
+- **Per-trial PNGs annotate animation spans** (green `axvspan`) and
+  **checked-attempt markers** (red dots) on both the camera-angle and
+  FPS subplots. Helps eyeball when win checks happened.
+- **Output path de-doubles platform prefix.** `_strip_platform_prefix`
+  drops a leading `{platform}/` from `source_rel_path` so files don't
+  end up under `out/analysis/web/web/...`.
+- **ZIP root descent.** If a session ZIP contains a single top-level
+  directory (the common case — name matches the zip stem), the loader
+  recurses into it, preventing the session name from appearing twice in
+  output paths.
+- **Per-trial title format** now includes
+  `(no_anim=…s, anim=…s, total=…s)` and uses the short
+  `level_NNN_trial_NNN_run_NNNN_object_NNN` slug.
+- **Session overview** accepts an explicit `title` (no longer a
+  free-form `title_suffix`) and prints aggregate no_anim/anim totals.
 
 ---
 

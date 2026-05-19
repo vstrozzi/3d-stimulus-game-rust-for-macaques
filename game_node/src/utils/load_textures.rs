@@ -124,9 +124,9 @@ pub fn natural_material(tex: &TextureSet) -> StandardMaterial {
         // 80+ surfaces was producing the "missed one vsync" pattern in
         // data_perf/. See documentation_performance.md §F1 — revert to
         // (0.05, 32.0) if a regression in surface depth-detail appears.
-        parallax_depth_scale: 0.03,
+        parallax_depth_scale: 1.0,
         parallax_mapping_method: ParallaxMappingMethod::Occlusion,
-        max_parallax_layer_count: 8.0,
+        max_parallax_layer_count: 32.0,
 
         ..default()
     }

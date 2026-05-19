@@ -72,6 +72,25 @@ COLOR_SUGGESTION_COS_SIM = monkey_shared.COLOR_SUGGESTION_COS_SIM
 DEFAULT_CAMERA_Y = monkey_shared.DEFAULT_CAMERA_Y
 CAMERA_3D_INITIAL_RADIUS = monkey_shared.CAMERA_3D_INITIAL_RADIUS
 N_START_ORIENTS = monkey_shared.N_START_ORIENTS
+MAX_TRIAL_FRAMES = monkey_shared.MAX_TRIAL_FRAMES
+
+# Frozen iteration order for hot loops — matches LOGGED_STATE_FIELDS as a list.
+_LOGGED_STATE_FIELDS_LIST = list(monkey_shared.LOGGED_STATE_FIELDS)
+
+# Stable list of all command keys; mirrors CMD_DEFAULTS in controller_main.js.
+_CMD_KEYS = (
+    "rotate_left", "rotate_right", "zoom_in", "zoom_out",
+    "check", "reset", "toggle_blank", "toggle_stop_rendering",
+    "animation_door", "animation_all_door", "animation_colored",
+)
+
+
+def _empty_frame_row():
+    """One preallocated row in the per-level scratch frame-log buffer."""
+    return {
+        "state_read": {k: None for k in _LOGGED_STATE_FIELDS_LIST},
+        "commands_sent": {k: False for k in _CMD_KEYS},
+    }
 
 # Evenly-spaced start orientations (one per door of the hexagonal base)
 START_ORIENTS = [k * 2.0 * math.pi / N_START_ORIENTS for k in range(N_START_ORIENTS)]
@@ -306,7 +325,12 @@ class MonkeyGameController:
         self.trial_start_orient = None
         self._frame_zero = None
         self._render_frame_zero = None
-        self.frame_log = {}
+        # Preallocated, reused across all trials of a level. log_frame mutates
+        # the row at self.frame_log[logged_fn] in place. save_trial_log copies
+        # frame_log[0:frame_log_len] into a compact retained dict at trial end.
+        self.frame_log = [_empty_frame_row() for _ in range(MAX_TRIAL_FRAMES)]
+        self.frame_log_len = 0
+        self._frame_log_overflow_warned = False
         self.win_event = None
         self.trial_run_counter = 0
         self.current_state = None
@@ -489,14 +513,33 @@ class MonkeyGameController:
                 "win_frame_number": logged_fn,
                 "present_elapsed_secs": float(state_read.get("present_elapsed_secs", 0.0)),
             }
-        filtered_state = {k: v for k, v in state_read.items() if k in self.LOGGED_STATE_FIELDS}
-        if "frame_number" in filtered_state:
-            filtered_state["frame_number"] = logged_fn
-        if "render_frame_number" in filtered_state:
-            filtered_state["render_frame_number"] = logged_rfn
-        entry = {"state_read": filtered_state, "commands_sent": commands_sent}
-        key = str(logged_fn)
-        self.frame_log[key] = entry
+
+        if logged_fn < 0 or logged_fn >= MAX_TRIAL_FRAMES:
+            if not self._frame_log_overflow_warned:
+                print(f"[LOG] frame_log overflow: logged_fn={logged_fn} exceeds MAX_TRIAL_FRAMES={MAX_TRIAL_FRAMES}; skipping")
+                self._frame_log_overflow_warned = True
+            return
+
+        # Mutate the preallocated row in place — no allocations during the trial.
+        row = self.frame_log[logged_fn]
+        sr = row["state_read"]
+        for k in _LOGGED_STATE_FIELDS_LIST:
+            sr[k] = state_read.get(k)
+        if "frame_number" in sr:
+            sr["frame_number"] = logged_fn
+        if "render_frame_number" in sr:
+            sr["render_frame_number"] = logged_rfn
+
+        cs = row["commands_sent"]
+        if commands_sent:
+            for k in _CMD_KEYS:
+                cs[k] = bool(commands_sent.get(k, False))
+        else:
+            for k in _CMD_KEYS:
+                cs[k] = False
+
+        if logged_fn + 1 > self.frame_log_len:
+            self.frame_log_len = logged_fn + 1
 
     @staticmethod
     def _stamp(dt):
@@ -659,28 +702,40 @@ class MonkeyGameController:
         trial_path = os.path.join(self.current_level_dir, "trials", trial_filename)
 
         # Bucket present_elapsed_secs deltas by preceding frame's is_animating.
-        rows = sorted(
-            (
-                (int(k), fr) for k, fr in self.frame_log.items()
-                if isinstance(fr, dict) and isinstance(fr.get("state_read"), dict)
-            ),
-            key=lambda kv: kv[0],
-        )
+        # Iterate the preallocated scratch buffer directly (rows are already
+        # ordered by logged_fn = slot index).
         elapsed_time_anim = 0.0
         elapsed_time_no_anim = 0.0
-        for (_, prev), (_, cur) in zip(rows, rows[1:]):
-            p0 = prev["state_read"].get("present_elapsed_secs")        #[cfg(not(target_arch = "wasm32"))]
-
-            p1 = cur["state_read"].get("present_elapsed_secs")
+        for i in range(1, self.frame_log_len):
+            prev_sr = self.frame_log[i - 1]["state_read"]
+            cur_sr = self.frame_log[i]["state_read"]
+            p0 = prev_sr.get("present_elapsed_secs")
+            p1 = cur_sr.get("present_elapsed_secs")
             if p0 is None or p1 is None:
                 continue
             dt = float(p1) - float(p0)
             if dt <= 0:
                 continue
-            if prev["state_read"].get("is_animating"):
+            if prev_sr.get("is_animating"):
                 elapsed_time_anim += dt
             else:
                 elapsed_time_no_anim += dt
+
+        # Build compact retained frames dict sized to actual frames used.
+        # Deep-copy each row so the scratch buffer can be reused by the next
+        # trial without aliasing this trial's saved log.
+        frames_compact = {}
+        frames_for_health = []
+        for i in range(self.frame_log_len):
+            r = self.frame_log[i]
+            frames_compact[str(i)] = {
+                "state_read": dict(r["state_read"]),
+                "commands_sent": dict(r["commands_sent"]),
+            }
+            frames_for_health.append({
+                "present_elapsed_secs": r["state_read"].get("present_elapsed_secs"),
+                "render_frame_number":  r["state_read"].get("render_frame_number"),
+            })
 
         log = {
             "level_index": self.current_level_index,
@@ -697,7 +752,7 @@ class MonkeyGameController:
             "timestamp_end": end_dt.isoformat(),
             "session_info": self.session_info,
             "win_event": self.win_event,
-            "frames": self.frame_log,
+            "frames": frames_compact,
         }
         try:
             self._atomic_write_json(trial_path, log)
@@ -717,11 +772,7 @@ class MonkeyGameController:
             "start_orient": self.trial_start_orient,
             "win_event": self.win_event,
             "file": trial_filename,
-            "_frames_for_health": [
-                {"present_elapsed_secs": fr.get("state_read", {}).get("present_elapsed_secs"),
-                 "render_frame_number":  fr.get("state_read", {}).get("render_frame_number")}
-                for fr in self.frame_log.values()
-            ],
+            "_frames_for_health": frames_for_health,
         }
         self.current_level_summary["trials_runs"].append(summary_row)
         self._flush_level_summary()
@@ -758,8 +809,12 @@ class MonkeyGameController:
             ):
                 for s in states[:-1]:
                     fn = s.get("frame_number", 0)
-                    if str(fn) not in self.frame_log:
-                        self.log_frame(s, {})
+                    # Dedup against the preallocated frame_log. frame_number is
+                    # monotonic within a trial, so any frame with rebased index
+                    # < frame_log_len has already been logged.
+                    logged_fn = fn if self._frame_zero is None else fn - self._frame_zero
+                    if logged_fn >= self.frame_log_len:
+                        self.log_frame(s, None)
 
             # Use the latest state for FSM dispatch
             self.current_state = states[-1]
@@ -850,7 +905,10 @@ class MonkeyGameController:
 
         self.nr_attempts = 0
         self.trial_start_time = time.time()
-        self.frame_log = {}
+        # frame_log buffer reused across trials — rewind cursor only. Old row
+        # contents past frame_log_len are never read.
+        self.frame_log_len = 0
+        self._frame_log_overflow_warned = False
         self._frame_zero = None
         self._render_frame_zero = None
         self.win_event = None

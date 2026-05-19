@@ -184,6 +184,13 @@ pub mod controller_constants {
     /// (one per door of the hexagonal base = 2 × N_FACES).
     pub const N_START_ORIENTS: usize = N_FACES * 2;
 
+    /// Upper bound on per-trial frame log length (20 min × 60 Hz).
+    /// Both controllers preallocate fixed-size frame-log buffers sized to
+    /// this so per-frame logging never triggers heap growth or GC during a
+    /// trial. A trial that would exceed this is clamped and skips logging
+    /// the overflow frames (with a warning).
+    pub const MAX_TRIAL_FRAMES: usize = 72_000;
+
     /// SHM-direct state fields written into each frame entry of a trial log.
     /// Both the Python and JS controllers consume this list; the verifier
     /// reads the same keys. Add/rename a field here, both sides pick it up.

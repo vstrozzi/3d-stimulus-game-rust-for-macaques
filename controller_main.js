@@ -38,9 +38,11 @@ let GAME_UNRESPONSIVENESS_THRESHOLD_S = null;
 let DEFAULT_CAMERA_Y = null;
 let CAMERA_3D_INITIAL_RADIUS = null;
 let LOGGED_STATE_FIELDS = null;       // Set<string>
+let LOGGED_STATE_FIELDS_LIST = null;  // string[]  (frozen iteration order for hot loops)
 let CONTROLLER_META_FIELDS = null;    // Set<string>
 let FSM_STATES = null;                // string[]
 let PROCEEDING_VALUES = null;         // string[]
+let MAX_TRIAL_FRAMES = 0;             // from Rust; preallocated frame-log capacity
 
 const APP_START_UNIX_NS = Date.now() * 1_000_000;
 
@@ -99,7 +101,13 @@ let commandSeqCounter = 0;
 let nrAttempts = 0;
 let trialStartTime = 0;
 let trialStartOrient = null;
-let frameLog = {};
+// Preallocated, reused across all trials of a level. Sized to MAX_TRIAL_FRAMES
+// after wasm init (see _initFrameLogScratch). `logFrame` mutates the row at
+// `frameLog[loggedFn]` in place — no per-frame allocations. At trial end
+// `saveTrialLog` copies frameLog[0..frameLogLen] into a fresh compact dict so
+// the per-level retained heap is sized to actual frames used.
+let frameLog = null;
+let frameLogLen = 0;
 let frameZero = null;
 let renderFrameZero = null;
 let winEvent = null;
@@ -376,23 +384,22 @@ function writeNoCommands() {
 }
 
 /** Read current commands from SHM (mirrors Python's shm_wrapper.read_commands).
- *  Returns a dict with the same keys as makeCmd so logs stay schema-consistent. */
+ *  Returns a SHARED scratch dict with the same keys as makeCmd; do not retain. */
 function readCommands() {
   const view = new Uint8Array(memory.buffer, pointers.cmd);
   const co = cmdOffsets;
-  return {
-    rotate_left: view[co.rotate_left] !== 0,
-    rotate_right: view[co.rotate_right] !== 0,
-    zoom_in: view[co.zoom_in] !== 0,
-    zoom_out: view[co.zoom_out] !== 0,
-    check: view[co.check] !== 0,
-    reset: view[co.reset] !== 0,
-    toggle_blank: view[co.toggle_blank] !== 0,
-    toggle_stop_rendering: view[co.toggle_stop_rendering] !== 0,
-    animation_door: view[co.animation_door] !== 0,
-    animation_all_door: view[co.animation_all_door] !== 0,
-    animation_colored: view[co.animation_colored] !== 0,
-  };
+  _scratchReadCmd.rotate_left = view[co.rotate_left] !== 0;
+  _scratchReadCmd.rotate_right = view[co.rotate_right] !== 0;
+  _scratchReadCmd.zoom_in = view[co.zoom_in] !== 0;
+  _scratchReadCmd.zoom_out = view[co.zoom_out] !== 0;
+  _scratchReadCmd.check = view[co.check] !== 0;
+  _scratchReadCmd.reset = view[co.reset] !== 0;
+  _scratchReadCmd.toggle_blank = view[co.toggle_blank] !== 0;
+  _scratchReadCmd.toggle_stop_rendering = view[co.toggle_stop_rendering] !== 0;
+  _scratchReadCmd.animation_door = view[co.animation_door] !== 0;
+  _scratchReadCmd.animation_all_door = view[co.animation_all_door] !== 0;
+  _scratchReadCmd.animation_colored = view[co.animation_colored] !== 0;
+  return _scratchReadCmd;
 }
 
 /** Increment command_seq so the game knows there are new commands.
@@ -627,9 +634,45 @@ const CMD_DEFAULTS = Object.freeze({
   animation_door: false, animation_all_door: false, animation_colored: false,
 });
 
-/** Build a command object: all false except the given overrides. */
-function makeCmd(overrides = {}) {
-  return { ...CMD_DEFAULTS, ...overrides };
+// Frozen list of command keys — used to copy fields without allocating.
+const CMD_KEYS = Object.freeze(Object.keys(CMD_DEFAULTS));
+
+// Single shared scratch object reused by every makeCmd() call. Callers either
+// pass it to writeCommands (which reads fields immediately into SHM) or to
+// logFrame (which field-copies into the preallocated row). Neither retains
+// the reference, so reuse is safe.
+const _scratchCmd = { ...CMD_DEFAULTS };
+
+/** Build a command object: all false except the given overrides.
+ *  Returns a SHARED scratch object; do not retain. */
+function makeCmd(overrides = undefined) {
+  for (let i = 0; i < CMD_KEYS.length; i++) _scratchCmd[CMD_KEYS[i]] = false;
+  if (overrides) {
+    for (const k in overrides) _scratchCmd[k] = overrides[k];
+  }
+  return _scratchCmd;
+}
+
+// Scratch dict for readCommands() — same reuse contract as _scratchCmd.
+const _scratchReadCmd = { ...CMD_DEFAULTS };
+
+/** Build an empty preallocated row for the frameLog scratch buffer. */
+function _emptyFrameRow() {
+  const state_read = {};
+  for (let i = 0; i < LOGGED_STATE_FIELDS_LIST.length; i++) {
+    state_read[LOGGED_STATE_FIELDS_LIST[i]] = null;
+  }
+  const commands_sent = {};
+  for (let i = 0; i < CMD_KEYS.length; i++) commands_sent[CMD_KEYS[i]] = false;
+  return { state_read, commands_sent };
+}
+
+/** One-time allocation of the per-level scratch frame-log buffer. Called
+ *  after wasm init populates LOGGED_STATE_FIELDS_LIST and MAX_TRIAL_FRAMES. */
+function _initFrameLogScratch() {
+  frameLog = new Array(MAX_TRIAL_FRAMES);
+  for (let i = 0; i < MAX_TRIAL_FRAMES; i++) frameLog[i] = _emptyFrameRow();
+  frameLogLen = 0;
 }
 
 function resetTriggers() {
@@ -661,6 +704,9 @@ function resyncSeq() {
 // LOGGING
 // ═══════════════════════════════════════════════════════════════════════════
 
+// One-shot warning if a trial exceeds MAX_TRIAL_FRAMES (clamped, overflow skipped).
+let _frameLogOverflowWarned = false;
+
 function logFrame(stateRead, commandsSent) {
   const rawFn = Number(stateRead?.frame_number ?? currentFrame);
   const rawRfn = Number(stateRead?.render_frame_number ?? 0);
@@ -679,13 +725,33 @@ function logFrame(stateRead, commandsSent) {
       present_elapsed_secs: stateRead?.present_elapsed_secs ?? 0,
     };
   }
-  const filtered = {};
-  for (const [k, v] of Object.entries(stateRead)) {
-    if (LOGGED_STATE_FIELDS.has(k)) filtered[k] = v;
+
+  if (loggedFn < 0 || loggedFn >= MAX_TRIAL_FRAMES) {
+    if (!_frameLogOverflowWarned) {
+      console.warn(`[LOG] frameLog overflow: loggedFn=${loggedFn} exceeds MAX_TRIAL_FRAMES=${MAX_TRIAL_FRAMES}; skipping`);
+      _frameLogOverflowWarned = true;
+    }
+    return;
   }
-  if ("frame_number" in filtered) filtered.frame_number = loggedFn;
-  if ("render_frame_number" in filtered) filtered.render_frame_number = loggedRfn;
-  frameLog[String(loggedFn)] = { state_read: filtered, commands_sent: commandsSent };
+
+  // Mutate the preallocated row in place — no allocations.
+  const row = frameLog[loggedFn];
+  const sr = row.state_read;
+  for (let i = 0; i < LOGGED_STATE_FIELDS_LIST.length; i++) {
+    const k = LOGGED_STATE_FIELDS_LIST[i];
+    sr[k] = stateRead[k];
+  }
+  // Override rebased counter fields.
+  if ("frame_number" in sr) sr.frame_number = loggedFn;
+  if ("render_frame_number" in sr) sr.render_frame_number = loggedRfn;
+
+  const cs = row.commands_sent;
+  for (let i = 0; i < CMD_KEYS.length; i++) {
+    const k = CMD_KEYS[i];
+    cs[k] = !!(commandsSent && commandsSent[k]);
+  }
+
+  if (loggedFn + 1 > frameLogLen) frameLogLen = loggedFn + 1;
 }
 
 function _participantName() {
@@ -842,15 +908,13 @@ function saveTrialLog(outcome) {
   const filename = _trialFilename(currentLevelIndex, _trialIdx(), activeChain, trialRunCounter, trialStartDt);
 
   // Bucket present_elapsed_secs deltas by preceding frame's is_animating.
-  const rows = Object.entries(frameLog)
-    .map(([k, fr]) => [Number(k), fr])
-    .filter(([_, fr]) => fr && fr.state_read)
-    .sort((a, b) => a[0] - b[0]);
+  // Iterate the preallocated scratch buffer directly (rows are already
+  // ordered by loggedFn = slot index).
   let elapsedAnim = 0;
   let elapsedNoAnim = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const prev = rows[i - 1][1].state_read;
-    const cur = rows[i][1].state_read;
+  for (let i = 1; i < frameLogLen; i++) {
+    const prev = frameLog[i - 1].state_read;
+    const cur = frameLog[i].state_read;
     const p0 = prev?.present_elapsed_secs;
     const p1 = cur?.present_elapsed_secs;
     if (p0 == null || p1 == null) continue;
@@ -858,6 +922,23 @@ function saveTrialLog(outcome) {
     if (dt <= 0) continue;
     if (prev.is_animating) elapsedAnim += dt;
     else elapsedNoAnim += dt;
+  }
+
+  // Build a compact, retained frames dict sized to actual frames used.
+  // Deep-copy each row so the scratch buffer can be reused by the next trial
+  // without aliasing this trial's saved log.
+  const framesCompact = {};
+  const framesForHealth = new Array(frameLogLen);
+  for (let i = 0; i < frameLogLen; i++) {
+    const r = frameLog[i];
+    framesCompact[String(i)] = {
+      state_read: { ...r.state_read },
+      commands_sent: { ...r.commands_sent },
+    };
+    framesForHealth[i] = {
+      present_elapsed_secs: r.state_read.present_elapsed_secs ?? null,
+      render_frame_number:  r.state_read.render_frame_number ?? null,
+    };
   }
 
   const log = {
@@ -875,7 +956,7 @@ function saveTrialLog(outcome) {
     timestamp_end: trialEndDt.toISOString(),
     session_info: _sessionInfo(),
     win_event: winEvent,
-    frames: frameLog,
+    frames: framesCompact,
     _filename: filename,
     _dir: `${currentLevelSummary._dir}/trials`,
   };
@@ -892,10 +973,7 @@ function saveTrialLog(outcome) {
     start_orient: trialStartOrient,
     win_event: winEvent,
     file: filename,
-    _frames_for_health: Object.values(frameLog).map(fr => ({
-      present_elapsed_secs: fr?.state_read?.present_elapsed_secs ?? null,
-      render_frame_number:  fr?.state_read?.render_frame_number ?? null,
-    })),
+    _frames_for_health: framesForHealth,
   });
   console.log(`[LOG] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, no_anim=${elapsedNoAnim.toFixed(6)}s anim=${elapsedAnim.toFixed(6)}s`);
 }
@@ -1041,10 +1119,13 @@ function handleInit(state) {
     toggle_stop_rendering: !stateOld.is_rendering_stopped,
   }));
 
-  // Reset per-trial tracking
+  // Reset per-trial tracking. frameLog buffer is reused across trials — only
+  // the "used length" cursor is rewound. Old row contents past the new
+  // frameLogLen are never read.
   nrAttempts = 0;
   trialStartTime = Date.now();
-  frameLog = {};
+  frameLogLen = 0;
+  _frameLogOverflowWarned = false;
   frameZero = null;
   renderFrameZero = null;
   winEvent = null;
@@ -1342,8 +1423,12 @@ function controllerLoop() {
   if (inPlay) {
     for (let i = 0; i < states.length - 1; i++) {
       const fn = states[i].frame_number;
-      if (!(String(fn) in frameLog)) {
-        logFrame(states[i], {});
+      // Dedup against the preallocated frameLog. frame_number is monotonic
+      // within a trial, so any frame with rebased index < frameLogLen has
+      // already been logged.
+      const loggedFn = frameZero === null ? 0 : fn - frameZero;
+      if (loggedFn >= frameLogLen) {
+        logFrame(states[i], null);
       }
     }
   }
@@ -1810,6 +1895,9 @@ async function start() {
   DEFAULT_CAMERA_Y = cc.DEFAULT_CAMERA_Y;
   CAMERA_3D_INITIAL_RADIUS = cc.CAMERA_3D_INITIAL_RADIUS;
   LOGGED_STATE_FIELDS = new Set(cc.LOGGED_STATE_FIELDS);
+  LOGGED_STATE_FIELDS_LIST = cc.LOGGED_STATE_FIELDS.slice();
+  MAX_TRIAL_FRAMES = cc.MAX_TRIAL_FRAMES | 0;
+  _initFrameLogScratch();
   CONTROLLER_META_FIELDS = new Set(cc.CONTROLLER_META_FIELDS);
   FSM_STATES = cc.FSM_STATES;
   PROCEEDING_VALUES = cc.PROCEEDING_VALUES;

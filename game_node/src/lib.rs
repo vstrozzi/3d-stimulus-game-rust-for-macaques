@@ -97,11 +97,7 @@ pub fn build_app() -> App {
             meta_check: AssetMetaCheck::Never, // Disable .meta file checking for faster load times
             ..default()
         }),
-        // PERF instrumentation: prints fps + frame time + entity count to
-        // the log every second. Catches steady-state regressions and entity
-        // leaks (e.g. trial-reset leaving game entities alive). Remove these
-        // three plugin lines once the perf investigation is closed — see
-        // documentation_performance.md §3.1 / §7.
+
         LogDiagnosticsPlugin::default(),
         FrameTimeDiagnosticsPlugin::default(),
         EntityCountDiagnosticsPlugin::default(),

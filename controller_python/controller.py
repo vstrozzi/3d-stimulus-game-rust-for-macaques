@@ -7,10 +7,49 @@ import random
 import signal
 import sys
 import tempfile
+import threading
 import time
 from enum import Enum, auto
 
-from pynput import keyboard
+# evdev (Wayland-safe). pynput was X11-only and broke on Wayland sessions
+# because there's no Wayland API for global key grabs (security by design).
+# evdev reads /dev/input/event* directly via the kernel, so it works on X11,
+# Wayland, and bare TTYs identically.
+#
+# Requires:
+#   - pip install evdev
+#   - user in the 'input' group:  sudo usermod -aG input $USER  (log out/in)
+# Optional:
+#   - MONKEY_KEYBOARD_PATH=/dev/input/eventN to pin a specific keyboard
+try:
+    from evdev import InputDevice, ecodes, list_devices
+except ImportError:
+    print("Error: 'evdev' module not found.")
+    print("Install with:  pip install evdev")
+    print("Then add yourself to the 'input' group:  sudo usermod -aG input $USER  (then log out/in)")
+    sys.exit(1)
+
+
+def _find_keyboard_device():
+    """Find a /dev/input/event* device that looks like a keyboard.
+
+    Identifies a 'keyboard' as any evdev device exposing both KEY_SPACE and
+    KEY_LEFT. Returns the first match. Override via the
+    ``MONKEY_KEYBOARD_PATH`` env var to pin a specific device (e.g. on a
+    rig with both a laptop keyboard and an external USB one).
+    """
+    forced = os.environ.get("MONKEY_KEYBOARD_PATH")
+    if forced:
+        return InputDevice(forced)
+    for path in list_devices():
+        try:
+            dev = InputDevice(path)
+        except (PermissionError, FileNotFoundError, OSError):
+            continue
+        keys = dev.capabilities().get(ecodes.EV_KEY, [])
+        if ecodes.KEY_SPACE in keys and ecodes.KEY_LEFT in keys:
+            return dev
+    return None
 
 PARTICIPANT_NAME = "native"
 LOG_ROOT = "./out/logs"
@@ -295,11 +334,18 @@ class MonkeyGameController:
 
         self._running = True
 
-        # Keyboard listener (own thread)
-        self.listener = keyboard.Listener(
-            on_press=self.on_key_press, on_release=self.on_key_release
-        )
-        self.listener.start()
+        # Keyboard listener (evdev, daemon thread). Wayland-safe; works on
+        # X11 and bare TTYs too. See top-of-file note.
+        self._kbd_device = _find_keyboard_device()
+        if self._kbd_device is None:
+            print("Error: no keyboard device found under /dev/input/event*.")
+            print("Check that:")
+            print("  - You are in the 'input' group:  id | grep input")
+            print("  - If not:  sudo usermod -aG input $USER  (then log out/in)")
+            print("  - Or pin a device with:  MONKEY_KEYBOARD_PATH=/dev/input/eventN")
+            sys.exit(1)
+        print(f"Keyboard listener: {self._kbd_device.path}  ({self._kbd_device.name})")
+        threading.Thread(target=self._input_loop, daemon=True).start()
 
     # Level/chain helpers
     @property
@@ -623,7 +669,8 @@ class MonkeyGameController:
         elapsed_time_anim = 0.0
         elapsed_time_no_anim = 0.0
         for (_, prev), (_, cur) in zip(rows, rows[1:]):
-            p0 = prev["state_read"].get("present_elapsed_secs")
+            p0 = prev["state_read"].get("present_elapsed_secs")        #[cfg(not(target_arch = "wasm32"))]
+
             p1 = cur["state_read"].get("present_elapsed_secs")
             if p0 is None or p1 is None:
                 continue
@@ -749,7 +796,12 @@ class MonkeyGameController:
 
             self.game_time_unresponsive = 0.0
 
-        self.listener.stop()
+        # Input thread is a daemon — it dies with the process. The read_loop
+        # call inside it is blocking; closing the device unblocks it.
+        try:
+            self._kbd_device.close()
+        except Exception:
+            pass
         print("[FSM] Controller stopped.")
 
     # FSM handlers (command logic unchanged)
@@ -1019,42 +1071,70 @@ class MonkeyGameController:
         self.game_time_unresponsive = 0.0
         self.fsm_state = ControllerState.INIT
 
-    def on_key_press(self, key):
-        if key == keyboard.Key.left:
-            self.inputs["rotate_left"] = True
-        if key == keyboard.Key.right:
-            self.inputs["rotate_right"] = True
-        if key == keyboard.Key.up:
-            self.inputs["zoom_in"] = True
-        if key == keyboard.Key.down:
-            self.inputs["zoom_out"] = True
+    def _input_loop(self):
+        """Background thread: read evdev events, update inputs/triggers.
 
-        if key == keyboard.Key.space and key not in self.pressed_keys:
-            self.triggers["check"] = True
+        Same semantics as the old pynput on_key_press/on_key_release:
+        - arrow keys hold-state into self.inputs
+        - SPACE / R / Q debounced one-shot via self.pressed_keys (codes)
+        - autorepeat events (ev.value == 2) are ignored
 
-        if hasattr(key, 'char') and key.char == "r" and key not in self.pressed_keys:
-            self._start = True
+        Wayland-safe — reads /dev/input directly.
+        """
+        KEY_TO_INPUT = {
+            ecodes.KEY_LEFT:  "rotate_left",
+            ecodes.KEY_RIGHT: "rotate_right",
+            ecodes.KEY_UP:    "zoom_in",
+            ecodes.KEY_DOWN:  "zoom_out",
+        }
+        try:
+            for ev in self._kbd_device.read_loop():
+                if not self._running:
+                    return
+                if ev.type != ecodes.EV_KEY:
+                    continue
+                is_press = ev.value == 1
+                is_release = ev.value == 0
+                # ev.value == 2 is autorepeat; we intentionally ignore it so
+                # one-shot triggers don't re-fire while a key is held.
 
-        if hasattr(key, 'char') and key.char == "q" and key not in self.pressed_keys:
-            self._running = False
+                if ev.code in KEY_TO_INPUT:
+                    if is_press:
+                        self.inputs[KEY_TO_INPUT[ev.code]] = True
+                        self.pressed_keys.add(ev.code)
+                    elif is_release:
+                        self.inputs[KEY_TO_INPUT[ev.code]] = False
+                        self.pressed_keys.discard(ev.code)
+                    continue
 
-        self.pressed_keys.add(key)
+                if ev.code == ecodes.KEY_SPACE:
+                    if is_press and ev.code not in self.pressed_keys:
+                        self.triggers["check"] = True
+                        self.pressed_keys.add(ev.code)
+                    elif is_release:
+                        self.triggers["check"] = False
+                        self.pressed_keys.discard(ev.code)
+                    continue
 
-    def on_key_release(self, key):
-        self.pressed_keys.discard(key)
+                if ev.code == ecodes.KEY_R:
+                    if is_press and ev.code not in self.pressed_keys:
+                        self._start = True
+                        self.pressed_keys.add(ev.code)
+                    elif is_release:
+                        self._start = False
+                        self.pressed_keys.discard(ev.code)
+                    continue
 
-        if key == keyboard.Key.left:
-            self.inputs["rotate_left"] = False
-        if key == keyboard.Key.right:
-            self.inputs["rotate_right"] = False
-        if key == keyboard.Key.up:
-            self.inputs["zoom_in"] = False
-        if key == keyboard.Key.down:
-            self.inputs["zoom_out"] = False
-        if key == keyboard.Key.space:
-            self.triggers["check"] = False
-        if hasattr(key, 'char') and key.char == "r":
-            self._start = False
+                if ev.code == ecodes.KEY_Q:
+                    if is_press and ev.code not in self.pressed_keys:
+                        self._running = False
+                        self.pressed_keys.add(ev.code)
+                    elif is_release:
+                        self.pressed_keys.discard(ev.code)
+                    continue
+        except OSError as e:
+            # Device closed (graceful shutdown) or disconnected.
+            print(f"[INPUT] evdev loop exiting: {e}")
 
 
 if __name__ == "__main__":

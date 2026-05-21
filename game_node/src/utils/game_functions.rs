@@ -1,7 +1,7 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
 
-use crate::utils::objects::{DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain,  GameStateLocal};
+use crate::utils::objects::{DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain, ScoreBarUI, GameStateLocal};
 use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
 
 /// Handles the light animation
@@ -133,40 +133,75 @@ pub fn handle_door_animation(
 
 }
 
-// Update the score bar based on the current level state
+// Update the score bar based on the current level state.
+//
+// The dot/chain/row entities are spawned once at startup
+// (`spawn_score_bar_pool`). Every tick we toggle their `Node.display` so
+// only `index < progress_bar_size` are laid out, and recolor the visible
+// ones based on `progress_bar_cur_size`. Hidden subtrees are skipped by
+// taffy, so no per-tick grid/flexbox recomputation happens.
 pub fn update_score_bar(
-    mut local_game_struct: ResMut<GameStateLocal>,
-    mut dot_query: Query<(&ScoreBarDot, &mut BackgroundColor), Without<ScoreBarChain>>,
-    mut chain_query: Query<(&ScoreBarChain, &mut BackgroundColor), Without<ScoreBarDot>>,
+    local_game_struct: Res<GameStateLocal>,
+    mut dot_query: Query<(&ScoreBarDot, &mut BackgroundColor, &mut Node), (Without<ScoreBarChain>, Without<ScoreBarUI>)>,
+    mut chain_query: Query<(&ScoreBarChain, &mut BackgroundColor, &mut Node), (Without<ScoreBarDot>, Without<ScoreBarUI>)>,
+    mut row_query: Query<(&ScoreBarUI, &mut Node), (Without<ScoreBarDot>, Without<ScoreBarChain>)>,
 ) {
-
-    let gs_game = &mut local_game_struct.0;
-    let progress_bar_cur_size: u32 = gs_game.progress_bar_cur_size; //gs_game.progress_bar_cur_size;
+    let gs_game = &local_game_struct.0;
+    let progress_bar_size: u32 = gs_game.progress_bar_size;
+    let progress_bar_cur_size: u32 = gs_game.progress_bar_cur_size;
 
     let filled_color = Color::srgba(1.0, 1.0, 1.0, 0.5);
     let unfilled_dot_color = Color::srgba(1.0, 1.0, 1.0, 0.01);
     let filled_chain_color = Color::srgba(1.0, 1.0, 0.0, 0.3);
     let unfilled_chain_color = Color::srgba(1.0, 1.0, 0.0, 0.05);
 
-    // Update dots
-    for (dot, mut bg) in dot_query.iter_mut() {
-        if dot.index < progress_bar_cur_size {
-            *bg = BackgroundColor(filled_color);
-        } else {
-            *bg = BackgroundColor(unfilled_dot_color);
+    // Rows: hide a whole row when none of its dots are active.
+    for (row, mut node) in row_query.iter_mut() {
+        let row_active = row.row_start < progress_bar_size;
+        let desired = if row_active { Display::Flex } else { Display::None };
+        if node.display != desired {
+            node.display = desired;
         }
     }
 
-    // Update chains
-    for (chain, mut bg) in chain_query.iter_mut() {
+    // Dots: visible iff index < progress_bar_size; color depends on cur_size.
+    for (dot, mut bg, mut node) in dot_query.iter_mut() {
+        let visible = dot.index < progress_bar_size;
+        let desired = if visible { Display::Flex } else { Display::None };
+        if node.display != desired {
+            node.display = desired;
+        }
+        if visible {
+            let color = if dot.index < progress_bar_cur_size {
+                filled_color
+            } else {
+                unfilled_dot_color
+            };
+            if bg.0 != color {
+                *bg = BackgroundColor(color);
+            }
+        }
+    }
+
+    // Chains: visible iff both connected dots are within the same row AND active.
+    for (chain, mut bg, mut node) in chain_query.iter_mut() {
         let dot_after = chain.index + 1;
         let same_row = chain.index / PROGRESS_BAR_WRAP_AROUND_SIZE
             == dot_after / PROGRESS_BAR_WRAP_AROUND_SIZE;
-
-        if same_row && dot_after < progress_bar_cur_size {
-            *bg = BackgroundColor(filled_chain_color);
-        } else {
-            *bg = BackgroundColor(unfilled_chain_color);
+        let visible = same_row && dot_after < progress_bar_size;
+        let desired = if visible { Display::Flex } else { Display::None };
+        if node.display != desired {
+            node.display = desired;
+        }
+        if visible {
+            let color = if dot_after < progress_bar_cur_size {
+                filled_chain_color
+            } else {
+                unfilled_chain_color
+            };
+            if bg.0 != color {
+                *bg = BackgroundColor(color);
+            }
         }
     }
 }

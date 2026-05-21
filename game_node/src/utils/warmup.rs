@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use shared::{DecorationShape, Texture};
 use strum::IntoEnumIterator;
 
-use crate::shared_memory::shared_memory_writer::FrameCounterResource;
+use crate::shared_memory::shared_memory_writer::RenderFrameCounterResource;
 use crate::utils::decorations::create_decoration_mesh;
 use crate::utils::load_textures::{natural_material, tinted_material_tiled};
 use crate::utils::objects::PreloadedTextures;
@@ -25,14 +25,19 @@ pub struct WarmupEntity;
 /// Tracks warmup progress. `complete` is what `check_scene_ready` gates on.
 #[derive(Resource, Default)]
 pub struct WarmupState {
-    /// Frame at which every preloaded texture first reported `all_loaded`.
-    /// We render the warmup scene for `WARMUP_FRAMES_AFTER_LOAD` frames
-    /// after this so the GPU pipeline cache is populated.
+    /// Render frame at which every preloaded texture first reported `all_loaded`.
+    /// We render the warmup scene for `WARMUP_FRAMES_AFTER_LOAD` render frames
+    /// after this so the GPU pipeline cache is populated. Stored in the
+    /// render-frame domain (`RenderFrameCounterResource`) so that warmup
+    /// progresses even when the controller has set `stop_rendering=true`,
+    /// which pauses the FixedUpdate-driven `FrameCounterResource`.
     pub all_loaded_at_frame: Option<u64>,
     pub complete: bool,
 }
 
-/// How many frames to render the warmup scene after every texture.
+/// How many render frames to render the warmup scene after every texture is
+/// decoded. Counted in render frames (vsync ticks) so warmup completion is
+/// independent of game-logic pausing.
 const WARMUP_FRAMES_AFTER_LOAD: u64 = 20;
 
 /// Spawn a tiny, near-invisible scene that touches every texture +
@@ -117,7 +122,7 @@ pub fn tick_warmup(
     mut warmup: ResMut<WarmupState>,
     images: Res<Assets<Image>>,
     preloaded: Res<PreloadedTextures>,
-    frame_counter: Res<FrameCounterResource>,
+    render_frame_counter: Res<RenderFrameCounterResource>,
     warmup_entities: Query<Entity, With<WarmupEntity>>,
     mut commands: Commands,
 ) {
@@ -133,14 +138,14 @@ pub fn tick_warmup(
     let start = match warmup.all_loaded_at_frame {
         Some(f) => f,
         None => {
-            warmup.all_loaded_at_frame = Some(frame_counter.0);
-            info!("Warmup: all textures decoded at frame {}; rendering for {} more frames",
-                  frame_counter.0, WARMUP_FRAMES_AFTER_LOAD);
+            warmup.all_loaded_at_frame = Some(render_frame_counter.0);
+            info!("Warmup: all textures decoded at render frame {}; rendering for {} more frames",
+                  render_frame_counter.0, WARMUP_FRAMES_AFTER_LOAD);
             return;
         }
     };
 
-    if frame_counter.0.saturating_sub(start) < WARMUP_FRAMES_AFTER_LOAD {
+    if render_frame_counter.0.saturating_sub(start) < WARMUP_FRAMES_AFTER_LOAD {
         return;
     }
 

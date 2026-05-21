@@ -21,6 +21,11 @@ pub mod game_constants {
     // Progress bar dots constants
     pub const PROGRESS_BAR_WRAP_AROUND_SIZE: u32 = 20;
     pub const PROGRESS_BAR_DOTS_SIZE: f32 = 20.0;
+    /// Maximum number of dots ever displayed in the score bar. The pool is
+    /// spawned once at startup and entities beyond `progress_bar_size` are
+    /// hidden via `Node.display`. Controllers must keep `progress_bar_size`
+    /// at or below this; excess dots silently won't show.
+    pub const PROGRESS_BAR_MAX_SIZE: u32 = 100;
 }
 
 /// 3D camera

@@ -17,6 +17,8 @@ use bevy::{
     window::*,
 };
 
+use bevy::winit::WinitSettings;
+
 // Re-export shared memory functions so wasm-bindgen keeps them in the cdylib
 #[cfg(target_arch = "wasm32")]
 pub use shared::{create_shared_memory_wasm, WebSharedMemory};
@@ -82,6 +84,7 @@ pub fn build_app() -> App {
     });
 
     let mut app = App::new();
+    app.insert_resource(WinitSettings::continuous());
     app.add_plugins((
         DefaultPlugins.set(WindowPlugin {
             primary_window: window,
@@ -114,6 +117,7 @@ pub fn build_app() -> App {
     .insert_resource(GameStateLocal::default())
     .insert_resource(PreloadedTextures::default())
     .insert_resource(crate::utils::warmup::WarmupState::default());
+
     app
 }
 

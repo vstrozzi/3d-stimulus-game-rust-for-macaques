@@ -2,24 +2,21 @@ use bevy::prelude::*;
 // TODO: add to shared memory
 use shared::constants::game_constants::{
     SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT, UI_REFERENCE_HEIGHT,
-    PROGRESS_BAR_DOTS_SIZE, PROGRESS_BAR_WRAP_AROUND_SIZE
+    PROGRESS_BAR_DOTS_SIZE, PROGRESS_BAR_MAX_SIZE, PROGRESS_BAR_WRAP_AROUND_SIZE,
 };
 use crate::utils::objects::{
-    ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot
+    ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot, ScoreBarRoot,
 };
-/// Spawns the energy score bar as a chain of dots at the top center of the screen (trials progression)
-pub fn spawn_score_bar(
-    commands: &mut Commands,
-    progress_bar_size: u32,
-    ) {
 
-    // Don't show the bar if the size is 0
-    if progress_bar_size == 0 {
-        return;
-    }
-
-    // Calculate how many rows we need
-    let num_rows = progress_bar_size.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
+/// Spawns the persistent score-bar entity pool at startup.
+///
+/// We allocate `PROGRESS_BAR_MAX_SIZE` dots (plus interleaving chain
+/// segments) once and never despawn them. `update_score_bar` toggles
+/// `Node.display` so only entities with index < `progress_bar_size` are
+/// laid out. This avoids the ~10 ms taffy/layout spike that the old
+/// despawn+respawn-on-every-check-alignment path produced.
+pub fn spawn_score_bar_pool(mut commands: Commands) {
+    let num_rows = PROGRESS_BAR_MAX_SIZE.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
 
     commands
         .spawn((
@@ -32,13 +29,13 @@ pub fn spawn_score_bar(
                 flex_direction: FlexDirection::Column,
                 ..default()
             },
-            UIEntity,
+            ScoreBarRoot,
         ))
         .with_children(|parent| {
-            // Create more Rows of levels if needed
             for row in 0..num_rows {
                 let row_start = row * PROGRESS_BAR_WRAP_AROUND_SIZE;
-                let row_end = (row_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(progress_bar_size);
+                let row_end =
+                    (row_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(PROGRESS_BAR_MAX_SIZE);
 
                 parent
                     .spawn((
@@ -49,27 +46,26 @@ pub fn spawn_score_bar(
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::SpaceEvenly,
                             margin: UiRect::bottom(Val::Px(2.0)),
+                            display: Display::None,
                             ..default()
                         },
-                        // Invisible background
                         BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.0)),
-                        ScoreBarUI,
+                        ScoreBarUI { row_start },
                     ))
                     .with_children(|bar_parent| {
                         for i in row_start..row_end {
-                            // Chain segment before each dot except the first in this row
                             if i > row_start {
                                 bar_parent.spawn((
                                     Node {
                                         width: Val::Px(0.0),
                                         height: Val::Px(1.0),
                                         flex_grow: 1.0,
+                                        display: Display::None,
                                         ..default()
                                     },
                                     ScoreBarChain { index: i - 1 },
                                 ));
                             }
-                            // Dot
                             bar_parent.spawn((
                                 Node {
                                     width: Val::Px(PROGRESS_BAR_DOTS_SIZE),
@@ -78,6 +74,7 @@ pub fn spawn_score_bar(
                                     border_radius: BorderRadius::all(Val::Px(
                                         PROGRESS_BAR_DOTS_SIZE / 2.0,
                                     )),
+                                    display: Display::None,
                                     ..default()
                                 },
                                 ScoreBarDot { index: i },

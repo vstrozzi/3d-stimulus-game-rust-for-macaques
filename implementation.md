@@ -637,15 +637,13 @@ clock. Causes:
 
 ## 15. Known Open Issues / Follow-ups
 
-1. **Warmup reads the now-paused frame counter.** `tick_warmup` in
-   `game_node/src/utils/warmup.rs:139` takes `Res<FrameCounterResource>`,
-   which only ticks when `!stop_rendering`. During boot this is fine
-   (stop_rendering defaults to false until the controller flips it),
-   but if the controller toggles `stop_rendering = true` before warmup
-   accumulates `WARMUP_FRAMES_AFTER_LOAD = 20` frames after textures
-   load, warmup hangs and `is_scene_ready` never flips.
-   **Fix**: switch `tick_warmup` to `RenderFrameCounterResource` (or a
-   `Time<Real>`-based local counter). Render frames always tick.
+1. ~~**Warmup reads the now-paused frame counter.**~~ **Fixed.**
+   `tick_warmup` now takes `Res<RenderFrameCounterResource>`, which
+   ticks every render frame regardless of `stop_rendering`. Warmup
+   progresses to completion even if the controller toggles
+   `stop_rendering = true` before the 20 post-decode warmup frames
+   have rendered. `WarmupState.all_loaded_at_frame` now stores a
+   render-frame index, not a FixedUpdate index.
 2. **Native warmup is unconditional.** It costs ~few hundred ms at
    startup on native, where the original stall was less severe.
    Consider `#[cfg(target_arch = "wasm32")]`-gating the spawn — not

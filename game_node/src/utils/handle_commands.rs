@@ -1,13 +1,10 @@
 //! Functions to handle commands received by the Controller
 use bevy::prelude::*;
-use core::sync::atomic::Ordering;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
 use crate::utils::objects::{
     DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions,
     UIEntity, BlankScreen, GameEntity, GameStateLocal};
-use crate::utils::ui::{spawn_score_bar};
 use crate::utils::helpers::{spawn_blank_screen, despawn_all_game_and_ui};
-use crate::utils::ui::despawn_ui;
 use crate::utils::setup::{setup_round};
 use shared::constants::camera_3d_constants::{CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
@@ -46,14 +43,12 @@ pub fn handle_reset_command(
     // Clear is_animating flag in SHM
     local_game_struct.0.is_animating = false;
 
-    let progress_bar_size = shm
-        .as_ref()
-        .map(|shm_res| shm_res.0.get().game_structure_control.progress_bar_size.load(Ordering::Relaxed))
-        .unwrap_or(0);
-
     despawn_all_game_and_ui(commands.reborrow(), game_entities, ui_entities);
 
-    // Reset shared memory game structure to default values for new round
+    // Reset shared memory game structure to default values for new round.
+    // The score bar is a persistent entity pool (see `spawn_score_bar_pool`)
+    // and is intentionally not despawned here; `update_score_bar` reflects
+    // the new `progress_bar_size` automatically.
     setup_round(
     commands.reborrow(),
     meshes,
@@ -68,8 +63,6 @@ pub fn handle_reset_command(
     door_win_entities,
     time,
     );
-
-    spawn_score_bar(&mut commands, progress_bar_size);
 
 }
 
@@ -123,9 +116,7 @@ pub fn handle_check_alignment(
     mut local_game_struct: ResMut<GameStateLocal>,
     camera_query: Query<&Transform, With<Camera3d>>,
     door_query: Query<(Entity, &BaseDoor, &Transform)>,
-    mut commands: Commands,
     time: Res<Time>,
-    ui_query: Query<Entity, With<UIEntity>>,
     mut door_win_entities: ResMut<DoorWinEntities>,
 ) {
     // Only proceed check alignment was requested or when not animating
@@ -186,10 +177,6 @@ pub fn handle_check_alignment(
         gs_game.win_time = time.elapsed().as_secs_f32().to_bits();
         door_win_entities.animate_all = false; // Animate only the winning door
     }
-
-    // Clean old UI and spawn new (Score Bar)
-    despawn_ui(&mut commands, &ui_query);
-    spawn_score_bar(&mut commands, gs_game.progress_bar_size);
 }
 
 

@@ -3,6 +3,10 @@ name = "game_node"
 version = "0.1.0"
 edition = "2021"
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-O4", "--enable-bulk-memory", "--enable-reference-types", "--enable-nontrapping-float-to-int"]
+
+
 [dependencies]
 bevy = { version = "0.18", features = ["pbr_specular_textures", "webgpu", "jpeg"] }
 console = "0.16.1"

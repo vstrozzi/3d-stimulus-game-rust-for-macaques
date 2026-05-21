@@ -72,19 +72,12 @@ pub fn read_shared_memory_commands(
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
 
-    // Check if there are new commands (seq != last processed)
-    let seq = shm.command_seq.load(Ordering::Acquire);
-    if seq == last_seq.0 {
-        return; // Already processed this command batch
-    }
-
+    // Read EVERY FixedUpdate tick (no seq gate). The seq gate below skips
     let speed_rotate = f32::from_bits(
         shm.game_structure_control
             .camera_speed_rotate
             .load(Ordering::Relaxed),
     );
-    // Level-scoped rotation sense (+1 default, -1 inverts left/right).
-    // Stored as `i32` bits in SHM.
     let rotation_sense = shm
         .game_structure_control
         .camera_rotation_sense
@@ -104,16 +97,6 @@ pub fn read_shared_memory_commands(
         pending_commands.zoom += CAMERA_3D_SPEED_ZOOM;
     }
 
-    pending_commands.toggle_stop_rendering = shm.commands.toggle_stop_rendering.load(Ordering::Relaxed);
-    pending_commands.animation_door = shm.commands.animation_door.load(Ordering::Relaxed);
-    pending_commands.check_alignment = shm.commands.check_alignment.load(Ordering::Relaxed);
-    pending_commands.toggle_blank = shm.commands.toggle_blank.load(Ordering::Relaxed);
-    pending_commands.reset = shm.commands.reset.load(Ordering::Relaxed);
-    pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
-    pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
-
-
-    // Camera update
     if let Ok(mut cam_transform) = camera_query.single_mut() {
         let cam_y = f32::from_bits(
             shm.game_structure_control
@@ -129,7 +112,20 @@ pub fn read_shared_memory_commands(
         cam_transform.translation.y = cam_y;
         cam_transform.translation.z = cam_z;
     }
-    
+
+    // ─── Edge-triggered: one-shot commands gated by seq ────────────────────
+    let seq = shm.command_seq.load(Ordering::Acquire);
+    if seq == last_seq.0 {
+        return;
+    }
+    pending_commands.toggle_stop_rendering = shm.commands.toggle_stop_rendering.load(Ordering::Relaxed);
+    pending_commands.animation_door = shm.commands.animation_door.load(Ordering::Relaxed);
+    pending_commands.check_alignment = shm.commands.check_alignment.load(Ordering::Relaxed);
+    pending_commands.toggle_blank = shm.commands.toggle_blank.load(Ordering::Relaxed);
+    pending_commands.reset = shm.commands.reset.load(Ordering::Relaxed);
+    pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
+    pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
+
     // Acknowledge: tell the controller we processed this batch.
     // Release ensures all reads above are complete before the controller sees the ack.
     shm.command_ack.store(seq, Ordering::Release);

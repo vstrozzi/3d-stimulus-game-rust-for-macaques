@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>3D Stimulus Game</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -11,11 +11,17 @@
     background: #0a0a14;
     color: #e0e0f0;
     height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
+  /* ── Landing screen ──────────────────────────────────────────────── */
   .landing {
     display: flex;
     flex-direction: column;
@@ -24,28 +30,18 @@
     max-width: 480px;
     width: 90%;
   }
-
   .landing h1 {
     font-size: 2em;
     font-weight: 700;
     letter-spacing: 2px;
     color: #7c6ff7;
   }
-
-  .landing .subtitle {
-    font-size: 0.85em;
-    color: rgba(255,255,255,0.35);
-    text-align: center;
-    margin-top: -16px;
-  }
-
   .actions {
     display: flex;
     flex-direction: column;
     gap: 12px;
     width: 100%;
   }
-
   .action-btn {
     display: flex;
     align-items: center;
@@ -61,19 +57,18 @@
     text-align: left;
     transition: border-color 0.15s, background 0.15s;
     text-decoration: none;
+    width: 100%;
   }
   .action-btn:hover {
     border-color: #7c6ff7;
     background: #22223a;
   }
-
   .action-icon {
     font-size: 1.6em;
     width: 40px;
     text-align: center;
     flex-shrink: 0;
   }
-
   .action-text .action-title {
     font-weight: 700;
     font-size: 1.05em;
@@ -83,20 +78,16 @@
     color: rgba(255,255,255,0.4);
     margin-top: 3px;
   }
-
   .loaded-info {
     font-size: 0.8em;
     color: #55cc88;
     text-align: center;
     min-height: 1.2em;
   }
-
   .loaded-info.empty { color: rgba(255,255,255,0.25); }
-
   .file-input { display: none; }
 
-  /* ── Session name overlay (top-left) — persisted in localStorage and
-        used to name the downloaded log zip. ──────────────────────────── */
+  /* ── Session name overlay (top-left) ──────────────────────────────── */
   .session-name-wrap {
     position: fixed;
     top: 16px;
@@ -121,55 +112,270 @@
     font-family: inherit;
     font-size: 13px;
     width: 220px;
+    -webkit-user-select: text;
+    user-select: text;
   }
   .session-name-wrap input:focus {
     outline: none;
     border-color: #7c6ff7;
   }
+
+  /* When the game UI is shown, switch the body to pure black so the
+     landing's dark-navy doesn't bleed through letterbox bars or any
+     brief transparent areas of the canvas. */
+  body:has(#game-root:not([hidden])) { background: #000; }
+
+  /* ── Game canvas (Bevy renders here) ─────────────────────────────── */
+  #game-canvas {
+    background: #000;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: none;
+  }
+
+  /* ── HUD overlay layer ───────────────────────────────────────────── */
+  #hud {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 20;
+  }
+  #status-bar {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: rgba(255,255,255,0.35);
+    font-size: 0.8em;
+    white-space: nowrap;
+  }
+
+  /* ── START TRIAL overlay ─────────────────────────────────────────── */
+  #start-trial-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 50;
+    background: #000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  #start-trial-overlay .prompt {
+    font-size: 1.6em;
+    color: #fff;
+    letter-spacing: 1px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* ── Initial loading overlay ─────────────────────────────────────── */
+  #loading-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .loading-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: min(360px, 75vw);
+  }
+  #loading-step {
+    font-size: 0.82em;
+    color: rgba(255,255,255,0.6);
+    text-align: center;
+    min-height: 1.2em;
+  }
+  .loading-bar-track {
+    width: 100%;
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .loading-bar-fill {
+    height: 100%;
+    background: #5bc0fa;
+    border-radius: 2px;
+    width: 0%;
+    transition: width 0.18s ease;
+  }
+  .loading-bar-fill.indeterminate {
+    width: 35% !important;
+    transition: none;
+    animation: bar-slide 1.3s ease-in-out infinite;
+  }
+  @keyframes bar-slide {
+    0%   { transform: translateX(-200%); }
+    100% { transform: translateX(380%); }
+  }
+  #loading-pct {
+    font-size: 0.7em;
+    color: rgba(255,255,255,0.28);
+    min-height: 1em;
+  }
+
+  /* ── Spinner inside start-trial overlay ──────────────────────────── */
+  .trial-spinner {
+    width: 28px; height: 28px;
+    border: 2px solid rgba(255,255,255,0.12);
+    border-top-color: rgba(255,255,255,0.55);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    display: none;
+  }
+  .trial-spinner.visible { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Download popup ──────────────────────────────────────────────── */
+  #download-popup {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.74);
+    pointer-events: auto;
+  }
+  #download-popup[hidden] { display: none !important; }
+  .download-popup-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    min-width: min(360px, 82vw);
+    padding: 24px 28px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 14px;
+    background: rgba(14, 16, 23, 0.96);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  }
+  .download-popup-title {
+    font-size: 1.15em;
+    color: #fff;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+  .download-popup-text {
+    font-size: 0.92em;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.72);
+    text-align: center;
+  }
+  #download-logs-btn {
+    padding: 10px 18px;
+    font-size: 0.9em;
+    font-family: inherit;
+    color: #fff;
+    background: #7c6ff7;
+    border: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: transform 0.12s ease, filter 0.2s ease;
+    box-shadow: 0 6px 18px rgba(124, 111, 247, 0.34);
+  }
+  #download-logs-btn:hover { filter: brightness(1.05); }
+  #download-logs-btn:active { transform: translateY(1px); }
+  @media (max-height: 700px) {
+    .download-popup-card { padding: 18px 22px; gap: 10px; }
+  }
 </style>
 </head>
 <body>
 
-<div class="session-name-wrap">
-  <label for="session-name">Session name (for log filenames)</label>
-  <input type="text" id="session-name" placeholder="e.g. monkey_A_session_03"
-         autocomplete="off" spellcheck="false" maxlength="64">
-</div>
-
-<div class="landing">
-  <h1>3D Stimulus Game</h1>
-
-  <div class="actions">
-    <!-- Play -->
-    <a class="action-btn" id="btn-play" href="./game.html">
-      <span class="action-icon">&#9654;</span>
-      <span class="action-text">
-        <span class="action-title">Play</span>
-        <span class="action-desc">Start the game with current trial configuration</span>
-      </span>
-    </a>
-
-    <!-- Create / Edit Trials -->
-    <a class="action-btn" id="btn-edit" href="./trials_config/trial_editor.html">
-      <span class="action-icon">&#9998;</span>
-      <span class="action-text">
-        <span class="action-title">Create / Edit Trials</span>
-        <span class="action-desc">Open the trial editor with the current trials.jsonl</span>
-      </span>
-    </a>
-
-    <!-- Load Custom Trials -->
-    <button class="action-btn" id="btn-load">
-      <span class="action-icon">&#128194;</span>
-      <span class="action-text">
-        <span class="action-title">Load Trials</span>
-        <span class="action-desc">Load a custom trials.jsonl to use when playing</span>
-      </span>
-    </button>
-    <input type="file" class="file-input" id="file-input" accept=".jsonl,.json">
+<!-- ─────────────────── LANDING ─────────────────── -->
+<div id="landing-root">
+  <div class="session-name-wrap">
+    <label for="session-name">Session name (for log filenames)</label>
+    <input type="text" id="session-name" placeholder="e.g. monkey_A_session_03"
+           autocomplete="off" spellcheck="false" maxlength="64">
   </div>
 
-  <div class="loaded-info" id="loaded-info"></div>
+  <div class="landing">
+    <h1>3D Stimulus Game</h1>
+
+    <div class="actions">
+      <button class="action-btn" id="btn-play" type="button">
+        <span class="action-icon">&#9654;</span>
+        <span class="action-text">
+          <span class="action-title" id="btn-play-title">Play</span>
+          <span class="action-desc" id="btn-play-desc">Make the game fullscreen</span>
+        </span>
+      </button>
+
+      <a class="action-btn" id="btn-edit" href="./trials_config/trial_editor.html">
+        <span class="action-icon">&#9998;</span>
+        <span class="action-text">
+          <span class="action-title">Create / Edit Trials</span>
+          <span class="action-desc">Open the trial editor with the current trials.jsonl</span>
+        </span>
+      </a>
+
+      <button class="action-btn" id="btn-load" type="button">
+        <span class="action-icon">&#128194;</span>
+        <span class="action-text">
+          <span class="action-title">Load Trials</span>
+          <span class="action-desc">Load a custom trials.jsonl to use when playing</span>
+        </span>
+      </button>
+      <input type="file" class="file-input" id="file-input" accept=".jsonl,.json">
+    </div>
+
+    <div class="loaded-info" id="loaded-info"></div>
+  </div>
+</div>
+
+<!-- ─────────────────── GAME (hidden until Play pressed) ─────────────────── -->
+<div id="game-root" hidden>
+  <canvas id="game-canvas"></canvas>
+
+  <div id="hud">
+    <div id="status-bar">Initializing...</div>
+  </div>
+
+  <div id="loading-overlay">
+    <div class="loading-box">
+      <div id="loading-step">Initializing...</div>
+      <div class="loading-bar-track">
+        <div id="loading-bar-fill" class="loading-bar-fill indeterminate"></div>
+      </div>
+      <div id="loading-pct"></div>
+    </div>
+  </div>
+
+  <div id="start-trial-overlay">
+    <div class="trial-spinner" id="trial-spinner"></div>
+    <span class="prompt" id="trial-prompt">Press the screen<br>or press space bar</span>
+  </div>
+
+  <div id="download-popup" hidden>
+    <div class="download-popup-card">
+      <div class="download-popup-title">Session complete</div>
+      <div class="download-popup-text">Download the collected trial logs now. This popup only appears after the final level finishes.</div>
+      <button id="download-logs-btn" type="button" title="Download all trial logs as ZIP">Download Logs</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -178,16 +384,14 @@
   const btnLoad = document.getElementById('btn-load');
   const btnPlay = document.getElementById('btn-play');
   const sessionNameInput = document.getElementById('session-name');
+  const landingRoot = document.getElementById('landing-root');
+  const gameRoot = document.getElementById('game-root');
 
-  // Session name persists across reloads so participants don't need to
-  // re-enter it. The web controller reads `localStorage.session_name`
-  // when assembling the downloaded log zip's filename.
   sessionNameInput.value = localStorage.getItem('session_name') || '';
   sessionNameInput.addEventListener('input', () => {
     localStorage.setItem('session_name', sessionNameInput.value);
   });
 
-  // Check if custom trials already in sessionStorage
   function updateInfo() {
     const stored = sessionStorage.getItem('custom_trials_jsonl');
     const name = sessionStorage.getItem('custom_trials_name');
@@ -200,7 +404,6 @@
       loadedInfo.className = 'loaded-info empty';
     }
   }
-
   updateInfo();
 
   btnLoad.addEventListener('click', () => fileInput.click());
@@ -212,7 +415,6 @@
     reader.onload = ev => {
       try {
         const text = ev.target.result;
-        // Validate: each line should be parseable JSON
         const lines = text.trim().split('\n').filter(l => l.trim());
         lines.forEach((l, i) => {
           try { JSON.parse(l); } catch (err) {
@@ -229,6 +431,93 @@
     reader.readAsText(file);
     e.target.value = '';
   });
+
+  // ── Play button: two-step flow ─────────────────────────────────────────
+  //   Step 1 (not fullscreen) → request fullscreen; on grant, change label.
+  //   Step 2 (already fullscreen) → boot the game.
+  // If the user exits fullscreen (Esc / system gesture) between presses,
+  // the label reverts and step 1 is required again.
+  const btnPlayTitle = document.getElementById('btn-play-title');
+  const btnPlayDesc = document.getElementById('btn-play-desc');
+  let _gameBooted = false;
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  function setPlayLabelForState() {
+    if (isFullscreen()) {
+      btnPlayTitle.textContent = 'Play';
+      btnPlayDesc.textContent = 'Press again to start the session';
+    } else {
+      btnPlayTitle.textContent = 'Play';
+      btnPlayDesc.textContent = 'Make the game fullscreen';
+    }
+  }
+  document.addEventListener('fullscreenchange', setPlayLabelForState);
+  document.addEventListener('webkitfullscreenchange', setPlayLabelForState);
+
+  function bootGame() {
+    if (_gameBooted) return;
+    _gameBooted = true;
+    landingRoot.hidden = true;
+    gameRoot.hidden = false;
+    // Inject JSZip then the controller module. The controller's start()
+    // runs on module load and begins the WASM download — at this point
+    // we are already fullscreen, so the loading bar appears inside it.
+    const z = document.createElement('script');
+    z.src = './vendor/jszip.min.js';
+    z.onload = () => {
+      const c = document.createElement('script');
+      c.type = 'module';
+      c.src = './controller_main.min.js';
+      document.body.appendChild(c);
+    };
+    document.body.appendChild(z);
+  }
+
+  function requestFullscreenForLanding() {
+    // Fullscreen the <html> root so the landing UI stays inside the
+    // fullscreen subtree and remains clickable. (Fullscreening the canvas
+    // would scope the fullscreen view to the canvas only, hiding the
+    // buttons.) iOS Safari does not support fullscreen on <html> — there
+    // we fall back to webkitRequestFullscreen on the canvas, which forces
+    // a single-step boot (landing disappears, so we boot immediately).
+    const root = document.documentElement;
+    const standardReq = root.requestFullscreen ? root.requestFullscreen.bind(root) : null;
+    if (standardReq) {
+      let p;
+      try { p = standardReq({ navigationUI: 'hide' }); }
+      catch (_) { p = null; }
+      if (p && typeof p.then === 'function') {
+        p.catch(() => {
+          alert('Fullscreen is required to start the session. Please allow fullscreen and press Play again.');
+        });
+      }
+      // setPlayLabelForState fires from fullscreenchange when granted.
+      return;
+    }
+    // iOS Safari fallback: webkit-prefixed, canvas-only. The landing will
+    // be hidden by the canvas-scoped fullscreen, so boot the game now.
+    const canvas = document.getElementById('game-canvas');
+    const webkitReq = canvas.webkitRequestFullscreen ? canvas.webkitRequestFullscreen.bind(canvas) : null;
+    if (webkitReq) {
+      try { webkitReq(); } catch (_) {}
+      bootGame();
+      return;
+    }
+    // No fullscreen API at all — just advance to step 2.
+    btnPlayDesc.textContent = 'Press again to start the session';
+  }
+
+  btnPlay.addEventListener('click', () => {
+    if (isFullscreen() || btnPlayDesc.textContent === 'Press again to start the session') {
+      bootGame();
+      return;
+    }
+    requestFullscreenForLanding();
+  });
+
+  setPlayLabelForState();
 </script>
 </body>
 </html>

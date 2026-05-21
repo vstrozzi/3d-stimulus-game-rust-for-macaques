@@ -113,9 +113,19 @@ pub struct BaseDoor {
     pub is_open: bool,
 }
 
-// Component of the UI bar showing the score with lights
+// Component of the UI bar showing the score with lights.
+// `row_start` is the first dot index displayed in this row; the row is
+// hidden when no dots in `[row_start, row_start+WRAP)` are active.
 #[derive(Component)]
-pub struct ScoreBarUI;
+pub struct ScoreBarUI {
+    pub row_start: u32,
+}
+
+/// Root entity of the persistent score-bar entity pool. Spawned once at
+/// startup and never despawned; `update_score_bar` toggles `Node.display`
+/// on the dot/chain children to show only the active subset.
+#[derive(Component)]
+pub struct ScoreBarRoot;
 
 // Component for the score bar dots
 #[derive(Component)]

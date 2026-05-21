@@ -175,6 +175,22 @@ let pinch = {
 // ── Framerate-independent friction tracking ─────────────────────────────────
 let lastProcessTime = 0;
 
+// ── Cached views over WASM linear memory ───────────────────────────────────
+// `memory.buffer` is replaced when WASM grows. We cache one DataView + one
+// Uint8Array over the full buffer and rebuild only when the underlying
+// ArrayBuffer identity changes. Callers add `basePtr` to the field offset
+// instead of constructing a fresh view per call (was a big GC source).
+let _cachedBuffer = null;
+let _cachedDV = null;
+let _cachedU8 = null;
+function _views() {
+  if (_cachedBuffer !== memory.buffer) {
+    _cachedBuffer = memory.buffer;
+    _cachedDV = new DataView(memory.buffer);
+    _cachedU8 = new Uint8Array(memory.buffer);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // UTILITY: float ↔ u32 bit conversion
 // ═══════════════════════════════════════════════════════════════════════════
@@ -265,77 +281,151 @@ function writeU64(view, offset, val) {
   view.setUint32(offset + 4, Math.floor(val / 0x100000000) & 0xFFFFFFFF, true);
 }
 
-/** Read a single game state from a given base pointer (reuses offsets). */
-function readGameStateAt(basePtr) {
-  const v = new DataView(memory.buffer, basePtr);
-  const o = offsets;
+/** Build an empty game-state scratch object (shape matches readGameStateAt output).
+ *  Arrays are preallocated to the proper size; readGameStateAtInto mutates in place. */
+function _newStateScratch() {
   return {
-    base_radius: v.getUint32(o.base_radius, true),
-    height: v.getUint32(o.height, true),
-    start_orient: v.getUint32(o.start_orient, true),
-    target_door: v.getUint32(o.target_door, true),
-    colors: Array.from({ length: N_COLOR_FLOATS }, (_, i) => v.getUint32(o.colors + i * 4, true)),
-    decorations_count: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_count + i * 4, true)),
-    decorations_size: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_size + i * 4, true)),
-    decorations_seeds: Array.from({ length: N_FACES }, (_, i) => readU64(v, o.decorations_seeds + i * 8)),
-    decorations_shape: Array.from({ length: N_FACES }, (_, i) => v.getUint32(o.decorations_shape + i * 4, true)),
-    // SHM stores i32 in u32 slots; expose as signed to JS so -1 (random)
-    // round-trips through the trial log without surprise.
-    decorations_rotation: Array.from({ length: N_FACES }, (_, i) => v.getInt32(o.decorations_rotation + i * 4, true)),
-    camera_rotation_sense: v.getInt32(o.camera_rotation_sense, true),
-    cosine_alignment_threshold: v.getUint32(o.cosine_alignment_threshold, true),
-    door_anim_fade_out: v.getUint32(o.door_anim_fade_out, true),
-    door_anim_stay_open: v.getUint32(o.door_anim_stay_open, true),
-    door_anim_fade_in: v.getUint32(o.door_anim_fade_in, true),
-    main_spotlight_intensity: v.getUint32(o.main_spotlight_intensity, true),
-    ambient_brightness: v.getUint32(o.ambient_brightness, true),
-    max_spotlight_intensity: v.getUint32(o.max_spotlight_intensity, true),
-    frame_number: readU64(v, o.frame_number),
-    render_frame_number: readU64(v, o.render_frame_number),
-    elapsed_secs: u32BitsToFloat(v.getUint32(o.elapsed_secs, true)),
-    render_elapsed_secs: u32BitsToFloat(v.getUint32(o.render_elapsed_secs, true)),
-    present_elapsed_secs: u32BitsToFloat(v.getUint32(o.present_elapsed_secs, true)),
-    photodiode_white: v.getUint8(o.photodiode_white) !== 0,
-    camera_radius: u32BitsToFloat(v.getUint32(o.camera_radius, true)),
-    camera_x: u32BitsToFloat(v.getUint32(o.camera_x, true)),
-    camera_y: u32BitsToFloat(v.getUint32(o.camera_y, true)),
-    camera_z: u32BitsToFloat(v.getUint32(o.camera_z, true)),
-    camera_speed_rotate: u32BitsToFloat(v.getUint32(o.camera_speed_rotate, true)),
-    attempts: v.getUint32(o.attempts, true),
-    current_alignment: u32BitsToFloat(v.getUint32(o.current_alignment, true)),
-    current_angle: u32BitsToFloat(v.getUint32(o.current_angle, true)),
-    is_animating: v.getUint8(o.is_animating) !== 0,
-    is_blank: v.getUint8(o.is_blank) !== 0,
-    is_rendering_stopped: v.getUint8(o.is_rendering_stopped) !== 0,
-    is_scene_ready: v.getUint8(o.is_scene_ready) !== 0,
-    win_elapsed_secs: u32BitsToFloat(v.getUint32(o.win_time, true)),
+    base_radius: 0, height: 0, start_orient: 0, target_door: 0,
+    colors: new Array(N_COLOR_FLOATS).fill(0),
+    decorations_count: new Array(N_FACES).fill(0),
+    decorations_size: new Array(N_FACES).fill(0),
+    decorations_seeds: new Array(N_FACES).fill(0),
+    decorations_shape: new Array(N_FACES).fill(0),
+    decorations_rotation: new Array(N_FACES).fill(0),
+    camera_rotation_sense: 0,
+    cosine_alignment_threshold: 0,
+    door_anim_fade_out: 0, door_anim_stay_open: 0, door_anim_fade_in: 0,
+    main_spotlight_intensity: 0, ambient_brightness: 0, max_spotlight_intensity: 0,
+    frame_number: 0, render_frame_number: 0,
+    elapsed_secs: 0, render_elapsed_secs: 0, present_elapsed_secs: 0,
+    photodiode_white: false,
+    camera_radius: 0, camera_x: 0, camera_y: 0, camera_z: 0, camera_speed_rotate: 0,
+    attempts: 0, current_alignment: 0, current_angle: 0,
+    is_animating: false, is_blank: false, is_rendering_stopped: false, is_scene_ready: false,
+    win_elapsed_secs: 0,
+    progress_bar_cur_size: 0, progress_bar_size: 0,
   };
+}
+
+// Persistent scratch for the single-snapshot reads (readGameState / handleInit's
+// stateOld / scene-ready check). Pool below is for the ring-buffer drain.
+let _singleStateScratch = null;
+// Pool of state objects for readGameStateSince — sized to ringBufferSize so a
+// single drain can fill the whole pool. Indexed by position within one drain.
+let _statePool = null;
+// Preallocated states-array returned by readGameStateSince. Its `length`
+// is reused; entries are slots in _statePool.
+let _statesArr = null;
+
+/** Read a single game state from `basePtr` into `target` (mutates in place). */
+function readGameStateAtInto(basePtr, target) {
+  _views();
+  const v = _cachedDV;
+  const u8 = _cachedU8;
+  const o = offsets;
+  target.base_radius = v.getUint32(basePtr + o.base_radius, true);
+  target.height = v.getUint32(basePtr + o.height, true);
+  target.start_orient = v.getUint32(basePtr + o.start_orient, true);
+  target.target_door = v.getUint32(basePtr + o.target_door, true);
+  const colors = target.colors;
+  for (let i = 0; i < N_COLOR_FLOATS; i++) colors[i] = v.getUint32(basePtr + o.colors + i * 4, true);
+  const dc = target.decorations_count;
+  const ds = target.decorations_size;
+  const dse = target.decorations_seeds;
+  const dsh = target.decorations_shape;
+  const dro = target.decorations_rotation;
+  for (let i = 0; i < N_FACES; i++) {
+    dc[i] = v.getUint32(basePtr + o.decorations_count + i * 4, true);
+    ds[i] = v.getUint32(basePtr + o.decorations_size + i * 4, true);
+    const so = basePtr + o.decorations_seeds + i * 8;
+    const lo = v.getUint32(so, true);
+    const hi = v.getUint32(so + 4, true);
+    dse[i] = hi * 0x100000000 + lo;
+    dsh[i] = v.getUint32(basePtr + o.decorations_shape + i * 4, true);
+    // i32 — -1 round-trips through the trial log.
+    dro[i] = v.getInt32(basePtr + o.decorations_rotation + i * 4, true);
+  }
+  target.camera_rotation_sense = v.getInt32(basePtr + o.camera_rotation_sense, true);
+  target.cosine_alignment_threshold = v.getUint32(basePtr + o.cosine_alignment_threshold, true);
+  target.door_anim_fade_out = v.getUint32(basePtr + o.door_anim_fade_out, true);
+  target.door_anim_stay_open = v.getUint32(basePtr + o.door_anim_stay_open, true);
+  target.door_anim_fade_in = v.getUint32(basePtr + o.door_anim_fade_in, true);
+  target.main_spotlight_intensity = v.getUint32(basePtr + o.main_spotlight_intensity, true);
+  target.ambient_brightness = v.getUint32(basePtr + o.ambient_brightness, true);
+  target.max_spotlight_intensity = v.getUint32(basePtr + o.max_spotlight_intensity, true);
+  {
+    const fnPtr = basePtr + o.frame_number;
+    const lo = v.getUint32(fnPtr, true);
+    const hi = v.getUint32(fnPtr + 4, true);
+    target.frame_number = hi * 0x100000000 + lo;
+  }
+  {
+    const rPtr = basePtr + o.render_frame_number;
+    const lo = v.getUint32(rPtr, true);
+    const hi = v.getUint32(rPtr + 4, true);
+    target.render_frame_number = hi * 0x100000000 + lo;
+  }
+  target.elapsed_secs = u32BitsToFloat(v.getUint32(basePtr + o.elapsed_secs, true));
+  target.render_elapsed_secs = u32BitsToFloat(v.getUint32(basePtr + o.render_elapsed_secs, true));
+  target.present_elapsed_secs = u32BitsToFloat(v.getUint32(basePtr + o.present_elapsed_secs, true));
+  target.photodiode_white = u8[basePtr + o.photodiode_white] !== 0;
+  target.camera_radius = u32BitsToFloat(v.getUint32(basePtr + o.camera_radius, true));
+  target.camera_x = u32BitsToFloat(v.getUint32(basePtr + o.camera_x, true));
+  target.camera_y = u32BitsToFloat(v.getUint32(basePtr + o.camera_y, true));
+  target.camera_z = u32BitsToFloat(v.getUint32(basePtr + o.camera_z, true));
+  target.camera_speed_rotate = u32BitsToFloat(v.getUint32(basePtr + o.camera_speed_rotate, true));
+  target.attempts = v.getUint32(basePtr + o.attempts, true);
+  target.current_alignment = u32BitsToFloat(v.getUint32(basePtr + o.current_alignment, true));
+  target.current_angle = u32BitsToFloat(v.getUint32(basePtr + o.current_angle, true));
+  target.is_animating = u8[basePtr + o.is_animating] !== 0;
+  target.is_blank = u8[basePtr + o.is_blank] !== 0;
+  target.is_rendering_stopped = u8[basePtr + o.is_rendering_stopped] !== 0;
+  target.is_scene_ready = u8[basePtr + o.is_scene_ready] !== 0;
+  target.win_elapsed_secs = u32BitsToFloat(v.getUint32(basePtr + o.win_time, true));
+  return target;
+}
+
+/** Read a single game state — returns the persistent single-state scratch.
+ *  Do NOT retain; the next call overwrites it. */
+function readGameStateAt(basePtr) {
+  return readGameStateAtInto(basePtr, _singleStateScratch);
 }
 
 /**
  * Read all game states written since lastWriteHead.
  * Returns { newHead, states: [...] }.
  */
-function readGameStateSince() {
-  const headView = new DataView(memory.buffer, pointers.ringWriteHead);
-  const currentHead = readU64(headView, 0);
+// Persistent return container for readGameStateSince — reused every call.
+const _readSinceResult = { newHead: 0, states: null };
 
-  if (currentHead <= lastWriteHead) {
-    return { newHead: currentHead, states: [] };
-  }
+function readGameStateSince() {
+  _views();
+  const head = pointers.ringWriteHead;
+  const lo = _cachedDV.getUint32(head, true);
+  const hi = _cachedDV.getUint32(head + 4, true);
+  const currentHead = hi * 0x100000000 + lo;
+
+  // Reuse the preallocated states array — set length 0 (no realloc).
+  _statesArr.length = 0;
+  _readSinceResult.newHead = currentHead;
+  _readSinceResult.states = _statesArr;
+
+  if (currentHead <= lastWriteHead) return _readSinceResult;
 
   const start = (currentHead - lastWriteHead > ringBufferSize)
     ? currentHead - ringBufferSize
     : lastWriteHead;
 
-  const states = [];
+  let slot = 0;
   for (let i = start; i < currentHead; i++) {
     const idx = Number(i) % ringBufferSize;
     const entryPtr = pointers.ringEntries + idx * ringEntryStride;
-    states.push(readGameStateAt(entryPtr));
+    const target = _statePool[slot++];
+    readGameStateAtInto(entryPtr, target);
+    _statesArr.push(target);
   }
 
-  return { newHead: currentHead, states };
+  return _readSinceResult;
 }
 
 /**
@@ -347,19 +437,21 @@ function readGameStateSince() {
  *                           animation_door, animation_all_door, animation_colored }
  */
 function writeCommands(cmds) {
-  const view = new Uint8Array(memory.buffer, pointers.cmd);
+  _views();
+  const view = _cachedU8;
+  const base = pointers.cmd;
   const co = cmdOffsets;
-  view[co.rotate_left] = cmds.rotate_left ? 1 : 0;
-  view[co.rotate_right] = cmds.rotate_right ? 1 : 0;
-  view[co.zoom_in] = cmds.zoom_in ? 1 : 0;
-  view[co.zoom_out] = cmds.zoom_out ? 1 : 0;
-  view[co.check] = cmds.check ? 1 : 0;
-  view[co.reset] = cmds.reset ? 1 : 0;
-  view[co.toggle_blank] = cmds.toggle_blank ? 1 : 0;
-  view[co.toggle_stop_rendering] = cmds.toggle_stop_rendering ? 1 : 0;
-  view[co.animation_door] = cmds.animation_door ? 1 : 0;
-  view[co.animation_all_door] = cmds.animation_all_door ? 1 : 0;
-  view[co.animation_colored] = cmds.animation_colored ? 1 : 0;
+  view[base + co.rotate_left] = cmds.rotate_left ? 1 : 0;
+  view[base + co.rotate_right] = cmds.rotate_right ? 1 : 0;
+  view[base + co.zoom_in] = cmds.zoom_in ? 1 : 0;
+  view[base + co.zoom_out] = cmds.zoom_out ? 1 : 0;
+  view[base + co.check] = cmds.check ? 1 : 0;
+  view[base + co.reset] = cmds.reset ? 1 : 0;
+  view[base + co.toggle_blank] = cmds.toggle_blank ? 1 : 0;
+  view[base + co.toggle_stop_rendering] = cmds.toggle_stop_rendering ? 1 : 0;
+  view[base + co.animation_door] = cmds.animation_door ? 1 : 0;
+  view[base + co.animation_all_door] = cmds.animation_all_door ? 1 : 0;
+  view[base + co.animation_colored] = cmds.animation_colored ? 1 : 0;
 
   // Match Python's write_commands: always reset triggers after writing
   resetTriggers();
@@ -367,38 +459,44 @@ function writeCommands(cmds) {
 
 /* Write all-false commands (Python's write_no_commands).*/
 function writeNoCommands() {
-  const view = new Uint8Array(memory.buffer, pointers.cmd);
+  _views();
+  const view = _cachedU8;
+  const base = pointers.cmd;
   const co = cmdOffsets;
-  view[co.rotate_left] = 0;
-  view[co.rotate_right] = 0;
-  view[co.zoom_in] = 0;
-  view[co.zoom_out] = 0;
-  view[co.check] = 0;
-  view[co.reset] = 0;
-  view[co.toggle_blank] = 0;
-  view[co.toggle_stop_rendering] = 0;
-  view[co.animation_door] = 0;
-  view[co.animation_all_door] = 0;
-  view[co.animation_colored] = 0;
-  return { ...CMD_DEFAULTS };
+  view[base + co.rotate_left] = 0;
+  view[base + co.rotate_right] = 0;
+  view[base + co.zoom_in] = 0;
+  view[base + co.zoom_out] = 0;
+  view[base + co.check] = 0;
+  view[base + co.reset] = 0;
+  view[base + co.toggle_blank] = 0;
+  view[base + co.toggle_stop_rendering] = 0;
+  view[base + co.animation_door] = 0;
+  view[base + co.animation_all_door] = 0;
+  view[base + co.animation_colored] = 0;
+  // Return value is unused by current callers; return the shared scratch
+  // (writeNoCommands previously allocated a fresh dict here every frame).
+  return CMD_DEFAULTS;
 }
 
 /** Read current commands from SHM (mirrors Python's shm_wrapper.read_commands).
  *  Returns a SHARED scratch dict with the same keys as makeCmd; do not retain. */
 function readCommands() {
-  const view = new Uint8Array(memory.buffer, pointers.cmd);
+  _views();
+  const view = _cachedU8;
+  const base = pointers.cmd;
   const co = cmdOffsets;
-  _scratchReadCmd.rotate_left = view[co.rotate_left] !== 0;
-  _scratchReadCmd.rotate_right = view[co.rotate_right] !== 0;
-  _scratchReadCmd.zoom_in = view[co.zoom_in] !== 0;
-  _scratchReadCmd.zoom_out = view[co.zoom_out] !== 0;
-  _scratchReadCmd.check = view[co.check] !== 0;
-  _scratchReadCmd.reset = view[co.reset] !== 0;
-  _scratchReadCmd.toggle_blank = view[co.toggle_blank] !== 0;
-  _scratchReadCmd.toggle_stop_rendering = view[co.toggle_stop_rendering] !== 0;
-  _scratchReadCmd.animation_door = view[co.animation_door] !== 0;
-  _scratchReadCmd.animation_all_door = view[co.animation_all_door] !== 0;
-  _scratchReadCmd.animation_colored = view[co.animation_colored] !== 0;
+  _scratchReadCmd.rotate_left = view[base + co.rotate_left] !== 0;
+  _scratchReadCmd.rotate_right = view[base + co.rotate_right] !== 0;
+  _scratchReadCmd.zoom_in = view[base + co.zoom_in] !== 0;
+  _scratchReadCmd.zoom_out = view[base + co.zoom_out] !== 0;
+  _scratchReadCmd.check = view[base + co.check] !== 0;
+  _scratchReadCmd.reset = view[base + co.reset] !== 0;
+  _scratchReadCmd.toggle_blank = view[base + co.toggle_blank] !== 0;
+  _scratchReadCmd.toggle_stop_rendering = view[base + co.toggle_stop_rendering] !== 0;
+  _scratchReadCmd.animation_door = view[base + co.animation_door] !== 0;
+  _scratchReadCmd.animation_all_door = view[base + co.animation_all_door] !== 0;
+  _scratchReadCmd.animation_colored = view[base + co.animation_colored] !== 0;
   return _scratchReadCmd;
 }
 
@@ -406,8 +504,11 @@ function readCommands() {
  *  Mirrors Python's shm_wrapper.increment_command_seq(). */
 function incrementCommandSeq() {
   commandSeqCounter++;
-  const seqView = new DataView(memory.buffer, pointers.commandSeq);
-  seqView.setBigUint64(0, BigInt(commandSeqCounter), true);
+  _views();
+  // Split write avoids the BigInt allocation that setBigUint64 forces.
+  const ptr = pointers.commandSeq;
+  _cachedDV.setUint32(ptr, commandSeqCounter & 0xFFFFFFFF, true);
+  _cachedDV.setUint32(ptr + 4, Math.floor(commandSeqCounter / 0x100000000) & 0xFFFFFFFF, true);
 }
 
 /**
@@ -416,15 +517,17 @@ function incrementCommandSeq() {
  * @param {Object} state - key→value (u32 bits for floats, u64 for seeds, etc.)
  */
 function writeGameStateControl(state) {
-  const v = new DataView(memory.buffer, pointers.gsControl);
+  _views();
+  const v = _cachedDV;
+  const base = pointers.gsControl;
   const o = offsets;
 
-  v.setUint32(o.base_radius, state.base_radius, true);
-  v.setUint32(o.height, state.height, true);
-  v.setUint32(o.start_orient, state.start_orient, true);
-  v.setUint32(o.target_door, state.target_door, true);
+  v.setUint32(base + o.base_radius, state.base_radius, true);
+  v.setUint32(base + o.height, state.height, true);
+  v.setUint32(base + o.start_orient, state.start_orient, true);
+  v.setUint32(base + o.target_door, state.target_door, true);
 
-  const writeU32Array = (base, arr, n) => { for (let i = 0; i < n; i++) v.setUint32(base + i * 4, arr[i], true); };
+  const writeU32Array = (offBase, arr, n) => { for (let i = 0; i < n; i++) v.setUint32(base + offBase + i * 4, arr[i], true); };
   if (state.colors) writeU32Array(o.colors, state.colors, N_COLOR_FLOATS);
   if (state.decorations_count) writeU32Array(o.decorations_count, state.decorations_count, N_FACES);
   if (state.decorations_size) writeU32Array(o.decorations_size, state.decorations_size, N_FACES);
@@ -434,49 +537,59 @@ function writeGameStateControl(state) {
   if (state.decorations_thickness) writeU32Array(o.decorations_thickness, state.decorations_thickness, N_FACES);
   if (state.decorations_color) writeU32Array(o.decorations_color, state.decorations_color, N_COLOR_FLOATS);
   if (state.decorations_seeds) {
-    for (let i = 0; i < N_FACES; i++) writeU64(v, o.decorations_seeds + i * 8, state.decorations_seeds[i]);
+    for (let i = 0; i < N_FACES; i++) {
+      const off = base + o.decorations_seeds + i * 8;
+      const val = state.decorations_seeds[i];
+      v.setUint32(off, val & 0xFFFFFFFF, true);
+      v.setUint32(off + 4, Math.floor(val / 0x100000000) & 0xFFFFFFFF, true);
+    }
   }
   if (state.decorations_rotation) {
     // Negative values (e.g. -1 = random) are written as their two's-complement
     // u32 bits; the game reads them back via `as i32` in Rust.
     for (let i = 0; i < N_FACES; i++) {
-      v.setInt32(o.decorations_rotation + i * 4, state.decorations_rotation[i] | 0, true);
+      v.setInt32(base + o.decorations_rotation + i * 4, state.decorations_rotation[i] | 0, true);
     }
   }
 
-  v.setUint32(o.cosine_alignment_threshold, state.cosine_alignment_threshold, true);
-  v.setUint32(o.door_anim_fade_out, state.door_anim_fade_out, true);
-  v.setUint32(o.door_anim_stay_open, state.door_anim_stay_open, true);
-  v.setUint32(o.door_anim_fade_in, state.door_anim_fade_in, true);
-  v.setUint32(o.main_spotlight_intensity, state.main_spotlight_intensity, true);
-  v.setUint32(o.ambient_brightness, state.ambient_brightness, true);
-  v.setUint32(o.max_spotlight_intensity, state.max_spotlight_intensity, true);
+  v.setUint32(base + o.cosine_alignment_threshold, state.cosine_alignment_threshold, true);
+  v.setUint32(base + o.door_anim_fade_out, state.door_anim_fade_out, true);
+  v.setUint32(base + o.door_anim_stay_open, state.door_anim_stay_open, true);
+  v.setUint32(base + o.door_anim_fade_in, state.door_anim_fade_in, true);
+  v.setUint32(base + o.main_spotlight_intensity, state.main_spotlight_intensity, true);
+  v.setUint32(base + o.ambient_brightness, state.ambient_brightness, true);
+  v.setUint32(base + o.max_spotlight_intensity, state.max_spotlight_intensity, true);
 
-  v.setUint32(o.progress_bar_size, state.progress_bar_size ?? 0, true);
-  v.setUint32(o.progress_bar_cur_size, state.progress_bar_cur_size ?? 0, true);
+  v.setUint32(base + o.progress_bar_size, state.progress_bar_size ?? 0, true);
+  v.setUint32(base + o.progress_bar_cur_size, state.progress_bar_cur_size ?? 0, true);
 
   // Dynamic fields
-  if (state.frame_number !== undefined) writeU64(v, o.frame_number, state.frame_number);
-  v.setUint32(o.elapsed_secs, state.elapsed_secs ?? 0, true);
-  v.setUint32(o.camera_radius, state.camera_radius, true);
-  v.setUint32(o.camera_x, state.camera_x, true);
-  v.setUint32(o.camera_y, state.camera_y, true);
-  v.setUint32(o.camera_z, state.camera_z, true);
-  v.setUint32(o.camera_speed_rotate, state.camera_speed_rotate ?? 0, true);
+  if (state.frame_number !== undefined) {
+    const off = base + o.frame_number;
+    const fn = state.frame_number;
+    v.setUint32(off, fn & 0xFFFFFFFF, true);
+    v.setUint32(off + 4, Math.floor(fn / 0x100000000) & 0xFFFFFFFF, true);
+  }
+  v.setUint32(base + o.elapsed_secs, state.elapsed_secs ?? 0, true);
+  v.setUint32(base + o.camera_radius, state.camera_radius, true);
+  v.setUint32(base + o.camera_x, state.camera_x, true);
+  v.setUint32(base + o.camera_y, state.camera_y, true);
+  v.setUint32(base + o.camera_z, state.camera_z, true);
+  v.setUint32(base + o.camera_speed_rotate, state.camera_speed_rotate ?? 0, true);
   // i32 — `setInt32` keeps the two's-complement bit pattern for negative values.
-  v.setInt32(o.camera_rotation_sense, (state.camera_rotation_sense ?? 1) | 0, true);
-  v.setUint32(o.attempts, state.attempts ?? 0, true);
-  v.setUint32(o.current_alignment, state.current_alignment ?? 0, true);
-  v.setUint32(o.current_angle, state.current_angle ?? 0, true);
+  v.setInt32(base + o.camera_rotation_sense, (state.camera_rotation_sense ?? 1) | 0, true);
+  v.setUint32(base + o.attempts, state.attempts ?? 0, true);
+  v.setUint32(base + o.current_alignment, state.current_alignment ?? 0, true);
+  v.setUint32(base + o.current_angle, state.current_angle ?? 0, true);
 
   // Booleans
-  const boolView = new Uint8Array(memory.buffer, pointers.gsControl);
-  boolView[o.is_animating] = state.is_animating ? 1 : 0;
-  boolView[o.is_blank] = state.is_blank ? 1 : 0;
-  boolView[o.is_rendering_stopped] = state.is_rendering_stopped ? 1 : 0;
-  boolView[o.is_scene_ready] = state.is_scene_ready ? 1 : 0;
+  const boolView = _cachedU8;
+  boolView[base + o.is_animating] = state.is_animating ? 1 : 0;
+  boolView[base + o.is_blank] = state.is_blank ? 1 : 0;
+  boolView[base + o.is_rendering_stopped] = state.is_rendering_stopped ? 1 : 0;
+  boolView[base + o.is_scene_ready] = state.is_scene_ready ? 1 : 0;
 
-  v.setUint32(o.win_time, state.win_time ?? 0, true);
+  v.setUint32(base + o.win_time, state.win_time ?? 0, true);
 }
 
 /**
@@ -486,20 +599,24 @@ function writeGameStateControl(state) {
  * readGameStateAt returns decoded floats for: elapsed_secs, current_alignment,
  * current_angle, win_elapsed_secs. This function re-encodes them back to u32 bits.
  */
+// Persistent scratch reused every frame by writeCurrentStateToControl.
+// Used to be a per-frame `{ ...state }` spread allocation.
+const _ctrlEncScratch = {};
 function writeCurrentStateToControl(state) {
-  const s = { ...state };
+  const s = _ctrlEncScratch;
+  Object.assign(s, state);
 
   // Re-encode decoded float fields back to u32 bits
-  s.elapsed_secs = floatToU32Bits(s.elapsed_secs ?? 0);
-  s.current_alignment = floatToU32Bits(s.current_alignment ?? 0);
-  s.current_angle = floatToU32Bits(s.current_angle ?? 0);
-  s.win_time = floatToU32Bits(s.win_elapsed_secs ?? 0);
+  s.elapsed_secs = floatToU32Bits(state.elapsed_secs ?? 0);
+  s.current_alignment = floatToU32Bits(state.current_alignment ?? 0);
+  s.current_angle = floatToU32Bits(state.current_angle ?? 0);
+  s.win_time = floatToU32Bits(state.win_elapsed_secs ?? 0);
 
-  s.camera_x = floatToU32Bits(s.camera_x ?? 0);
-  s.camera_y = floatToU32Bits(s.camera_y ?? 0);
-  s.camera_z = floatToU32Bits(s.camera_z ?? 0);
-  s.camera_radius = floatToU32Bits(s.camera_radius ?? 0);
-  s.camera_speed_rotate = floatToU32Bits(s.camera_speed_rotate ?? 0);
+  s.camera_x = floatToU32Bits(state.camera_x ?? 0);
+  s.camera_y = floatToU32Bits(state.camera_y ?? 0);
+  s.camera_z = floatToU32Bits(state.camera_z ?? 0);
+  s.camera_radius = floatToU32Bits(state.camera_radius ?? 0);
+  s.camera_speed_rotate = floatToU32Bits(state.camera_speed_rotate ?? 0);
 
   writeGameStateControl(s);
 }
@@ -515,19 +632,27 @@ function currentLevel() {
 }
 
 /** Flat trial: merges object[activeChain] + fixed + trial_cfg.
- *  Mirrors Python's expand_flat_trial + flat_trial property. */
+ *  Mirrors Python's expand_flat_trial + flat_trial property.
+ *  Cached: flatTrial is called every PLAYING frame (and again inside
+ *  checkHasFinished). All inputs (currentLevelIndex, activeChain, chainIdxs)
+ *  change only on trial boundaries, so we compute once per trial and invalidate
+ *  via _invalidateFlatTrial(). */
+let _flatTrialCache = null;
+function _invalidateFlatTrial() { _flatTrialCache = null; }
 function flatTrial() {
+  if (_flatTrialCache !== null) return _flatTrialCache;
   const level = currentLevel();
   const obj = level.objects[activeChain];
   const trialIdx = Math.min(chainIdxs[activeChain], level.trials.length - 1);
   const trialCfg = level.trials[trialIdx];
   const fixed = level.fixed;
   const flat = {};
-  for (const [k, v] of Object.entries(obj)) flat[k] = v;
-  for (const [k, v] of Object.entries(fixed)) {
-    if (k !== "pr_switching_chain") flat[k] = v;
+  for (const k in obj) flat[k] = obj[k];
+  for (const k in fixed) {
+    if (k !== "pr_switching_chain") flat[k] = fixed[k];
   }
-  for (const [k, v] of Object.entries(trialCfg)) flat[k] = v;
+  for (const k in trialCfg) flat[k] = trialCfg[k];
+  _flatTrialCache = flat;
   return flat;
 }
 
@@ -536,6 +661,7 @@ function _trialIdx() {
 }
 function _setTrialIdx(val) {
   chainIdxs[activeChain] = val;
+  _invalidateFlatTrial();
 }
 
 function _levelStartTrial() {
@@ -561,6 +687,7 @@ function _maybeSwitch() {
   if (candidates.length > 0) {
     const rand = Math.floor(Math.random() * candidates.length);
     activeChain = candidates[rand];
+    _invalidateFlatTrial();
   }
 }
 
@@ -675,6 +802,17 @@ function _initFrameLogScratch() {
   frameLogLen = 0;
 }
 
+/** One-time allocation of the game-state scratch + pool. Must run after
+ *  N_FACES / N_COLOR_FLOATS are populated from Rust, and after `ringBufferSize`
+ *  is known (so the pool covers a full drain). */
+function _initStateScratch() {
+  _singleStateScratch = _newStateScratch();
+  _statePool = new Array(ringBufferSize);
+  for (let i = 0; i < ringBufferSize; i++) _statePool[i] = _newStateScratch();
+  _statesArr = new Array(ringBufferSize);
+  _statesArr.length = 0;
+}
+
 function resetTriggers() {
   for (const k of Object.keys(triggers)) triggers[k] = false;
 }
@@ -686,8 +824,11 @@ function resetAllCommands() {
 
 /** Read command_ack from SHM (game writes this after processing commands). */
 function readCommandAck() {
-  const v = new DataView(memory.buffer, pointers.commandAck);
-  return Number(v.getBigUint64(0, true));
+  _views();
+  const ptr = pointers.commandAck;
+  const lo = _cachedDV.getUint32(ptr, true);
+  const hi = _cachedDV.getUint32(ptr + 4, true);
+  return hi * 0x100000000 + lo;
 }
 
 /** Check if there are unacknowledged commands pending. */
@@ -957,10 +1098,21 @@ function saveTrialLog(outcome) {
     session_info: _sessionInfo(),
     win_event: winEvent,
     frames: framesCompact,
+  };
+  // Serialize the trial log to a JSON string now and retain only that string
+  // for the rest of the level. Collapses the deep per-trial object tree
+  // (frames dict + nested rows) into a single opaque heap entry so V8
+  // MajorGC has almost nothing to walk between trials.
+  // The ZIP builder writes this string verbatim — output bytes are identical.
+  const _json = JSON.stringify(log, null, 2);
+  allTrialLogs.push({
     _filename: filename,
     _dir: `${currentLevelSummary._dir}/trials`,
-  };
-  allTrialLogs.push(log);
+    _json,
+  });
+  // Drop references to the deep intermediate tree so it can be reclaimed
+  // before the next trial fills the frameLog scratch.
+  log.frames = null;
 
   currentLevelSummary.trials_runs.push({
     trial_index_in_chain: _trialIdx(),
@@ -1020,8 +1172,8 @@ async function downloadLogs() {
 
   for (const trial of allTrialLogs) {
     const path = `${baseName}/${trial._dir}/${trial._filename}`;
-    const { _filename, _dir, ...clean } = trial;
-    zip.file(path, JSON.stringify(clean, null, 2));
+    // Trial body was already JSON.stringified at trial-end (see saveTrialLog).
+    zip.file(path, trial._json);
   }
   for (const summary of levelSummaries) {
     const path = `${baseName}/${summary._dir}/${summary._filename}`;
@@ -1030,15 +1182,27 @@ async function downloadLogs() {
   }
 
   const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+  const url = URL.createObjectURL(blob);
   const a = Object.assign(document.createElement("a"), {
-    href: URL.createObjectURL(blob),
+    href: url,
     download: `${baseName}.zip`,
   });
   a.click();
 
+  // Free the per-trial JSON strings, summary objects, and the blob URL so the
+  // browser can reclaim them. JS has no manual GC; nulling references is the
+  // closest equivalent — it lets the next MajorGC drop these arenas.
+  for (let i = 0; i < allTrialLogs.length; i++) {
+    allTrialLogs[i]._json = null;
+    allTrialLogs[i] = null;
+  }
   allTrialLogs.length = 0;
+  for (let i = 0; i < levelSummaries.length; i++) levelSummaries[i] = null;
   levelSummaries.length = 0;
   lastSummaryFilename = null;
+  // Revoke the blob URL after the click — keeps it out of the document URL
+  // table once the download dialog has consumed it.
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
   hideDownloadPopup();
 }
 
@@ -1201,7 +1365,10 @@ function handlePlaying(state) {
   // ── Terminate if finished ──
   if (checkHasFinished(state)) {
     console.log(`[FSM] Finished with outcome ${trialProceeding} → TRIAL_COMPLETE`);
-    logFrame(state, { ...inputs, ...triggers });
+    // Reuse shared scratch — logFrame copies field-by-field, no retention.
+    const cmdsDone = makeCmd(inputs);
+    for (const k in triggers) cmdsDone[k] = triggers[k];
+    logFrame(state, cmdsDone);
     fsmState = FSM.TRIAL_COMPLETE;
     return;
   }
@@ -1328,6 +1495,7 @@ function handleTrialIndexUpdate() {
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);
     activeChain = 0;
+    _invalidateFlatTrial();
     console.log(`[LEVEL] Level complete → level ${currentLevelIndex}`);
     return;
   }
@@ -1341,6 +1509,7 @@ function handleTrialIndexUpdate() {
     if (candidates.length > 0) {
       const rand = Math.floor(Math.random() * candidates.length);
       activeChain = candidates[rand];
+      _invalidateFlatTrial();
     }
     console.log(`[CHAIN] Chain exhausted, switching to chain ${activeChain}`);
   } else {
@@ -1598,13 +1767,61 @@ function updateStatusBar(text) {
 // INPUT SETUP
 // ═══════════════════════════════════════════════════════════════════════════
 
+// ── Fullscreen + Wake Lock helpers ─────────────────────────────────────────
+// Cross-browser fullscreen request, per the MDN Fullscreen API and the
+// canonical Stack Overflow pattern. Must be called synchronously from
+// inside a user-gesture handler (touchstart / keydown); the call itself
+// must complete in <1 s after the gesture or the browser refuses.
+// References:
+//   https://developer.mozilla.org/en-US/docs/Web/API/Element/requestFullscreen
+//   https://stackoverflow.com/a/29715395
+function tryEnterFullscreenThenStart() {
+  if (document.fullscreenElement || document.webkitFullscreenElement
+      || document.mozFullScreenElement || document.msFullscreenElement) {
+    _start = true;
+    return;
+  }
+  const el = document.documentElement;
+  const req = el.requestFullscreen
+           || el.msRequestFullscreen
+           || el.mozRequestFullScreen
+           || el.webkitRequestFullScreen;
+  if (!req) { _start = true; return; } // unsupported → don't block the session
+  const p = req.call(el);
+  if (p && typeof p.then === "function") {
+    p.then(() => { _start = true; })
+     .catch(() => {
+       updateStatusBar("Fullscreen required to start — tap or press space again");
+     });
+  } else {
+    // Prefixed APIs (older Safari/IE) return undefined — start immediately.
+    _start = true;
+  }
+}
+
+let _wakeLock = null;
+async function acquireWakeLock() {
+  if (!("wakeLock" in navigator)) return;
+  try { _wakeLock = await navigator.wakeLock.request("screen"); }
+  catch (_) { /* OS refused (low battery, etc.) — silent */ }
+}
+
 function setupInput() {
+  // ── Screen Wake Lock ───────────────────────────────────────────────────
+  // Prevents the OS from dimming the screen or throttling CPU/GPU during
+  // long sessions. Browsers auto-release on tab hide, so re-acquire on
+  // visibilitychange.
+  acquireWakeLock();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") acquireWakeLock();
+  });
+
   // ── TOUCH ──────────────────────────────────────────────────────────────
   window.addEventListener("touchstart", (e) => {
     if (e.target.closest("#download-popup")) return;
     e.preventDefault();
     if (fsmState === FSM.WAITING_FOR_START) {
-      _start = true;
+      tryEnterFullscreenThenStart();
       return;
     }
     if (fsmState !== FSM.PLAYING) return;
@@ -1709,7 +1926,7 @@ function setupInput() {
 
     // Space bar starts the trial from WAITING_FOR_START
     if (e.code === "Space" && fsmState === FSM.WAITING_FOR_START) {
-      _start = true;
+      tryEnterFullscreenThenStart();
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -1949,6 +2166,9 @@ async function start() {
   pointers.ringEntries = sharedMem.get_frame_buffer_entries_ptr();
   ringEntryStride = sharedMem.get_frame_buffer_entry_stride();
   ringBufferSize = sharedMem.get_frame_buffer_size();
+
+  // State scratch + pool depends on ringBufferSize / N_FACES / N_COLOR_FLOATS.
+  _initStateScratch();
 
   // Catch log-schema drift early: every name in LOGGED_STATE_FIELDS must be
   // a real key in readGameStateAt's output. Mirrors controller.py's check.

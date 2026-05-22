@@ -451,17 +451,17 @@ class MonkeyGameController:
         return all(idx >= n for idx in self.chain_idxs)
 
     def _maybe_switch_chain(self):
-        """With probability pr, reroll the active chain uniformly over all
-        chains (including the current one and finished ones — a finished
-        chain can still be visited but cannot advance past its terminal
-        index)."""
+        """With probability pr, switch the active chain to one of the OTHER
+        chains uniformly at random. Finished chains are still candidates —
+        they can be re-visited but cannot advance past their terminal index."""
         n_objects = len(self.level["objects"])
         if n_objects <= 1:
             return
         pr = self.level["fixed"].get("pr_switching_chain", 1.0 / n_objects)
         if random.random() >= pr:
             return
-        self.active_chain = random.randrange(n_objects)
+        candidates = [i for i in range(n_objects) if i != self.active_chain]
+        self.active_chain = random.choice(candidates)
 
     def game_state_fields(self, flat):
         """Return only the game-state keys (no controller meta)."""

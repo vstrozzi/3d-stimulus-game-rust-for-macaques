@@ -678,9 +678,13 @@ function _maybeSwitch() {
   if (nObjects <= 1) return;
   const pr = level.fixed.pr_switching_chain ?? (1.0 / nObjects);
   if (Math.random() >= pr) return;
-  // Reroll uniformly over ALL chains (including current and finished ones).
-  // A finished chain can be re-selected but cannot advance past terminal.
-  activeChain = Math.floor(Math.random() * nObjects);
+  // Pick uniformly at random from the OTHER chains (finished ones included —
+  // they can be re-visited but cannot advance past their terminal index).
+  const candidates = [];
+  for (let i = 0; i < nObjects; i++) {
+    if (i !== activeChain) candidates.push(i);
+  }
+  activeChain = candidates[Math.floor(Math.random() * candidates.length)];
   _invalidateFlatTrial();
 }
 

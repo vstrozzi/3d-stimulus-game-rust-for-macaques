@@ -451,17 +451,17 @@ class MonkeyGameController:
         return all(idx >= n for idx in self.chain_idxs)
 
     def _maybe_switch_chain(self):
-        """With probability pr, switch to a random other non-exhausted chain."""
+        """With probability pr, reroll the active chain uniformly over all
+        chains (including the current one and finished ones — a finished
+        chain can still be visited but cannot advance past its terminal
+        index)."""
         n_objects = len(self.level["objects"])
         if n_objects <= 1:
             return
         pr = self.level["fixed"].get("pr_switching_chain", 1.0 / n_objects)
         if random.random() >= pr:
             return
-        n = len(self.level["trials"])
-        candidates = [i for i in range(n_objects) if i != self.active_chain and self.chain_idxs[i] < n]
-        if candidates:
-            self.active_chain = random.choice(candidates)
+        self.active_chain = random.randrange(n_objects)
 
     def game_state_fields(self, flat):
         """Return only the game-state keys (no controller meta)."""
@@ -1147,7 +1147,7 @@ class MonkeyGameController:
         idx = self._trial_idx()
 
         if self.trial_proceeding == TrialProceeding.ADVANCE:
-            new_idx = idx + 1
+            new_idx = min(idx + 1, n)
         elif self.trial_proceeding == TrialProceeding.RETROCEED:
             new_idx = max(0, idx - 1)
         else:  # STAY
@@ -1168,14 +1168,7 @@ class MonkeyGameController:
             print(f"[LEVEL] Level complete → level {self.current_level_index}")
             return
 
-        # If current chain is done, force switch to a non-exhausted one
-        if self._trial_idx() >= n:
-            candidates = [i for i in range(len(self.level["objects"])) if self.chain_idxs[i] < n]
-            if candidates:
-                self.active_chain = candidates[0]
-            print(f"[CHAIN] Chain exhausted, switching to chain {self.active_chain}")
-        else:
-            self._maybe_switch_chain()
+        self._maybe_switch_chain()
 
     def _resync_with_game(self):
         self.current_frame = -1

@@ -1,8 +1,13 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
 
-use crate::utils::objects::{DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain, ScoreBarUI, GameStateLocal};
+use crate::utils::objects::{BaseDoor, DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain, ScoreBarUI, GameStateLocal};
 use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
+
+pub const FAINT_ALIGNED_INTENSITY_FACTOR: f32 = 1.0 / 8.0;
+pub const FAINT_ALIGNED_SPOTLIGHT_FACTOR: f32 = 1.0 / 64.0;
+pub const FAINT_ALIGNED_SPOTLIGHT_RANGE: f32 = 4.0;
+pub const HOLE_SPOTLIGHT_RANGE: f32 = 25.0;
 
 /// Handles the light animation
 pub fn handle_door_animation(
@@ -202,6 +207,105 @@ pub fn update_score_bar(
             if bg.0 != color {
                 *bg = BackgroundColor(color);
             }
+        }
+    }
+}
+
+pub fn update_faint_aligned_door(
+    local_game_struct: Res<GameStateLocal>,
+    camera_query: Query<&Transform, With<Camera3d>>,
+    door_query: Query<(&BaseDoor, &GlobalTransform)>,
+    mut light_query: Query<(&HoleLight, &mut Visibility, &mut SpotLight)>,
+    mut emissive_query: Query<
+        (&HoleEmissive, &mut Visibility, &MeshMaterial3d<StandardMaterial>),
+        Without<HoleLight>,
+    >,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let gs_game = &local_game_struct.0;
+
+    let set_emissive = |
+        vis: &mut Visibility,
+        mat_handle: &MeshMaterial3d<StandardMaterial>,
+        materials: &mut Assets<StandardMaterial>,
+        visible: bool,
+        emissive: LinearRgba,
+    | {
+        let desired_vis = if visible { Visibility::Visible } else { Visibility::Hidden };
+        if *vis != desired_vis {
+            *vis = desired_vis;
+        }
+        if let Some(mat) = materials.get_mut(&mat_handle.0) {
+            if mat.emissive != emissive {
+                mat.emissive = emissive;
+            }
+        }
+    };
+
+    if gs_game.is_animating {
+        for (_hole, mut vis, mat_handle) in emissive_query.iter_mut() {
+            set_emissive(&mut vis, mat_handle, &mut materials, false, LinearRgba::BLACK);
+        }
+        for (_hole, mut vis, mut spotlight) in light_query.iter_mut() {
+            if *vis != Visibility::Hidden {
+                *vis = Visibility::Hidden;
+            }
+            spotlight.intensity = 0.0;
+            spotlight.range = HOLE_SPOTLIGHT_RANGE;
+        }
+        return;
+    }
+
+    let Ok(camera_transform) = camera_query.single() else {
+        return;
+    };
+    let cam_forward = camera_transform.forward();
+    let cam_xz = Vec3::new(cam_forward.x, 0.0, cam_forward.z).normalize_or_zero();
+    if cam_xz.length_squared() == 0.0 {
+        return;
+    }
+
+    let mut best_idx: Option<usize> = None;
+    let mut best_alignment = f32::NEG_INFINITY;
+    for (door, door_global) in &door_query {
+        let n_world = door_global.rotation() * door.normal;
+        let n_xz = Vec3::new(n_world.x, 0.0, n_world.z).normalize_or_zero();
+        let a = n_xz.dot(cam_xz);
+        if a > best_alignment {
+            best_alignment = a;
+            best_idx = Some(door.door_index);
+        }
+    }
+    let Some(best_idx) = best_idx else { return };
+
+    let lin = Color::WHITE.to_linear();
+    let faint = LinearRgba::new(
+        lin.red   * FAINT_ALIGNED_INTENSITY_FACTOR,
+        lin.green * FAINT_ALIGNED_INTENSITY_FACTOR,
+        lin.blue  * FAINT_ALIGNED_INTENSITY_FACTOR,
+        FAINT_ALIGNED_INTENSITY_FACTOR,
+    );
+    for (hole, mut vis, mat_handle) in emissive_query.iter_mut() {
+        let is_aligned = hole.door_index == best_idx;
+        let target = if is_aligned { faint } else { LinearRgba::BLACK };
+        set_emissive(&mut vis, mat_handle, &mut materials, is_aligned, target);
+    }
+
+    let max_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
+    let faint_intensity = max_intensity * FAINT_ALIGNED_SPOTLIGHT_FACTOR;
+    for (hole, mut vis, mut spotlight) in light_query.iter_mut() {
+        let is_aligned = hole.door_index == best_idx;
+        let desired_vis = if is_aligned { Visibility::Visible } else { Visibility::Hidden };
+        if *vis != desired_vis {
+            *vis = desired_vis;
+        }
+        if is_aligned {
+            spotlight.intensity = faint_intensity;
+            spotlight.color = Color::WHITE;
+            spotlight.range = FAINT_ALIGNED_SPOTLIGHT_RANGE;
+        } else {
+            spotlight.intensity = 0.0;
+            spotlight.range = HOLE_SPOTLIGHT_RANGE;
         }
     }
 }

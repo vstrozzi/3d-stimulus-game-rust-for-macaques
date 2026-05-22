@@ -568,7 +568,8 @@ function enforceLevel(lv) {
   if (f.camera_y == null) f.camera_y = CAMERA_DEFAULTS.default_y;
   if (f.camera_speed_rotate == null) f.camera_speed_rotate = CAMERA_DEFAULTS.speed_rotate;
   if (f.camera_rotation_sense == null) f.camera_rotation_sense = CAMERA_DEFAULTS.rotation_sense;
-  f.pr_switching_chain = 1 / lv.objects.length;
+  if (f.pr_switching_chain == null) f.pr_switching_chain = 1 / lv.objects.length;
+  f.pr_switching_chain = Math.max(0, Math.min(1, f.pr_switching_chain));
   f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));
 
   let firstSharedIdx = -1;
@@ -939,7 +940,7 @@ function renderFixed(fixed, lv) {
   ).join(' · ');
 
   const N = lv ? lv.objects.length : 2;
-  const prVal = (1 / N);
+  const prVal = fixed.pr_switching_chain ?? (1 / N);
 
   const numRow = (label, field, val, step, min = '') =>
     `<div class="fixed-row">
@@ -964,9 +965,9 @@ function renderFixed(fixed, lv) {
     <div class="fixed-group">
       <div class="fixed-group-title">Trials</div>
       ${numRow('start_trial', 'start_trial', fixed.start_trial || 0, '1', '0')}
-      <div class="fixed-row">
+      <div class="fixed-row" title="Probability of switching to another (uniformly random) chain after each trial. 0 = never; 1 = always reroll.">
         <label>pr_switch</label>
-        <span class="readonly-val">1 / ${N} = ${prVal.toFixed(4)}</span>
+        <input type="number" class="fixed-in" data-ff="pr_switching_chain" value="${prVal}" step="0.01" min="0" max="1">
       </div>
       <div class="fixed-row">
         <label>start_orient</label>
@@ -1215,6 +1216,10 @@ function attachEvents() {
       let val = +e.target.value;
       if (field === 'start_trial') {
         val = Math.max(0, Math.min(Math.round(val), levels[sel].trials.length - 1));
+        e.target.value = val;
+      } else if (field === 'pr_switching_chain') {
+        if (!Number.isFinite(val)) val = 0;
+        val = Math.max(0, Math.min(1, val));
         e.target.value = val;
       }
       levels[sel].fixed[field] = val;

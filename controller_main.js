@@ -678,16 +678,10 @@ function _maybeSwitch() {
   if (nObjects <= 1) return;
   const pr = level.fixed.pr_switching_chain ?? (1.0 / nObjects);
   if (Math.random() >= pr) return;
-  const nTrials = level.trials.length;
-  const candidates = [];
-  for (let i = 0; i < nObjects; i++) {
-    if (i !== activeChain && chainIdxs[i] < nTrials) candidates.push(i);
-  }
-  if (candidates.length > 0) {
-    const rand = Math.floor(Math.random() * candidates.length);
-    activeChain = candidates[rand];
-    _invalidateFlatTrial();
-  }
+  // Reroll uniformly over ALL chains (including current and finished ones).
+  // A finished chain can be re-selected but cannot advance past terminal.
+  activeChain = Math.floor(Math.random() * nObjects);
+  _invalidateFlatTrial();
 }
 
 function _progressBarCur() {

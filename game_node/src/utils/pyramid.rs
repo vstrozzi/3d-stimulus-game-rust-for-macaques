@@ -9,6 +9,7 @@ use crate::utils::decorations::{
     generate_decoration_set, generate_grid_decoration_set, spawn_decorations_from_set,
 };
 use crate::utils::helpers::build_mesh;
+use crate::utils::game_functions::HOLE_SPOTLIGHT_RANGE;
 use bevy::prelude::*;
 use shared::{Texture};
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};
@@ -217,6 +218,7 @@ pub fn spawn_pyramid_base(
             .spawn((
                 Mesh3d(meshes.add(pentagon_mesh)),
                 MeshMaterial3d(materials.add(StandardMaterial {
+                    base_color: Color::BLACK,
                     emissive: LinearRgba::new(0.0, 0.0, 0.0, 1.0),
                     cull_mode: None,
                     ..default()
@@ -236,7 +238,7 @@ pub fn spawn_pyramid_base(
                     shadows_enabled: false,
                     inner_angle: std::f32::consts::PI / 6.0,
                     outer_angle: std::f32::consts::PI / 4.0,
-                    range: 25.0,
+                    range: HOLE_SPOTLIGHT_RANGE,
                     radius: 0.5,
                     ..default()
                 },

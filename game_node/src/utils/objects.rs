@@ -79,6 +79,24 @@ pub struct Pyramid;
 #[derive(Component)]
 pub struct RotableComponent;
 
+#[derive(Resource, Default)]
+pub struct CameraShakeState {
+    /// time.elapsed() at which the current shake started, or None when idle.
+    pub start: Option<Duration>,
+    pub amplitude: f32,
+    pub duration: f32,
+    /// Last frame's applied offset, so the next frame can subtract it out
+    /// before applying the new one (camera state stays clean after the
+    /// shake finishes).
+    pub last_offset: Vec3,
+}
+
+#[derive(Component)]
+pub struct LeftScoreBarRoot;
+
+#[derive(Component)]
+pub struct LeftScoreBarFill;
+
 #[derive(Component)]
 pub struct HoleLight {
     pub door_index: usize,

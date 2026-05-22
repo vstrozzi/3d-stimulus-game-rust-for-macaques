@@ -159,10 +159,13 @@ Startup:        init_shared_memory_system
                 setup_environment
                 preload_all_textures
                 spawn_warmup_scene
-                spawn_score_bar_pool         (chain order matters)
+                spawn_score_bar_pool         (trial-progress dots, left-side vertical)
+                spawn_left_score_bar         (score bar — see §14d)
 
-PreUpdate:      read_shared_memory_commands
-                read_shared_memory_game_state_local
+PreUpdate:      read_shared_memory_commands       (chained)
+                read_shared_memory_game_state_local  (seq-gated, snapshot copy)
+                sync_live_state_from_shm           (every-frame copy of
+                                                    score_bar_*, shake_*)
 
 First:          commit_render_sample         (writes prev frame's staged
                                               sample to SHM, stamped with
@@ -170,20 +173,23 @@ First:          commit_render_sample         (writes prev frame's staged
                                               ≈ vsync of the prior flip)
 
 Update:         update_ui_scale
-                tick_warmup                  (despawns warmup scene + flips WarmupState.complete)
-                check_scene_ready            (gated on WarmupState.complete)
-                stage_render_sample          (samples + stages; no SHM write)
-                force_redraw_every_frame     (touches Window to request redraw
-                                              on next about_to_wait)
+                tick_warmup
+                check_scene_ready
+                stage_render_sample
+                force_redraw_every_frame
                 handle_reset_command         (chained)
                 handle_check_alignment
                 handle_blank_screen
                 handle_stop_rendering
                 handle_rotation
                 handle_zoom
-                handle_door_animation
+                update_faint_aligned_door    (always-on white hint on aligned door)
                 handle_animation_door_command
-                update_score_bar
+                handle_door_animation
+                update_winning_face_glow     (lights winning pyramid face during win)
+                handle_camera_shake          (after handle_zoom — uses base position)
+                update_score_bar             (trial-progress dots)
+                update_left_score_bar        (color-interp left bar)
 
 PostUpdate:     clear_pending_commands       (chained)
                 increment_timing             (paused if stop_rendering)
@@ -717,6 +723,197 @@ the drift definition is simpler than it used to be. Remaining causes:
   [systems_logic.rs](game_node/src/utils/systems_logic.rs) and
   [lib.rs](game_node/src/lib.rs) so `Update` keeps firing each vsync
   even without input.
+
+---
+
+## 14d. Trial-flow, lighting, and UX additions (this session)
+
+This pass added a batch of features driven by the experimental design.
+None of the §8 timing semantics changed.
+
+### Trial-config schema additions
+- **`fixed.start_object`** — `-1` = controller picks uniformly at random
+  over chains; `>= 0` = specific chain index. Resolved by
+  `_level_start_object` (Python) / `_levelStartObject` (JS) on every
+  level transition (first level too). Editor exposes a select with
+  `Random` plus one option per object.
+- **`fixed.pr_switching_chain`** — was a locked computed value; now
+  editable in [trial_editor.html](trials_config/trial_editor.html) (range `[0, 1]`, default `1/N`).
+  `_maybe_switch_chain` reroll picks u.a.r. over the **other** chains
+  (current chain excluded); finished chains stay eligible — they can be
+  revisited but cannot advance past terminal index. ADVANCE caps `idx`
+  at `n`. The old "force switch to a non-exhausted chain" path is gone;
+  a level only completes when every chain hits terminal simultaneously.
+- **`fixed.score_bar_max`** — editor int (`0` hides the bar). Persists
+  across levels; the bar value is session-scoped.
+- **`fixed.shake_amplitude`, `fixed.shake_duration`** — per-level camera-
+  shake config. Defaults `0.5` and `1.0`. Forwarded as `f32::to_bits()`
+  in the dedicated SHM fields (see below).
+- **`trials[i].show_all`** — per-trial bool. Only consulted in the
+  retroceed (final-wrong) branch; flips `animation_all_door=true` +
+  `animation_colored=true` so the existing game logic paints **red on
+  all doors** instead of red on the target. All other branches send
+  the historical command tuple unchanged.
+- `start_object` and `show_all` are in `CONTROLLER_META_FIELDS` in
+  [shared/src/constants.rs](shared/src/constants.rs) so they're filtered
+  out of `write_game_state`.
+- Both controllers' `_backfill_level_defaults` /
+  `backfillLevelDefaults` populate every new field on import so old
+  `trials.jsonl` files keep loading.
+
+### SHM additions
+- **Commands**: `shake: AtomicBool`. Sent on every wrong-alignment
+  check (`cosine < threshold`).
+- **State (game_structure_control)**:
+  - `score_bar_value: AtomicU32`, `score_bar_max: AtomicU32` —
+    controller-owned, live-updated.
+  - `shake_amplitude: AtomicU32` (f32 bits), `shake_duration: AtomicU32`
+    (f32 bits) — per-level config.
+- **`SCORE_BAR_DEFAULT_MAX = 0`** in
+  [shared/src/constants.rs](shared/src/constants.rs) so the left bar is
+  invisible before the controller writes a real max.
+
+### Live SHM sync (was a latent bug)
+`read_shared_memory_game_state_local` is gated by `command_seq`, but
+`read_shared_memory_commands` runs first in PreUpdate and already
+advances `last_seq.0`, so the second system always returned early —
+`local_game_struct.0` was only refreshed when `handle_reset_command` →
+`setup_round` ran (i.e., on trial init). This meant the score bar,
+shake params, and any future controller-owned live state would only
+update at trial boundaries.
+
+Fix: new `sync_live_state_from_shm` system added to PreUpdate (third in
+the chain). It bypasses the gate and copies just the live controller-
+owned fields each frame:
+```rust
+local_game_struct.0.score_bar_value = gs.score_bar_value.load(Relaxed);
+local_game_struct.0.score_bar_max   = gs.score_bar_max.load(Relaxed);
+local_game_struct.0.shake_amplitude = gs.shake_amplitude.load(Relaxed);
+local_game_struct.0.shake_duration  = gs.shake_duration.load(Relaxed);
+```
+The seq-gated full-snapshot copy is still useful for fields that only
+need to refresh on trial reset; this system layers on top for the few
+fields that need per-frame propagation.
+
+### Light palette
+- `LIGHT_RED = #8B0000` and `LIGHT_GREEN = #CCFF00` exposed as `Color`
+  consts in [handle_commands.rs](game_node/src/utils/handle_commands.rs).
+- `handle_animation_door_command` collapsed to:
+  `colored && !all_door → GREEN`, else `RED`. The old four-way
+  truth table (with the alpha-0 "invisible" branch) is gone.
+- `update_score_bar` / left-bar share the same palette.
+
+### Always-on aligned-door hint (`update_faint_aligned_door`)
+The door most-aligned with the camera always glows a faint white. Lives
+in [game_functions.rs](game_node/src/utils/game_functions.rs).
+- `HoleLight` and `HoleEmissive` now carry a `door_index: usize` so
+  the system can filter without joining through `ChildOf`.
+- During alignment the door's emissive is set to
+  `WHITE * FAINT_ALIGNED_INTENSITY_FACTOR` (default `1/8`) and the
+  spotlight is set to
+  `max_intensity * FAINT_ALIGNED_SPOTLIGHT_FACTOR` (default `1/64`)
+  with `FAINT_ALIGNED_SPOTLIGHT_RANGE = 4.0` instead of the normal
+  `HOLE_SPOTLIGHT_RANGE = 25.0`. All four constants live in
+  [shared/src/constants.rs::lighting_constants](shared/src/constants.rs)
+  so they're tweakable without recompiling the system body.
+- When `is_animating` flips true the faint system **clears all emissives
+  and spotlights**, restoring spotlight ranges to `HOLE_SPOTLIGHT_RANGE`,
+  so the win/wrong animation can paint cleanly from a black baseline.
+- The hole pentagon material now uses `base_color: Color::BLACK` (see
+  [pyramid.rs](game_node/src/utils/pyramid.rs)) — default `WHITE` was
+  picking up ambient and washing out the small emissive deltas.
+
+### `animate_all` spotlights
+`handle_door_animation` no longer forces `target_intensity = 0.0` when
+`animate_all = true`. Instead spotlights run at
+`max_intensity * intensity_factor * FAINT_ALIGNED_SPOTLIGHT_FACTOR`,
+which matches the always-on hint's brightness. This lets the "wrong on
+all doors" (`show_all=true`) path actually be visible (and dim).
+
+### Winning face glow (`update_winning_face_glow`)
+During the win animation only (color == `LIGHT_GREEN` && `!animate_all`),
+the triangular pyramid face above the winning door is lit with a soft
+green emissive over the same `fade_out / stay_open / fade_in` envelope
+as the door spotlight.
+- New `PyramidFace { normal: Vec3 }` component on each face entity
+  ([pyramid.rs](game_node/src/utils/pyramid.rs)).
+- At runtime the system picks the face whose world-space normal best
+  matches the target door's world-space normal (both rotate by the
+  shared `RotableComponent` yaw, so the dot product is stable).
+- `WINNING_FACE_GLOW = 0.4` scales `LIGHT_GREEN.to_linear() *
+  intensity_factor`. Other faces are forced to `LinearRgba::BLACK`.
+
+### Camera shake (`handle_camera_shake`)
+Damage-style shake on wrong attempts. Lives in
+[camera.rs](game_node/src/utils/camera.rs).
+- New `CameraShakeState` resource holds `start: Option<Duration>`,
+  `amplitude`, `duration`.
+- Triggered by SHM cmd `shake`. Amplitude/duration are read from
+  `local_game_struct.0` (kept fresh by `sync_live_state_from_shm`).
+- Effect: small `rotate_local_x` (pitch) + `rotate_local_z` (roll)
+  jitter, exponentially decayed (`exp(-4t/duration)`), two pseudo-random
+  sine frequencies (`37 Hz`, `53 Hz`).
+- **Pitch and roll only** — yaw (`rotate_local_y`) feeds back into
+  `handle_zoom`'s euler-yaw extraction next frame and drifts the orbit
+  position; pitch/roll don't. `handle_zoom` calls `look_at(ZERO, Y)`
+  each frame which resets rotation, so no accumulation.
+- Controllers send `shake=true` whenever a `check` press has
+  `cosine_alignment <= threshold` (same predicate that decrements the
+  score bar). `shake=false` on correct.
+
+### Left-side score bar
+New UI element ([ui.rs](game_node/src/utils/ui.rs)):
+`LeftScoreBarRoot` (border + bg) containing a single `LeftScoreBarFill`
+that grows from the bottom. `update_left_score_bar`:
+- Hides the root when `score_bar_max == 0`.
+- Lerps `LIGHT_RED ↔ LIGHT_GREEN` proportional to `value/max`.
+- Alpha is `LEFT_SCORE_BAR_ALPHA = 0.30` from
+  [shared/src/constants.rs](shared/src/constants.rs).
+- Controller maintains `scoreBarValue` (Python: `self.score_bar_value`;
+  JS: `scoreBarValue`). Initialized to `score_bar_max / 2` on session
+  start, persists across levels, `+1` on correct check, `-1` on wrong
+  check, clamped to `[0, max]`.
+
+### Trial-progress dots bar moved to the left
+The existing top-of-screen progress bar is now a **vertical** column
+just to the right of the score bar (`TRIAL_BAR_LEFT_PX =
+LEFT_SCORE_BAR_LEFT_PX + LEFT_SCORE_BAR_WIDTH_PX + 10`). Fixed vertical
+span regardless of trial count. Layout:
+- Outer node: `FlexDirection::Row` to hold one or more columns.
+- Each column: `FlexDirection::ColumnReverse` (fills bottom→top),
+  `PROGRESS_BAR_WRAP_AROUND_SIZE` dots per column.
+- When `progress_bar_size > WRAP_AROUND_SIZE`, the next 20 dots wrap
+  into a new column to the right of the previous one — vertical extent
+  is unchanged.
+- `update_score_bar` is untouched; it still just toggles
+  `Node.display` per dot/chain index.
+
+### Editor changes
+[trial_editor.html](trials_config/trial_editor.html) gained: editable
+`pr_switch`, `start_object` select (Random + chain indices),
+`score_bar_max` input (min 0), `shake_amplitude` + `shake_duration`
+inputs (in the Animation group), per-trial `show_all` checkbox.
+Backfill in `enforceLevel` populates every new field on import so older
+JSONL files still validate.
+
+### Controller-side housekeeping
+- Both `_CMD_KEYS` lists (module-level and class-level in Python; the
+  JS `CMD_DEFAULTS` and `triggers`) include `shake`.
+- Python `write_no_commands` builds the dict from `_CMD_KEYS` rather
+  than enumerating keys inline, so future SHM cmd additions only need
+  the `_CMD_KEYS` update.
+- `session_info.paradigm` is the basename of the loaded `trials.jsonl`
+  (Python takes `sys.argv[1]` if provided; JS uses either
+  `custom_trials_name` from sessionStorage or the default
+  `trials.jsonl`).
+
+### Rebuild order after this session
+```
+cargo build --release -p shared --features python
+cp target/release/libshared.so controller_python/monkey_shared.so
+cargo build --release -p game_node
+wasm-pack build game_node --target web --release --out-dir ../out   # web only
+```
 
 ---
 

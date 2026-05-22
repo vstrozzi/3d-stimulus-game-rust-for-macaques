@@ -69,6 +69,7 @@ let paradigmName = "trials.jsonl";
 let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
 let activeChain = 0;
+let scoreBarValue = 0;
 
 // FSM
 let fsmState = FSM.INIT;
@@ -91,6 +92,7 @@ let triggers = {
   animation_door: false,
   animation_all_door: false,
   animation_colored: false,
+  shake: false,
 };
 
 // Command sequence counter (mirrors Python's shm_wrapper.command_seq_counter)
@@ -303,6 +305,8 @@ function _newStateScratch() {
     is_animating: false, is_blank: false, is_rendering_stopped: false, is_scene_ready: false,
     win_elapsed_secs: 0,
     progress_bar_cur_size: 0, progress_bar_size: 0,
+    score_bar_value: 0, score_bar_max: 10,
+    shake_amplitude: 0, shake_duration: 0,
   };
 }
 
@@ -451,6 +455,7 @@ function writeCommands(cmds) {
   view[base + co.animation_door] = cmds.animation_door ? 1 : 0;
   view[base + co.animation_all_door] = cmds.animation_all_door ? 1 : 0;
   view[base + co.animation_colored] = cmds.animation_colored ? 1 : 0;
+  view[base + co.shake] = cmds.shake ? 1 : 0;
 
   // Match Python's write_commands: always reset triggers after writing
   resetTriggers();
@@ -473,6 +478,7 @@ function writeNoCommands() {
   view[base + co.animation_door] = 0;
   view[base + co.animation_all_door] = 0;
   view[base + co.animation_colored] = 0;
+  view[base + co.shake] = 0;
   // Return value is unused by current callers; return the shared scratch
   // (writeNoCommands previously allocated a fresh dict here every frame).
   return CMD_DEFAULTS;
@@ -496,6 +502,7 @@ function readCommands() {
   _scratchReadCmd.animation_door = view[base + co.animation_door] !== 0;
   _scratchReadCmd.animation_all_door = view[base + co.animation_all_door] !== 0;
   _scratchReadCmd.animation_colored = view[base + co.animation_colored] !== 0;
+  _scratchReadCmd.shake = view[base + co.shake] !== 0;
   return _scratchReadCmd;
 }
 
@@ -561,6 +568,10 @@ function writeGameStateControl(state) {
 
   v.setUint32(base + o.progress_bar_size, state.progress_bar_size ?? 0, true);
   v.setUint32(base + o.progress_bar_cur_size, state.progress_bar_cur_size ?? 0, true);
+  v.setUint32(base + o.score_bar_value, state.score_bar_value ?? 0, true);
+  v.setUint32(base + o.score_bar_max, state.score_bar_max ?? 10, true);
+  v.setUint32(base + o.shake_amplitude, state.shake_amplitude ?? 0, true);
+  v.setUint32(base + o.shake_duration, state.shake_duration ?? 0, true);
 
   // Dynamic fields
   if (state.frame_number !== undefined) {
@@ -762,7 +773,7 @@ function buildTrialState(trialCfg) {
 const CMD_DEFAULTS = Object.freeze({
   rotate_left: false, rotate_right: false, zoom_in: false, zoom_out: false,
   check: false, reset: false, toggle_blank: false, toggle_stop_rendering: false,
-  animation_door: false, animation_all_door: false, animation_colored: false,
+  animation_door: false, animation_all_door: false, animation_colored: false, shake: false,
 });
 
 // Frozen list of command keys — used to copy fields without allocating.
@@ -1274,6 +1285,12 @@ function handleInit(state) {
   // Progress bar
   trialState.progress_bar_cur_size = _progressBarCur();
   trialState.progress_bar_size = _progressBarSize();
+  const sbMax = Math.max(1, Math.round(level.fixed.score_bar_max ?? 10));
+  scoreBarValue = Math.max(0, Math.min(scoreBarValue, sbMax));
+  trialState.score_bar_value = scoreBarValue;
+  trialState.score_bar_max = sbMax;
+  trialState.shake_amplitude = floatToU32Bits(level.fixed.shake_amplitude ?? 0.5);
+  trialState.shake_duration = floatToU32Bits(level.fixed.shake_duration ?? 1.0);
 
   // Read previous game state (to check is_blank / is_rendering_stopped)
   const stateOld = readGameState();
@@ -1417,14 +1434,23 @@ function handlePlaying(state) {
     const stopRenderForAnim = !state.is_rendering_stopped;
     const showAll = !!trial.show_all;
 
+    const sbMaxCheck = Math.max(0, Math.round(currentLevel().fixed.score_bar_max ?? 10));
+    const correct = cosineAlignment > cosineThreshold;
+    if (correct) {
+      scoreBarValue = Math.min(sbMaxCheck, scoreBarValue + 1);
+    } else {
+      scoreBarValue = Math.max(0, scoreBarValue - 1);
+    }
+    const shake = !correct;
+
     // Branch 1: Last attempt AND fail → retroceed.
     // Default: red on the target door. With show_all: red on all doors
     // (which the game maps to via colored=true + animation_all_door=true).
     if ((nrAttempts) === retroceedThreshold && cosineAlignment < cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed (${showAll ? "all" : "single"})`);
       cmds = showAll
-        ? makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true, animation_colored: true })
-        : makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true });
+        ? makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true, animation_colored: true, shake })
+        : makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, shake });
       writeCommands(cmds);
       fsmState = FSM.WAITING_ANIMATION_START;
       nrAttempts += 1;
@@ -1438,17 +1464,17 @@ function handlePlaying(state) {
     ) {
       const coloredLight = cosineAlignment > COLOR_SUGGESTION_COS_SIM;
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: coloredLight });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: coloredLight, shake });
     }
     // Branch 3: Single green (in win budget & correct).
     else if (inWinBudget && cosineAlignment > cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: true, shake });
     }
     // Branch 4: No suggestion left → door animates with no visible light.
     else {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → check (all white)`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true });
+      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true, shake });
     }
 
     nrAttempts += 1;
@@ -1638,6 +1664,12 @@ function controllerLoop() {
   // Set progress bar on state (mirrors Python lines 413-414)
   state.progress_bar_cur_size = _progressBarCur();
   state.progress_bar_size = _progressBarSize();
+  const sbMaxLoop = Math.max(0, Math.round(currentLevel().fixed.score_bar_max ?? 10));
+  scoreBarValue = Math.max(0, Math.min(scoreBarValue, sbMaxLoop));
+  state.score_bar_value = scoreBarValue;
+  state.score_bar_max = sbMaxLoop;
+  state.shake_amplitude = floatToU32Bits(currentLevel().fixed.shake_amplitude ?? 0.5);
+  state.shake_duration = floatToU32Bits(currentLevel().fixed.shake_duration ?? 1.0);
 
   writeNoCommands();
 
@@ -2039,6 +2071,9 @@ function backfillLevelDefaults(level) {
   level.fixed ??= {};
   if (level.fixed.camera_rotation_sense == null) level.fixed.camera_rotation_sense = 1;
   if (level.fixed.start_object == null) level.fixed.start_object = -1;
+  if (level.fixed.score_bar_max == null) level.fixed.score_bar_max = 10;
+  if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
+  if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;
   for (const obj of (level.objects || [])) {
     if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
   }
@@ -2159,6 +2194,8 @@ async function start() {
     const startIdx = levels[0].fixed.start_trial ?? 0;
     chainIdxs = new Array(levels[0].objects.length).fill(startIdx);
     activeChain = _levelStartObject(levels[0]);
+    const sbMax0 = levels[0].fixed.score_bar_max ?? 10;
+    scoreBarValue = Math.floor(sbMax0 / 2);
   }
 
   if (levels.length === 0) {

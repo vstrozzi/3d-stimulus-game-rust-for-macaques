@@ -282,6 +282,7 @@ impl WebSharedMemory {
         set("animation_door",   off!(cmd.animation_door));
         set("animation_all_door", off!(cmd.animation_all_door));
         set("animation_colored", off!(cmd.animation_colored));
+        set("shake",            off!(cmd.shake));
 
         obj.into()
     }
@@ -337,6 +338,10 @@ impl WebSharedMemory {
         // Progress bar state
         set("progress_bar_size", off!(gs.progress_bar_size));
         set("progress_bar_cur_size", off!(gs.progress_bar_cur_size));
+        set("score_bar_value", off!(gs.score_bar_value));
+        set("score_bar_max", off!(gs.score_bar_max));
+        set("shake_amplitude", off!(gs.shake_amplitude));
+        set("shake_duration", off!(gs.shake_duration));
 
         // Dynamic fields
         set("frame_number",       off!(gs.frame_number));
@@ -437,6 +442,10 @@ impl WebSharedMemory {
 
         set_u32("progress_bar_size", def.progress_bar_size.load(Relaxed));
         set_u32("progress_bar_cur_size", def.progress_bar_cur_size.load(Relaxed));
+        set_u32("score_bar_value", def.score_bar_value.load(Relaxed));
+        set_u32("score_bar_max", def.score_bar_max.load(Relaxed));
+        set_u32("shake_amplitude", def.shake_amplitude.load(Relaxed));
+        set_u32("shake_duration", def.shake_duration.load(Relaxed));
 
         set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
         set_f64("render_frame_number", def.render_frame_number.load(Relaxed) as f64);

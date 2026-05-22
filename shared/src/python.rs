@@ -116,7 +116,8 @@ impl SharedMemoryWrapper {
         toggle_stop_rendering: bool,
         animation_door: bool,
         animation_all_door: bool,
-        animation_colored: bool
+        animation_colored: bool,
+        shake: bool
     ) {
         let shm = self.inner.get();
         let cmd = &shm.commands;
@@ -132,6 +133,7 @@ impl SharedMemoryWrapper {
         cmd.animation_door.store(animation_door, Ordering::Relaxed);
         cmd.animation_all_door.store(animation_all_door, Ordering::Relaxed);
         cmd.animation_colored.store(animation_colored, Ordering::Relaxed);
+        cmd.shake.store(shake, Ordering::Relaxed);
     }
 
     /// Read cmds
@@ -152,6 +154,7 @@ impl SharedMemoryWrapper {
             dict.set_item("animation_door", cmd.animation_door.load(Ordering::Relaxed))?;
             dict.set_item("animation_all_door", cmd.animation_all_door.load(Ordering::Relaxed))?;
             dict.set_item("animation_colored", cmd.animation_colored.load(Ordering::Relaxed))?;
+            dict.set_item("shake", cmd.shake.load(Ordering::Relaxed))?;
 
             Ok(dict.into())
         })
@@ -190,6 +193,10 @@ impl SharedMemoryWrapper {
         max_spotlight_intensity: f32,
         progress_bar_size: u32,
         progress_bar_cur_size: u32,
+        score_bar_value: u32,
+        score_bar_max: u32,
+        shake_amplitude: f32,
+        shake_duration: f32,
         frame_number: u64,
         elapsed_secs: f32,
         camera_radius: f32,
@@ -266,6 +273,10 @@ impl SharedMemoryWrapper {
 
         gs.progress_bar_size.store(progress_bar_size, Ordering::Relaxed);
         gs.progress_bar_cur_size.store(progress_bar_cur_size, Ordering::Relaxed);
+        gs.score_bar_value.store(score_bar_value, Ordering::Relaxed);
+        gs.score_bar_max.store(score_bar_max, Ordering::Relaxed);
+        gs.shake_amplitude.store(shake_amplitude.to_bits(), Ordering::Relaxed);
+        gs.shake_duration.store(shake_duration.to_bits(), Ordering::Relaxed);
 
         gs.frame_number.store(frame_number, Ordering::Relaxed);
         gs.elapsed_secs.store(elapsed_secs.to_bits(), Ordering::Relaxed);
@@ -370,6 +381,10 @@ impl SharedMemoryWrapper {
             // Level bar
             dict.set_item("progress_bar_size", gs.progress_bar_size.load(Ordering::Relaxed))?;
             dict.set_item("progress_bar_cur_size", gs.progress_bar_cur_size.load(Ordering::Relaxed))?;
+            dict.set_item("score_bar_value", gs.score_bar_value.load(Ordering::Relaxed))?;
+            dict.set_item("score_bar_max", gs.score_bar_max.load(Ordering::Relaxed))?;
+            dict.set_item("shake_amplitude", f32::from_bits(gs.shake_amplitude.load(Ordering::Relaxed)))?;
+            dict.set_item("shake_duration", f32::from_bits(gs.shake_duration.load(Ordering::Relaxed)))?;
 
             // Dynamic trials fields
             dict.set_item("frame_number", gs.frame_number.load(Ordering::Relaxed))?;

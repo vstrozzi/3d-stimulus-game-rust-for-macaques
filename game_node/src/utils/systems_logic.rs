@@ -2,10 +2,10 @@
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local};
+use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local, sync_live_state_from_shm};
 use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local, stage_render_sample, commit_render_sample};
-use crate::utils::camera::{spawn_persistent_camera};
-use crate::utils::ui::{spawn_score_bar_pool, update_ui_scale};
+use crate::utils::camera::{spawn_persistent_camera, handle_camera_shake};
+use crate::utils::ui::{spawn_score_bar_pool, spawn_left_score_bar, update_left_score_bar, update_ui_scale};
 use crate::utils::game_functions::{
     handle_door_animation,
     update_faint_aligned_door,
@@ -41,11 +41,12 @@ impl Plugin for SystemsLogicPlugin {
                     preload_all_textures,
                     spawn_warmup_scene,
                     spawn_score_bar_pool,
+                    spawn_left_score_bar,
                 ).chain())
             // Shared memory
             .add_systems(
                 PreUpdate,
-                (read_shared_memory_commands, read_shared_memory_game_state_local).chain(),
+                (read_shared_memory_commands, read_shared_memory_game_state_local, sync_live_state_from_shm).chain(),
             )
             // Global UI responsiveness system (runs every frame)
             .add_systems(Update, update_ui_scale)
@@ -78,7 +79,9 @@ impl Plugin for SystemsLogicPlugin {
                     update_faint_aligned_door,
                     handle_animation_door_command,
                     handle_door_animation,
+                    handle_camera_shake,
                     update_score_bar,
+                    update_left_score_bar,
                     ).chain(),
             )
             // Post Update

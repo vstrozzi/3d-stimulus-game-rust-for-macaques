@@ -29,6 +29,7 @@ pub struct PendingCommands {
     pub animation_door: bool,
     pub animation_all_door: bool,
     pub animation_colored: bool,
+    pub shake: bool,
 }
 
 /// Bevy plugin to read shared memory commands and update local game state
@@ -125,6 +126,7 @@ pub fn read_shared_memory_commands(
     pending_commands.reset = shm.commands.reset.load(Ordering::Relaxed);
     pending_commands.animation_all_door = shm.commands.animation_all_door.load(Ordering::Relaxed);
     pending_commands.animation_colored = shm.commands.animation_colored.load(Ordering::Relaxed);
+    pending_commands.shake = shm.commands.shake.load(Ordering::Relaxed);
 
     // Acknowledge: tell the controller we processed this batch.
     // Release ensures all reads above are complete before the controller sees the ack.
@@ -151,4 +153,21 @@ pub fn read_shared_memory_game_state_local(
 
     // Update local to copy
     local_game_struct.0 = gs_game.to_not_atomic();
+}
+
+/// Refresh "live" controller-owned fields every frame, bypassing the seq
+/// gate above. These are values the controller updates continuously
+/// (score bar, shake config) which the game needs to react to without
+/// waiting for a trial reset.
+pub fn sync_live_state_from_shm(
+    shm_res: Option<Res<SharedMemResource>>,
+    mut local_game_struct: ResMut<GameStateLocal>,
+) {
+    let Some(shm_res) = shm_res else { return };
+    let shm = shm_res.0.get();
+    let gs = &shm.game_structure_control;
+    local_game_struct.0.score_bar_value = gs.score_bar_value.load(Ordering::Relaxed);
+    local_game_struct.0.score_bar_max = gs.score_bar_max.load(Ordering::Relaxed);
+    local_game_struct.0.shake_amplitude = gs.shake_amplitude.load(Ordering::Relaxed);
+    local_game_struct.0.shake_duration = gs.shake_duration.load(Ordering::Relaxed);
 }

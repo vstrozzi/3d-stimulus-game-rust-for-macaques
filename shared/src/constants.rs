@@ -31,6 +31,13 @@ pub mod game_constants {
     /// hidden via `Node.display`. Controllers must keep `progress_bar_size`
     /// at or below this; excess dots silently won't show.
     pub const PROGRESS_BAR_MAX_SIZE: u32 = 100;
+
+    /// Default capacity of the left-side score bar. Controller-owned and
+    /// session-persistent; starts at `max / 2` on session start.
+    pub const SCORE_BAR_DEFAULT_MAX: u32 = 0;
+
+    pub const SHAKE_AMPLITUDE_DEFAULT: f32 = 0.5;
+    pub const SHAKE_DURATION_DEFAULT: f32 = 1.0;
 }
 
 /// 3D camera
@@ -180,9 +187,9 @@ pub mod controller_constants {
     /// If the game stops pushing frames for this long, the controller resyncs.
     pub const GAME_UNRESPONSIVENESS_THRESHOLD_S: f32 = 3.0;
 
-    /// Cosine threshold (≈ cos(π/6)) above which the "check" animation shows
+    /// Cosine threshold above which the "check" animation shows
     /// a colored hint instead of plain white.
-    pub const COLOR_SUGGESTION_COS_SIM: f32 = 0.8660254;
+    pub const COLOR_SUGGESTION_COS_SIM: f32 = 0.95;
 
     /// Default camera Y when a level doesn't override it.
     pub const DEFAULT_CAMERA_Y: f32 = 1.0;

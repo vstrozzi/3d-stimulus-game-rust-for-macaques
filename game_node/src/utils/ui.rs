@@ -1,64 +1,74 @@
 use bevy::prelude::*;
-// TODO: add to shared memory
 use shared::constants::game_constants::{
-    SCORE_BAR_HEIGHT, SCORE_BAR_TOP_OFFSET, SCORE_BAR_WIDTH_PERCENT, UI_REFERENCE_HEIGHT,
+    UI_REFERENCE_HEIGHT,
     PROGRESS_BAR_DOTS_SIZE, PROGRESS_BAR_MAX_SIZE, PROGRESS_BAR_WRAP_AROUND_SIZE,
 };
 use crate::utils::objects::{
     ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot, ScoreBarRoot,
+    LeftScoreBarRoot, LeftScoreBarFill, GameStateLocal,
 };
+use crate::utils::handle_commands::{LIGHT_GREEN, LIGHT_RED};
 
-/// Spawns the persistent score-bar entity pool at startup.
+const LEFT_SCORE_BAR_WIDTH_PX: f32 = 24.0;
+const LEFT_SCORE_BAR_HEIGHT_PERCENT: f32 = 60.0;
+const LEFT_SCORE_BAR_LEFT_PX: f32 = 16.0;
+
+const TRIAL_BAR_LEFT_PX: f32 = LEFT_SCORE_BAR_LEFT_PX + LEFT_SCORE_BAR_WIDTH_PX + 10.0;
+const TRIAL_BAR_HEIGHT_PERCENT: f32 = LEFT_SCORE_BAR_HEIGHT_PERCENT;
+const TRIAL_BAR_COL_WIDTH_PX: f32 = PROGRESS_BAR_DOTS_SIZE + 8.0;
+
+/// Spawns the persistent trial-progress dot pool at startup.
 ///
-/// We allocate `PROGRESS_BAR_MAX_SIZE` dots (plus interleaving chain
-/// segments) once and never despawn them. `update_score_bar` toggles
-/// `Node.display` so only entities with index < `progress_bar_size` are
-/// laid out. This avoids the ~10 ms taffy/layout spike that the old
-/// despawn+respawn-on-every-check-alignment path produced.
+/// Vertical layout: dots stack top→bottom in a column; when there are more
+/// trials than `PROGRESS_BAR_WRAP_AROUND_SIZE`, extra dots wrap into another
+/// column to the right. Total vertical span is constant (matches the score
+/// bar) regardless of trial count. `update_score_bar` toggles `Node.display`
+/// so only entities with index < `progress_bar_size` are laid out.
 pub fn spawn_score_bar_pool(mut commands: Commands) {
-    let num_rows = PROGRESS_BAR_MAX_SIZE.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
+    let num_cols = PROGRESS_BAR_MAX_SIZE.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
 
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                top: Val::Px(SCORE_BAR_TOP_OFFSET),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Column,
+                left: Val::Px(TRIAL_BAR_LEFT_PX),
+                top: Val::Percent((100.0 - TRIAL_BAR_HEIGHT_PERCENT) / 2.0),
+                height: Val::Percent(TRIAL_BAR_HEIGHT_PERCENT),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Stretch,
                 ..default()
             },
             ScoreBarRoot,
         ))
         .with_children(|parent| {
-            for row in 0..num_rows {
-                let row_start = row * PROGRESS_BAR_WRAP_AROUND_SIZE;
-                let row_end =
-                    (row_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(PROGRESS_BAR_MAX_SIZE);
+            for col in 0..num_cols {
+                let col_start = col * PROGRESS_BAR_WRAP_AROUND_SIZE;
+                let col_end =
+                    (col_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(PROGRESS_BAR_MAX_SIZE);
 
                 parent
                     .spawn((
                         Node {
-                            width: Val::Percent(SCORE_BAR_WIDTH_PERCENT),
-                            height: Val::Px(SCORE_BAR_HEIGHT),
+                            width: Val::Px(TRIAL_BAR_COL_WIDTH_PX),
+                            height: Val::Percent(100.0),
                             padding: UiRect::all(Val::Px(2.0)),
+                            flex_direction: FlexDirection::ColumnReverse,
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::SpaceEvenly,
-                            margin: UiRect::bottom(Val::Px(2.0)),
+                            margin: UiRect::right(Val::Px(2.0)),
                             display: Display::None,
                             ..default()
                         },
                         BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.0)),
-                        ScoreBarUI { row_start },
+                        ScoreBarUI { row_start: col_start },
                     ))
-                    .with_children(|bar_parent| {
-                        for i in row_start..row_end {
-                            if i > row_start {
-                                bar_parent.spawn((
+                    .with_children(|col_parent| {
+                        for i in col_start..col_end {
+                            if i > col_start {
+                                col_parent.spawn((
                                     Node {
-                                        width: Val::Px(0.0),
-                                        height: Val::Px(1.0),
+                                        width: Val::Px(1.0),
+                                        height: Val::Px(0.0),
                                         flex_grow: 1.0,
                                         display: Display::None,
                                         ..default()
@@ -66,7 +76,7 @@ pub fn spawn_score_bar_pool(mut commands: Commands) {
                                     ScoreBarChain { index: i - 1 },
                                 ));
                             }
-                            bar_parent.spawn((
+                            col_parent.spawn((
                                 Node {
                                     width: Val::Px(PROGRESS_BAR_DOTS_SIZE),
                                     height: Val::Px(PROGRESS_BAR_DOTS_SIZE),
@@ -83,6 +93,80 @@ pub fn spawn_score_bar_pool(mut commands: Commands) {
                     });
             }
         });
+}
+
+const LEFT_SCORE_BAR_ALPHA: f32 = 0.30;
+
+pub fn spawn_left_score_bar(mut commands: Commands) {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(LEFT_SCORE_BAR_LEFT_PX),
+                top: Val::Percent((100.0 - LEFT_SCORE_BAR_HEIGHT_PERCENT) / 2.0),
+                width: Val::Px(LEFT_SCORE_BAR_WIDTH_PX),
+                height: Val::Percent(LEFT_SCORE_BAR_HEIGHT_PERCENT),
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::FlexEnd,
+                border: UiRect::all(Val::Px(2.0)),
+                display: Display::None,
+                ..default()
+            },
+            BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.25)),
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.15)),
+            LeftScoreBarRoot,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(50.0),
+                    ..default()
+                },
+                BackgroundColor(LIGHT_RED.with_alpha(LEFT_SCORE_BAR_ALPHA)),
+                LeftScoreBarFill,
+            ));
+        });
+}
+
+pub fn update_left_score_bar(
+    local_game_struct: Res<GameStateLocal>,
+    mut root_query: Query<&mut Node, (With<LeftScoreBarRoot>, Without<LeftScoreBarFill>)>,
+    mut fill_query: Query<(&mut Node, &mut BackgroundColor), With<LeftScoreBarFill>>,
+) {
+    let gs = &local_game_struct.0;
+    let max = gs.score_bar_max;
+    let desired_display = if max == 0 { Display::None } else { Display::Flex };
+    for mut node in root_query.iter_mut() {
+        if node.display != desired_display {
+            node.display = desired_display;
+        }
+    }
+    if max == 0 {
+        return;
+    }
+
+    let value = gs.score_bar_value.min(max);
+    let t = value as f32 / max as f32;
+    let r = LIGHT_RED.to_linear();
+    let g = LIGHT_GREEN.to_linear();
+    let lerped = LinearRgba::new(
+        r.red   + (g.red   - r.red)   * t,
+        r.green + (g.green - r.green) * t,
+        r.blue  + (g.blue  - r.blue)  * t,
+        LEFT_SCORE_BAR_ALPHA,
+    );
+    let target_color = Color::LinearRgba(lerped);
+    let target_height = Val::Percent(t * 100.0);
+
+    for (mut node, mut bg) in fill_query.iter_mut() {
+        if node.height != target_height {
+            node.height = target_height;
+        }
+        if bg.0 != target_color {
+            *bg = BackgroundColor(target_color);
+        }
+    }
 }
 
 /// Updates UI scale based on window size for responsive design

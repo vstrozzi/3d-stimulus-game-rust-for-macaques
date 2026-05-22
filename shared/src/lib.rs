@@ -37,6 +37,7 @@ pub struct SharedCommands {
     pub animation_door: AtomicBool,
     pub animation_all_door: AtomicBool,
     pub animation_colored: AtomicBool,
+    pub shake: AtomicBool,
 }
 
 impl SharedCommands {
@@ -53,6 +54,7 @@ impl SharedCommands {
             animation_door: AtomicBool::new(false),
             animation_all_door: AtomicBool::new(false),
             animation_colored: AtomicBool::new(false),
+            shake: AtomicBool::new(false),
         }
     }
 }
@@ -167,6 +169,14 @@ macro_rules! shared_game_state {
             // Level bar
             pub progress_bar_size: $U32,
             pub progress_bar_cur_size: $U32,
+
+            // Left-side score bar (session-wide, controller-owned).
+            pub score_bar_value: $U32,
+            pub score_bar_max: $U32,
+
+            // Camera shake (per-level config: strength + duration in seconds).
+            pub shake_amplitude: $U32,
+            pub shake_duration: $U32,
 
             // Dynamic trials fields
             pub frame_number: $U64,
@@ -309,6 +319,12 @@ impl SharedGameState {
             progress_bar_size: AtomicU32::new(0),
             progress_bar_cur_size: AtomicU32::new(0),
 
+            score_bar_value: AtomicU32::new(constants::game_constants::SCORE_BAR_DEFAULT_MAX / 2),
+            score_bar_max: AtomicU32::new(constants::game_constants::SCORE_BAR_DEFAULT_MAX),
+
+            shake_amplitude: AtomicU32::new(constants::game_constants::SHAKE_AMPLITUDE_DEFAULT.to_bits()),
+            shake_duration: AtomicU32::new(constants::game_constants::SHAKE_DURATION_DEFAULT.to_bits()),
+
             // Dynamic trials fields
             frame_number: AtomicU64::new(0),
             render_frame_number: AtomicU64::new(0),
@@ -366,6 +382,10 @@ impl SharedGameState {
 
         self.progress_bar_cur_size.store(other.progress_bar_cur_size.load(Ordering::Relaxed), Ordering::Relaxed);
         self.progress_bar_size.store(other.progress_bar_size.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.score_bar_value.store(other.score_bar_value.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.score_bar_max.store(other.score_bar_max.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.shake_amplitude.store(other.shake_amplitude.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.shake_duration.store(other.shake_duration.load(Ordering::Relaxed), Ordering::Relaxed);
 
         self.frame_number.store(other.frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.render_frame_number.store(other.render_frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -466,6 +486,10 @@ impl SharedGameState {
             max_spotlight_intensity: self.max_spotlight_intensity.load(Ordering::Relaxed),
             progress_bar_size: self.progress_bar_size.load(Ordering::Relaxed),
             progress_bar_cur_size: self.progress_bar_cur_size.load(Ordering::Relaxed),
+            score_bar_value: self.score_bar_value.load(Ordering::Relaxed),
+            score_bar_max: self.score_bar_max.load(Ordering::Relaxed),
+            shake_amplitude: self.shake_amplitude.load(Ordering::Relaxed),
+            shake_duration: self.shake_duration.load(Ordering::Relaxed),
             frame_number: self.frame_number.load(Ordering::Relaxed),
             render_frame_number: self.render_frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
@@ -517,6 +541,10 @@ impl SharedGameState {
         self.max_spotlight_intensity.store(state.max_spotlight_intensity, Ordering::Relaxed);
         self.progress_bar_size.store(state.progress_bar_size, Ordering::Relaxed);
         self.progress_bar_cur_size.store(state.progress_bar_cur_size, Ordering::Relaxed);
+        self.score_bar_value.store(state.score_bar_value, Ordering::Relaxed);
+        self.score_bar_max.store(state.score_bar_max, Ordering::Relaxed);
+        self.shake_amplitude.store(state.shake_amplitude, Ordering::Relaxed);
+        self.shake_duration.store(state.shake_duration, Ordering::Relaxed);
         self.frame_number.store(state.frame_number, Ordering::Relaxed);
         self.render_frame_number.store(state.render_frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);

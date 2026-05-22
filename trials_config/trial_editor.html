@@ -514,6 +514,9 @@ function defaultLevel(nObjects = 2) {
       start_trial: 0,
       // -1 = controller picks at random; otherwise chain index 0..N-1.
       start_object: -1,
+      score_bar_max: 10,
+      shake_amplitude: 0.5,
+      shake_duration: 1.0,
       base_radius: PYRAMID_DEFAULTS.base_radius,
       height: PYRAMID_DEFAULTS.height,
       cosine_alignment_threshold: GAME_DEFAULTS.cosine_alignment_to_win,
@@ -575,6 +578,12 @@ function enforceLevel(lv) {
   f.pr_switching_chain = Math.max(0, Math.min(1, f.pr_switching_chain));
   if (f.start_object == null) f.start_object = -1;
   if (f.start_object >= 0) f.start_object = Math.min(f.start_object, lv.objects.length - 1);
+  if (f.score_bar_max == null) f.score_bar_max = 10;
+  f.score_bar_max = Math.max(0, Math.round(f.score_bar_max));
+  if (f.shake_amplitude == null) f.shake_amplitude = 0.5;
+  if (f.shake_duration == null) f.shake_duration = 1.0;
+  f.shake_amplitude = Math.max(0, f.shake_amplitude);
+  f.shake_duration = Math.max(0, f.shake_duration);
   for (const t of (lv.trials || [])) {
     if (t.show_all == null) t.show_all = false;
   }
@@ -987,6 +996,10 @@ function renderFixed(fixed, lv) {
           ${lv.objects.map((_, i) => `<option value="${i}"${(fixed.start_object ?? -1) === i ? ' selected' : ''}>${i}</option>`).join('')}
         </select>
       </div>
+      <div class="fixed-row" title="Capacity of the left-side score bar. 0 hides the bar. Persists across levels; starts at max/2 at session start.">
+        <label>score_bar_max</label>
+        <input type="number" class="fixed-in" data-ff="score_bar_max" value="${fixed.score_bar_max ?? 10}" step="1" min="0">
+      </div>
       <div class="fixed-row">
         <label>start_orient</label>
         <span class="orient-info">${orientDisplay}</span>
@@ -1003,6 +1016,8 @@ function renderFixed(fixed, lv) {
       ${numRow('fade_out', 'door_anim_fade_out', fixed.door_anim_fade_out, '0.1', '0')}
       ${numRow('stay_open', 'door_anim_stay_open', fixed.door_anim_stay_open, '0.1', '0')}
       ${numRow('fade_in', 'door_anim_fade_in', fixed.door_anim_fade_in, '0.1', '0')}
+      ${numRow('shake_amp', 'shake_amplitude', fixed.shake_amplitude ?? 0.5, '0.1', '0')}
+      ${numRow('shake_dur', 'shake_duration', fixed.shake_duration ?? 1.0, '0.1', '0')}
     </div>
     <div class="fixed-group">
       <div class="fixed-group-title">Lighting</div>
@@ -1244,6 +1259,9 @@ function attachEvents() {
       } else if (field === 'pr_switching_chain') {
         if (!Number.isFinite(val)) val = 0;
         val = Math.max(0, Math.min(1, val));
+        e.target.value = val;
+      } else if (field === 'score_bar_max') {
+        val = Math.max(0, Math.round(val));
         e.target.value = val;
       }
       levels[sel].fixed[field] = val;

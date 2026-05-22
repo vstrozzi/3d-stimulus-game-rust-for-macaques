@@ -114,7 +114,7 @@ _LOGGED_STATE_FIELDS_LIST = list(monkey_shared.LOGGED_STATE_FIELDS)
 _CMD_KEYS = (
     "rotate_left", "rotate_right", "zoom_in", "zoom_out",
     "check", "reset", "toggle_blank", "toggle_stop_rendering",
-    "animation_door", "animation_all_door", "animation_colored",
+    "animation_door", "animation_all_door", "animation_colored", "shake",
 )
 
 
@@ -212,6 +212,9 @@ def _backfill_level_defaults(level):
     fixed = level.setdefault("fixed", {})
     fixed.setdefault("camera_rotation_sense", 1)
     fixed.setdefault("start_object", -1)
+    fixed.setdefault("score_bar_max", 10)
+    fixed.setdefault("shake_amplitude", 0.5)
+    fixed.setdefault("shake_duration", 1.0)
     for obj in level.get("objects", []):
         obj.setdefault("decorations_rotation", [0, 0, 0])
     for trial in level.get("trials", []):
@@ -282,7 +285,7 @@ class TrialProceeding(Enum):
 
 
 # Catches drift if a state is renamed only on one side: each ControllerState
-# name must appear in monkey_shared.FSM_STATES (which controller_main.js also reads).
+# name must appear in monkey_shared.FSM_STAT<ES (which controller_main.js also reads).
 assert [s.name for s in ControllerState] == list(monkey_shared.FSM_STATES), (
     f"ControllerState drifted from shared FSM_STATES: "
     f"py={[s.name for s in ControllerState]} shared={list(monkey_shared.FSM_STATES)}"
@@ -332,6 +335,7 @@ class MonkeyGameController:
             "animation_door": False,
             "animation_all_door": False,
             "animation_colored": False,
+            "shake": False,
         }
 
         # Session metadata, written once into every trial log.
@@ -360,6 +364,12 @@ class MonkeyGameController:
             start = self.levels[0]["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.levels[0]["objects"])
             self.active_chain = self._level_start_object(self.levels[0])
+
+        # Session-wide score bar. Starts at half the first level's capacity
+        # and persists across all levels — increment on correct, decrement
+        # on wrong, clamped to [0, max].
+        first_max = self.levels[0]["fixed"].get("score_bar_max", 10) if self.levels else 10
+        self.score_bar_value = first_max // 2
 
         # Frame tracking
         self.current_frame = -1
@@ -525,7 +535,7 @@ class MonkeyGameController:
     _CMD_KEYS = (
         "rotate_left", "rotate_right", "zoom_in", "zoom_out",
         "check", "reset", "toggle_blank", "toggle_stop_rendering",
-        "animation_door", "animation_all_door", "animation_colored",
+        "animation_door", "animation_all_door", "animation_colored", "shake",
     )
 
     def write_commands(self, commands=None):
@@ -889,6 +899,12 @@ class MonkeyGameController:
 
             self.current_state["progress_bar_cur_size"] = self._progress_bar_cur()
             self.current_state["progress_bar_size"] = self._progress_bar_size()
+            sb_max = int(self.level["fixed"].get("score_bar_max", 10))
+            self.score_bar_value = max(0, min(self.score_bar_value, sb_max))
+            self.current_state["score_bar_value"] = self.score_bar_value
+            self.current_state["score_bar_max"] = sb_max
+            self.current_state["shake_amplitude"] = float(self.level["fixed"].get("shake_amplitude", 0.5))
+            self.current_state["shake_duration"] = float(self.level["fixed"].get("shake_duration", 1.0))
             
             # Clear commands    
             self.write_no_commands()
@@ -940,6 +956,10 @@ class MonkeyGameController:
         self.trial_start_orient = float(trial_state["start_orient"])
         trial_state["progress_bar_cur_size"] = self._progress_bar_cur()
         trial_state["progress_bar_size"] = self._progress_bar_size()
+        sb_max = int(self.level["fixed"].get("score_bar_max", 10))
+        self.score_bar_value = max(0, min(self.score_bar_value, sb_max))
+        trial_state["score_bar_value"] = self.score_bar_value
+        trial_state["score_bar_max"] = sb_max
 
         # Position camera using fixed camera_y and camera_radius
         cam_y = self.level["fixed"].get("camera_y", DEFAULT_CAMERA_Y)
@@ -1057,6 +1077,14 @@ class MonkeyGameController:
 
             show_all = bool(flat.get("show_all", False))
 
+            sb_max = int(self.level["fixed"].get("score_bar_max", 10))
+            if cosine_current > cosine_threshold:
+                self.score_bar_value = min(sb_max, self.score_bar_value + 1)
+                shake = False
+            else:
+                self.score_bar_value = max(0, self.score_bar_value - 1)
+                shake = True
+
             # Since animating stop rendering
             cmds =  {
                     "rotate_left": False, "rotate_right": False,
@@ -1065,6 +1093,7 @@ class MonkeyGameController:
                     "toggle_stop_rendering": not self.current_state.get("is_rendering_stopped", False),
                     "animation_door": True,
                     "animation_all_door": False, "animation_colored": False,
+                    "shake": shake,
                 }
             if (self.nr_attempts) == retroceeds_threshold and cosine_current < cosine_threshold:
                 print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")

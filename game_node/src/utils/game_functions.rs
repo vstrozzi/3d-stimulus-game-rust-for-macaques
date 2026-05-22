@@ -3,11 +3,8 @@ use bevy::prelude::*;
 
 use crate::utils::objects::{BaseDoor, DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain, ScoreBarUI, GameStateLocal};
 use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
-
-pub const FAINT_ALIGNED_INTENSITY_FACTOR: f32 = 1.0 / 8.0;
-pub const FAINT_ALIGNED_SPOTLIGHT_FACTOR: f32 = 1.0 / 64.0;
-pub const FAINT_ALIGNED_SPOTLIGHT_RANGE: f32 = 4.0;
-pub const HOLE_SPOTLIGHT_RANGE: f32 = 25.0;
+use shared::constants::lighting_constants::{FAINT_ALIGNED_INTENSITY_FACTOR,FAINT_ALIGNED_SPOTLIGHT_FACTOR, FAINT_ALIGNED_SPOTLIGHT_RANGE,HOLE_SPOTLIGHT_RANGE
+};
 
 /// Handles the light animation
 pub fn handle_door_animation(

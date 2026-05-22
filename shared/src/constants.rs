@@ -159,6 +159,12 @@ pub mod lighting_constants {
     pub const SPOTLIGHT_LIGHT_INTENSITY: f32 = 50_000_000.0;
     pub const GLOBAL_AMBIENT_LIGHT_INTENSITY: f32 = 100.0;
     pub const MAX_SPOTLIGHT_INTENSITY: f32 = 50_000_000.0;
+
+    pub const FAINT_ALIGNED_INTENSITY_FACTOR: f32 = 1.0 / 8.0;
+    pub const FAINT_ALIGNED_SPOTLIGHT_FACTOR: f32 = 1.0 / 64.0;
+    pub const FAINT_ALIGNED_SPOTLIGHT_RANGE: f32 = 4.0;
+    pub const HOLE_SPOTLIGHT_RANGE: f32 = 25.0;
+
 }
 
 

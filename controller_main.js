@@ -1492,7 +1492,7 @@ function handleTrialIndexUpdate() {
   const idx = _trialIdx();
 
   let newIdx;
-  if (trialProceeding === PROCEEDING.ADVANCE) newIdx = idx + 1;
+  if (trialProceeding === PROCEEDING.ADVANCE) newIdx = Math.min(idx + 1, n);
   else if (trialProceeding === PROCEEDING.RETROCEED) newIdx = Math.max(0, idx - 1);
   else newIdx = idx; // STAY
 
@@ -1520,21 +1520,7 @@ function handleTrialIndexUpdate() {
     return;
   }
 
-  // If active chain is exhausted, switch to a random non‑exhausted chain
-  if (_trialIdx() >= n) {
-    const candidates = [];
-    for (let i = 0; i < level.objects.length; i++) {
-      if (chainIdxs[i] < n) candidates.push(i);
-    }
-    if (candidates.length > 0) {
-      const rand = Math.floor(Math.random() * candidates.length);
-      activeChain = candidates[rand];
-      _invalidateFlatTrial();
-    }
-    console.log(`[CHAIN] Chain exhausted, switching to chain ${activeChain}`);
-  } else {
-    _maybeSwitch();
-  }
+  _maybeSwitch();
 }
 
 function handleTrialComplete(state) {

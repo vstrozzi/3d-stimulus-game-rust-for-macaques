@@ -8,8 +8,9 @@ use crate::utils::objects::{
 use crate::utils::decorations::{
     generate_decoration_set, generate_grid_decoration_set, spawn_decorations_from_set,
 };
+
+use shared::constants::lighting_constants::HOLE_SPOTLIGHT_RANGE;
 use crate::utils::helpers::build_mesh;
-use crate::utils::game_functions::HOLE_SPOTLIGHT_RANGE;
 use bevy::prelude::*;
 use shared::{Texture};
 use shared::constants::{object_constants::GROUND_Y, pyramid_constants::*};

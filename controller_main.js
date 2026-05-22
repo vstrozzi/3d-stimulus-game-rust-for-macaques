@@ -1333,7 +1333,17 @@ function handleWaitingForStart(state) {
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
-    logFrame(state, cmds);
+    // Re-sync frame tracking: the reset we just shipped will re-zero the
+    // game's frame_number on the next tick. Anchoring frameZero now to the
+    // pre-reset state.frame_number causes every post-reset frame to compute
+    // a negative loggedFn and either get dropped or written out of order —
+    // that's the "two timelines" diagonal the inPlay gate above only
+    // partially mitigates. Drop the start-frame log; the catchup loop will
+    // anchor frameZero to the actually-zeroed counter on the next tick.
+    currentFrame = -1;
+    lastWriteHead = readU64(new DataView(memory.buffer, pointers.ringWriteHead), 0);
+    frameZero = null;
+    renderFrameZero = null;
     showStartOverlay(false);
     updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Playing`);
     console.log(`[FSM] START pressed → PLAYING (level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()})`);

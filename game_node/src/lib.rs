@@ -84,7 +84,9 @@ pub fn build_app() -> App {
     });
 
     let mut app = App::new();
+    // Add continous window
     app.insert_resource(WinitSettings::continuous());
+
     app.add_plugins((
         DefaultPlugins.set(WindowPlugin {
             primary_window: window,
@@ -110,7 +112,6 @@ pub fn build_app() -> App {
         StateEmitterPlugin,
         WebAdapterPlugin,
     ))
-    .insert_resource(Time::<Fixed>::from_hz(REFRESH_RATE_HZ))
     .insert_resource(DoorWinEntities::default())
     .insert_resource(RoundStartTimestamp::default())
     .insert_resource(GameConditions::default())

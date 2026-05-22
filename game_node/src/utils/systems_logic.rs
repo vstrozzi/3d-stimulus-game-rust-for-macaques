@@ -43,7 +43,7 @@ impl Plugin for SystemsLogicPlugin {
                 ).chain())
             // Shared memory
             .add_systems(
-                FixedPreUpdate,
+                PreUpdate,
                 (read_shared_memory_commands, read_shared_memory_game_state_local).chain(),
             )
             // Global UI responsiveness system (runs every frame)
@@ -66,7 +66,7 @@ impl Plugin for SystemsLogicPlugin {
             .add_systems(Update, force_redraw_every_frame)
             // Command driven
             .add_systems(
-                FixedUpdate,
+                Update,
                 (
                     handle_reset_command,
                     handle_check_alignment,
@@ -81,7 +81,7 @@ impl Plugin for SystemsLogicPlugin {
             )
             // Post Update
             .add_systems(
-                FixedPostUpdate,
+                PostUpdate,
                 (
                 clear_pending_commands,
                 increment_timing,

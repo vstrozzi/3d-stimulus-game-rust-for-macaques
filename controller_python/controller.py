@@ -809,9 +809,6 @@ class MonkeyGameController:
             ):
                 for s in states[:-1]:
                     fn = s.get("frame_number", 0)
-                    # Dedup against the preallocated frame_log. frame_number is
-                    # monotonic within a trial, so any frame with rebased index
-                    # < frame_log_len has already been logged.
                     logged_fn = fn if self._frame_zero is None else fn - self._frame_zero
                     if logged_fn >= self.frame_log_len:
                         self.log_frame(s, None)
@@ -950,6 +947,7 @@ class MonkeyGameController:
             self.log_frame(self.current_state, cmds)
             print(f"[FSM] R pressed → PLAYING (level {self.current_level_index} chain {self.active_chain} trial {self._trial_idx()})")
             return
+
 
     def _handle_playing(self):
         # Check at which state are we

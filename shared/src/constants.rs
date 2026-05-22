@@ -1,7 +1,12 @@
 // Constants used in the game_node and shared across libraries.
 /// Generic game constants
 pub mod game_constants {
-    pub const REFRESH_RATE_HZ: f64 = 60.0; // Hz
+    // NOTE: there is intentionally no `REFRESH_RATE_HZ` constant. The game
+    // runs all logic (gameplay, command handling, SHM writes) once per
+    // rendered frame — i.e. at whatever rate the OS compositor / browser
+    // delivers vsync. Trial logs report the *measured* refresh rate from
+    // observed `present_elapsed_secs` deltas, populated in the controllers'
+    // `_compute_timing_health` (see controller.py / controller_main.js).
 
     // Cosine alignment with door to win
     pub const COSINE_ALIGNMENT_TO_WIN: f32 = 0.95; // approx ~8 degrees
@@ -242,20 +247,3 @@ pub mod controller_constants {
     pub const PROCEEDING_VALUES: &[&str] = &["ADVANCE", "STAY", "RETROCEED"];
 }
 
-/// Shared timing constants for stimulus experiments.
-pub mod timing {
-    use super::game_constants::REFRESH_RATE_HZ;
-
-    /// Duration to show black screen after win (in frames)
-    pub const WIN_BLANK_DURATION_FRAMES: u64 = 60;
-    
-    /// Convert frames to approximate seconds 
-    pub const fn frames_to_seconds(frames: u64) -> f32 {
-        frames as f32 / REFRESH_RATE_HZ as f32
-    }
-    
-    /// Convert seconds to frames
-    pub const fn seconds_to_frames(seconds: f32) -> u64 {
-        (seconds * REFRESH_RATE_HZ as f32) as u64
-    }
-}

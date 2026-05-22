@@ -72,7 +72,7 @@ pub fn read_shared_memory_commands(
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
 
-    // Read EVERY FixedUpdate tick (no seq gate). The seq gate below skips
+    // Read EVERY tick (no seq gate). The seq gate below skips
     let speed_rotate = f32::from_bits(
         shm.game_structure_control
             .camera_speed_rotate

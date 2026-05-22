@@ -19,7 +19,6 @@ import init, {
   create_shared_memory_wasm,
   WebSharedMemory,
   wasm_main,
-  refresh_rate_hz,
   controller_constants,
 } from "./game_node/pkg/game_node.js";
 
@@ -28,7 +27,6 @@ import init, {
 // All values below are populated from Rust (shared/src/constants.rs) after
 // init() — controller.py reads the same source via PyO3, so both controllers
 // stay in lockstep.
-let REFRESH_RATE_HZ = null;
 let N_FACES = null;
 let N_COLOR_FLOATS = null;
 let N_START_ORIENTS = null;
@@ -67,6 +65,7 @@ let defaultGameState = null; // default SharedGameState values (from Rust)
 
 // Levels / chains (mirrors Python's multi-level multi-chain model)
 let levels = [];
+let paradigmName = "trials.jsonl";
 let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
 let activeChain = 0;
@@ -900,14 +899,26 @@ function _participantName() {
   return sanitizeSessionName(raw) || "unknown";
 }
 
+// Browser-reported display refresh rate. Chrome 121+ exposes
+// `screen.refreshRate` directly; other browsers return `null`. We do NOT
+// fall back to measuring from observed frame deltas — that goes into
+// `timing_health.refresh_rate_hz_measured` separately as a sanity check.
+function _queryDisplayRefreshRateHz() {
+  if (typeof screen !== "undefined" && typeof screen.refreshRate === "number") {
+    return screen.refreshRate;
+  }
+  return null;
+}
+
 function _sessionInfo() {
   return {
     app_start_unix_ns: APP_START_UNIX_NS,
     platform: "wasm",
     user_agent: (typeof navigator !== "undefined" ? navigator.userAgent : null),
-    refresh_rate_hz: REFRESH_RATE_HZ,
+    refresh_rate_hz: _queryDisplayRefreshRateHz(),
     cross_origin_isolated: (typeof self !== "undefined" ? !!self.crossOriginIsolated : null),
     present_mode: "fifo",
+    paradigm: paradigmName,
   };
 }
 
@@ -1000,9 +1011,14 @@ function _computeTimingHealth(summary) {
     mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
     std = Math.sqrt(deltas.reduce((s, d) => s + (d - mean) ** 2, 0) / deltas.length);
   }
+  // Sanity-check value from observed present-time deltas. Cross-check
+  // against the browser-reported `session_info.refresh_rate_hz` to catch
+  // VRR / dropped-frame mismatches — not the authoritative reading.
+  const refreshHzMeasured = mean > 0 ? 1.0 / mean : null;
   return {
     present_dt_mean_ms: Math.round(mean * 1e6) / 1e3,
     present_dt_std_ms:  Math.round(std  * 1e6) / 1e3,
+    refresh_rate_hz_measured: refreshHzMeasured !== null ? Math.round(refreshHzMeasured * 1e3) / 1e3 : null,
     render_gaps: renderGaps,
     freeze_events: 0,
     drift_max_s: 0.0,
@@ -2040,10 +2056,12 @@ async function loadLevels() {
     let text;
     if (customTrials) {
       text = customTrials;
+      paradigmName = customName || "custom.jsonl";
       console.log(`Using custom trials from sessionStorage: ${customName}`);
     } else {
       const resp = await fetch(TRIALS_PATH);
       text = await resp.text();
+      paradigmName = TRIALS_PATH.split("/").pop() || "trials.jsonl";
     }
     const lines = text.trim().split("\n").filter((l) => l.trim());
     levels = [];
@@ -2106,7 +2124,6 @@ async function start() {
   setLoadingProgress(-1); // indeterminate while JS compiles
   const wasm = await init({ module_or_path: wasmBuffer });
   memory = wasm.memory;
-  REFRESH_RATE_HZ = refresh_rate_hz(); // read from Rust constants, like Python's monkey_shared.REFRESH_RATE_HZ
 
   // Pull every cross-controller constant from Rust so this file stays in
   // lockstep with controller.py. controller.py imports the same names from

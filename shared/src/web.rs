@@ -26,12 +26,6 @@ pub fn shared_game_state_byte_size() -> u32 {
     std::mem::size_of::<SharedGameState>() as u32
 }
 
-/// REFRESH_RATE_HZ from constants.rs — mirrors Python's monkey_shared.REFRESH_RATE_HZ
-#[wasm_bindgen]
-pub fn refresh_rate_hz() -> f64 {
-    crate::constants::game_constants::REFRESH_RATE_HZ
-}
-
 /// Single object containing every cross-controller constant — values, field
 /// lists, FSM labels. Mirrors the attributes exposed by the Python module so
 /// `controller.py` and `controller_main.js` can pull the same source.

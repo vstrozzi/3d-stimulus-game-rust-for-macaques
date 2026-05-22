@@ -4,11 +4,17 @@ use bevy::{prelude::*};
 use crate::shared_memory::shared_memory_reader::{SharedMemResource};
 use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameConditions, BlankScreen};
 
-// Count FixedUpdate ticks since beginning of game
+// Pause-aware game-logic tick counter. Ticked once per rendered frame in
+// `PostUpdate::increment_timing`, but skipped while `stop_rendering` is true.
+// Kept as a separate counter from `RenderFrameCounterResource` so the SHM
+// `frame_number` field carries the "active game time" tick index that the
+// controller relies on for trial timeout / FSM bookkeeping.
 #[derive(Resource, Default)]
 pub struct FrameCounterResource(pub u64);
 
-// Count render frames (Update ticks) since beginning of game
+// Render-frame counter. Ticked unconditionally in `Update::stage_render_sample`
+// once per vsync; never pauses on `stop_rendering`. Drives the
+// `render_frame_number` SHM field used for photodiode / timing analysis.
 #[derive(Resource, Default)]
 pub struct RenderFrameCounterResource(pub u64);
 

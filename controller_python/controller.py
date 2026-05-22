@@ -4,7 +4,9 @@ import json
 import math
 import os
 import random
+import re
 import signal
+import subprocess
 import sys
 import tempfile
 import threading
@@ -28,6 +30,39 @@ except ImportError:
     print("Install with:  pip install evdev")
     print("Then add yourself to the 'input' group:  sudo usermod -aG input $USER  (then log out/in)")
     sys.exit(1)
+
+
+def _query_display_refresh_rate_hz():
+    """Ask the OS for the active display's refresh rate (Hz).
+
+    Shells out to ``xrandr --current`` and parses the line containing the
+    asterisk that marks the currently-active mode. Works on X11 and XWayland
+    (the latter covers most Wayland sessions). Returns ``None`` when xrandr
+    is unavailable or its output doesn't parse — the caller should treat
+    that as "unknown" rather than substituting a hardcoded value.
+    """
+    try:
+        out = subprocess.check_output(
+            ["xrandr", "--current"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=2.0,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return None
+    # Active-mode line looks like:
+    #   1920x1080     60.00*+  59.94    50.00
+    # The token bearing '*' is the current refresh rate in Hz.
+    for line in out.splitlines():
+        if "*" not in line:
+            continue
+        for tok in line.split():
+            if "*" in tok:
+                try:
+                    return float(tok.rstrip("*+"))
+                except ValueError:
+                    continue
+    return None
 
 
 def _find_keyboard_device():
@@ -63,8 +98,6 @@ except ImportError:
 
 # Constants imported from shared/src/constants.rs via monkey_shared.
 # Single source of truth — mirrored to controller_main.js through wasm-bindgen.
-REFRESH_RATE_HZ = monkey_shared.REFRESH_RATE_HZ
-WIN_BLANK_DURATION_FRAMES = monkey_shared.WIN_BLANK_DURATION_FRAMES
 SHM_NAME = monkey_shared.SHM_NAME
 POLLING_RATE_S = monkey_shared.POLLING_RATE_S
 GAME_UNRESPONSIVENESS_THRESHOLD_S = monkey_shared.GAME_UNRESPONSIVENESS_THRESHOLD_S
@@ -182,12 +215,26 @@ def _backfill_level_defaults(level):
         obj.setdefault("decorations_rotation", [0, 0, 0])
 
 
-def load_levels(trials_path="trials_config/trials.jsonl"):
-    """Load levels from new JSONL format. Each line is a level with objects/trials/fixed."""
+def load_levels(trials_path=None):
+    """Load levels from new JSONL format. Each line is a level with objects/trials/fixed.
+
+    Returns ``(levels, paradigm_basename)`` so callers can stamp the paradigm
+    filename into ``session_info``.
+    """
     levels = []
     script_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(script_dir)
-    trial_file = os.path.join(parent_dir, trials_path)
+    if trials_path is None:
+        if len(sys.argv) > 1:
+            trials_path = sys.argv[1]
+        else:
+            trials_path = "trials_config/trials.jsonl"
+    trial_file = (
+        trials_path
+        if os.path.isabs(trials_path)
+        else os.path.join(parent_dir, trials_path)
+    )
+    paradigm_name = os.path.basename(trial_file)
 
     try:
         with open(trial_file, "r", encoding="utf-8") as f:
@@ -213,7 +260,7 @@ def load_levels(trials_path="trials_config/trials.jsonl"):
         print(f"Loaded {len(levels)} levels from {trial_file}")
     except Exception as e:
         print(f"Failed to load levels: {e}")
-    return levels
+    return levels, paradigm_name
 
 
 class ControllerState(Enum):
@@ -285,16 +332,21 @@ class MonkeyGameController:
         }
 
         # Session metadata, written once into every trial log.
+        # `refresh_rate_hz` is queried from the OS at startup (xrandr) — not
+        # hardcoded, not measured from observed frame deltas. The measured
+        # value is still surfaced separately in `timing_health.refresh_rate_hz_measured`
+        # so analyses can cross-check that the display actually delivered
+        # what it claims (catches VRR / dropped-frame mismatches).
+        # Level configuration
+        self.levels, paradigm_name = load_levels()
         self.session_info = {
             "app_start_unix_ns": time.time_ns(),
             "platform": "native",
             "os": sys.platform,
-            "refresh_rate_hz": float(REFRESH_RATE_HZ),
+            "refresh_rate_hz": _query_display_refresh_rate_hz(),
             "present_mode": "fifo",
+            "paradigm": paradigm_name,
         }
-
-        # Level configuration
-        self.levels = load_levels()
         self.total_levels = len(self.levels)
 
         # Current level state
@@ -655,9 +707,14 @@ class MonkeyGameController:
             std = math.sqrt(sum((d - mean) ** 2 for d in deltas) / len(deltas))
         else:
             mean = std = 0.0
+        # Sanity-check value: 1 / mean(Δpresent) from the frames we actually
+        # logged. Useful for catching VRR / dropped-frame mismatches against
+        # the OS-reported `session_info.refresh_rate_hz` — not authoritative.
+        refresh_hz_measured = (1.0 / mean) if mean > 0 else None
         return {
             "present_dt_mean_ms": round(mean * 1000, 3),
             "present_dt_std_ms":  round(std  * 1000, 3),
+            "refresh_rate_hz_measured": round(refresh_hz_measured, 3) if refresh_hz_measured is not None else None,
             "render_gaps": render_gaps,
             "freeze_events": freezes,
             "drift_max_s": 0.0,

@@ -158,25 +158,11 @@ Startup:        init_shared_memory_system
                 spawn_persistent_camera
                 setup_environment
                 preload_all_textures
-                spawn_warmup_scene           (chain order matters)
+                spawn_warmup_scene
+                spawn_score_bar_pool         (chain order matters)
 
-FixedPreUpdate: read_shared_memory_commands
+PreUpdate:      read_shared_memory_commands
                 read_shared_memory_game_state_local
-
-FixedUpdate:    handle_reset_command
-                handle_check_alignment
-                handle_blank_screen
-                handle_stop_rendering
-                handle_rotation
-                handle_zoom
-                handle_door_animation
-                handle_animation_door_command
-                update_score_bar
-
-FixedPostUpdate: clear_pending_commands
-                 increment_timing            (paused if stop_rendering)
-                 update_shared_memory_local
-                 write_shared_memory_game_state
 
 First:          commit_render_sample         (writes prev frame's staged
                                               sample to SHM, stamped with
@@ -187,7 +173,29 @@ Update:         update_ui_scale
                 tick_warmup                  (despawns warmup scene + flips WarmupState.complete)
                 check_scene_ready            (gated on WarmupState.complete)
                 stage_render_sample          (samples + stages; no SHM write)
+                force_redraw_every_frame     (touches Window to request redraw
+                                              on next about_to_wait)
+                handle_reset_command         (chained)
+                handle_check_alignment
+                handle_blank_screen
+                handle_stop_rendering
+                handle_rotation
+                handle_zoom
+                handle_door_animation
+                handle_animation_door_command
+                update_score_bar
+
+PostUpdate:     clear_pending_commands       (chained)
+                increment_timing             (paused if stop_rendering)
+                update_shared_memory_local
+                write_shared_memory_game_state
 ```
+
+> **Single vsync schedule.** Every system above runs at the display
+> refresh rate (one tick per rendered frame). There is no `FixedUpdate`
+> in this app — see §8 for the consolidated clock model and §14c for
+> the migration log. `force_redraw_every_frame` + `WinitSettings::continuous()`
+> keep the `Update` schedule firing each vsync even without input.
 
 ### Why staging matters (the `Screen('Flip')` analogue)
 
@@ -219,9 +227,9 @@ The implementation:
    into SHM. The row now consistently describes frame *N* with a
    `present_elapsed_secs` matching frame *N*'s actual flip.
 
-The `FixedPreUpdate` ↔ `FixedPostUpdate` round-trip preserves these
-fields through the fixed loop (local reads SHM in PreUpdate, writes back
-in PostUpdate).
+The `PreUpdate` ↔ `PostUpdate` round-trip preserves these fields through
+the per-frame loop (local reads SHM in `PreUpdate`, writes back in
+`PostUpdate`).
 
 Residual error: ~0–1 ms on native (Fifo back-pressure jitter), ~0–1 ms
 on web (rAF callback scheduling). Both are constant offsets to the true
@@ -237,9 +245,9 @@ photon time that the photodiode absorbs during calibration.
 
 | Counter | Where it ticks | Pauses on `stop_rendering`? | Resets on `handle_reset_command`? |
 |---|---|---|---|
-| `FrameCounterResource` (`frame_number`) | `FixedPostUpdate::increment_timing` | **Yes** (early return) | Yes (= 0) |
-| `RenderFrameCounterResource` (`render_frame_number`) | `Update::increment_render_frame_counter` | No | Yes (= 0) |
-| `RoundStartTimestamp` (→ `elapsed_secs`) | `FixedPostUpdate::increment_timing` (accumulates `time.delta()`) | Yes | Reset to `Some(Duration::ZERO)` in `setup_round` |
+| `FrameCounterResource` (`frame_number`) | `PostUpdate::increment_timing` | **Yes** (early return) | Yes (= 0) |
+| `RenderFrameCounterResource` (`render_frame_number`) | `Update::stage_render_sample` | No | Yes (= 0) |
+| `RoundStartTimestamp` (→ `elapsed_secs`) | `PostUpdate::increment_timing` (accumulates `time.delta()`) | Yes | Reset to `Some(Duration::ZERO)` in `setup_round` |
 
 Net result: on the first visible frame of a trial, `frame_number = 0`
 and `elapsed_secs ≈ 0`. `render_frame_number` ticks throughout to keep
@@ -322,16 +330,21 @@ Browser editor for trial JSONs. Notes:
 ┌─────────────────────────┐       ┌───────────────────────────┐
 │       Controller        │       │        Game (Bevy)        │
 │  (Python native / JS)   │       │                           │
-│                         │       │  FixedUpdate (60 Hz)      │
-│  Writes commands ──────────────▶│    game logic, physics    │
-│  Reads game state  ◀────────────│    elapsed_secs           │
-│  Logs trial data        │       │    frame_number           │
-│                         │  SHM  │                           │
-│                         │       │  Update (vsync-locked)    │
-│                         │       │    rendering              │
-│                         │       │    render_elapsed_secs    │
-│                         │       │    render_frame_number    │
-│                         │       │    photodiode_white       │
+│                         │       │  PreUpdate (vsync)        │
+│  Writes commands ──────────────▶│    read commands          │
+│                         │       │                           │
+│                         │       │  Update (vsync)           │
+│                         │       │    game logic, rotation,  │
+│                         │       │    animation, rendering   │
+│                         │       │                           │
+│                         │  SHM  │  First (vsync, next tick) │
+│  Reads game state  ◀────────────│    commit render sample   │
+│  Logs trial data        │       │    (present_elapsed_secs) │
+│                         │       │                           │
+│                         │       │  PostUpdate (vsync)       │
+│                         │       │    elapsed_secs+=delta    │
+│                         │       │    frame_number++         │
+│                         │       │    write SHM + ring push  │
 └─────────────────────────┘       └───────────────────────────┘
                                            │
                                     GPU pipeline → Compositor → Scanout → Photons
@@ -339,27 +352,62 @@ Browser editor for trial JSONs. Notes:
 
 ---
 
-## 8. Two Clock Domains
+## 8. Single Clock Domain (vsync)
 
-| Field                  | Update schedule         | What it measures                         |
-|------------------------|-------------------------|------------------------------------------|
-| `frame_number`         | **FixedUpdate** (60 Hz) | Game-logic tick counter (paused if `stop_rendering`) |
-| `elapsed_secs`         | **FixedUpdate** (60 Hz) | Cumulative game-logic time since round start (paused if `stop_rendering`) |
-| `render_frame_number`  | **Update** (vsync)      | Render frame counter (never paused)      |
-| `render_elapsed_secs`  | **Update** (vsync)      | Real-clock time at frame submission      |
-| `photodiode_white`     | **Update** (vsync)      | State of photodiode calibration square   |
+All game systems — command handling, gameplay logic, animations, score
+bar updates, SHM writes — run **once per rendered frame** in Bevy's
+standard `PreUpdate` / `Update` / `PostUpdate` schedules. There is no
+`FixedUpdate` schedule in this app; `Time::<Fixed>` is not inserted as a
+resource. The fixed/render split that earlier versions of this document
+described has been removed.
 
-### FixedUpdate (game logic)
-- Configured at exactly 60 Hz via `Time::<Fixed>::from_hz(60.0)`.
-- Each tick advances `elapsed_secs` by exactly 1/60 s = 16.667 ms.
-- Bevy runs multiple ticks per render frame to catch up if rendering is
-  slow; zero ticks if rendering is faster than 60 Hz.
-- **Precision**: deterministic step, no jitter.
+| Field                  | Where written                  | Pauses on `stop_rendering`? |
+|------------------------|--------------------------------|-----------------------------|
+| `frame_number`         | `PostUpdate::increment_timing` | **Yes** (early return)      |
+| `elapsed_secs`         | `PostUpdate::increment_timing` | **Yes**                     |
+| `render_frame_number`  | `Update::stage_render_sample`  | No                          |
+| `render_elapsed_secs`  | `Update::stage_render_sample`  | No                          |
+| `present_elapsed_secs` | `First::commit_render_sample`  | No                          |
+| `photodiode_white`     | `First::commit_render_sample`  | No                          |
 
-### Update (render loop)
-- Runs once per vsync under `PresentMode::Fifo`.
-- Native: OS compositor vsync. WASM: `requestAnimationFrame`.
-- **Precision**: subject to OS/browser scheduling jitter (±1 ms typical).
+`frame_number` and `render_frame_number` therefore share the same vsync
+tick rate; the only behavioural difference is that `frame_number` and
+`elapsed_secs` are pause-aware (skipped while `stop_rendering = true` or
+during door animations that flip that flag), giving the controller a
+clean "active game time" stream. Both pairs are kept in SHM and in trial
+logs for back-compat — verifier code that previously consumed only
+`frame_number`/`elapsed_secs` keeps working.
+
+### Refresh-rate independence
+Because the loop is vsync-driven, the per-tick cadence equals the
+display refresh rate (60 Hz / 120 Hz / 144 Hz / VRR). Anything that
+should be wall-clock-stable across displays must multiply by
+`time.delta_secs()`. As of this writing:
+
+- **Door animations** use `time.elapsed()` ✓
+- **`elapsed_secs` accumulation** uses `time.delta()` ✓
+- **Camera rotation / zoom** apply per-tick increments ✗
+  ([shared_memory_reader.rs:75](game_node/src/shared_memory/shared_memory_reader.rs#L75-L98)
+  adds `camera_speed_rotate`/`CAMERA_3D_SPEED_ZOOM` without a `delta`
+  multiplier). At 120 Hz the monkey rotates at 2× the intended speed.
+  Tracked as an open issue in §15.
+
+### Refresh rate: OS-reported vs measured
+The hardcoded `REFRESH_RATE_HZ` constant has been removed. Both
+controllers now record two independent values per session:
+
+- **`session_info.refresh_rate_hz`** — queried directly from the OS /
+  browser at startup. Native: `xrandr --current` parsed in
+  `_query_display_refresh_rate_hz()` (works on X11 and XWayland;
+  returns `None` if `xrandr` is missing or the output doesn't parse).
+  Web: `screen.refreshRate` (Chrome 121+; `null` elsewhere — no
+  fallback).
+- **`timing_health.refresh_rate_hz_measured`** — `1 / mean(Δpresent_elapsed_secs)`
+  over the frames actually logged in this level. Used as a sanity check
+  against the OS value; mismatches flag VRR sessions or dropped frames
+  rather than telling you the "true" rate.
+
+The two should agree to <0.5 Hz on a healthy Fifo session.
 
 ---
 
@@ -367,19 +415,19 @@ Browser editor for trial JSONs. Notes:
 
 ```
  Game logic      Render submit    GPU work         Compositor       Scanout
- (FixedUpdate)   (Update)         (GPU pipeline)   (OS/browser)     (LCD/OLED)
+ (Update)        (end of Update)  (GPU pipeline)   (OS/browser)     (LCD/OLED)
      │               │                 │                 │              │
-     ├ 0–16.7 ms ─▶ ├ <1 ms ──────▶  ├ 0.5–8 ms ──▶   ├ 0–16.7 ms ─▶ │
+     ├ <1 ms ──────▶ ├ <1 ms ──────▶  ├ 0.5–8 ms ──▶   ├ 0–16.7 ms ─▶ │
 ```
 
 | Stage | Typical | Worst |
 |---|---|---|
-| FixedUpdate → Update | 0–16.7 ms | 16.7 ms |
+| Game logic → render submit | <1 ms | <1 ms |
 | CPU render submission | <1 ms | <1 ms |
 | GPU pipeline | 0.5–3 ms | 8 ms |
 | Compositor (Fifo) | 0–16.7 ms | 33.4 ms |
 | Display scanout (top) | ~0.1 ms | ~0.5 ms |
-| **Total** | **~1–37 ms** | **~60 ms** |
+| **Total** | **~1–20 ms** | **~45 ms** |
 
 This latency is nearly constant for a given hardware setup; the
 photodiode measures it as a fixed `T_offset`.
@@ -444,10 +492,11 @@ restores stable 60 Hz.
 ## 12. Ring Buffer & Polling
 
 - 8-slot ring of full `SharedGameState`. Game pushes one entry per
-  FixedUpdate. Controller drains via `read_game_state_since()`.
+  rendered frame (`PostUpdate::write_shared_memory_game_state`).
+  Controller drains via `read_game_state_since()`.
 - Overflow detectable: `current_head - last_head > 8`.
-- **Snapshot read** (`read_game_state`) gives the latest render-side
-  fields; the ring is the only way to recover skipped FixedUpdate ticks.
+- **Snapshot read** (`read_game_state`) gives the latest fields; the
+  ring is the only way to recover frames the controller polled past.
 
 What the monitor cannot capture: actual display onset (photodiode
 only), compositor frame drops, inter-poll render frames (aliasing),
@@ -458,23 +507,25 @@ sub-frame timing.
 ## 13. Drift Sources & Definition
 
 In trial logs you will see "drift" — the gap between game time and wall
-clock. Causes:
+clock. Since the migration to a single vsync-driven schedule (§4, §8),
+`elapsed_secs` is just `time.delta()` accumulated per rendered frame, so
+the drift definition is simpler than it used to be. Remaining causes:
 
-1. **Skipped / catch-up FixedUpdate ticks** when a render frame is slow;
-   averages out but produces transient drift.
-2. **Intentional pauses** (`stop_rendering`, door animations) where
-   `elapsed_secs` is paused by design but the controller wall-clock
-   keeps ticking. The verifier excludes these via the `is_animating`
-   flag — see `tools/verify_trial_logs.py::_active_drift_series()`.
-3. **Web vsync ≠ 60 Hz** on 120 Hz / VRR displays. `FixedUpdate` still
-   tries to hit 60 Hz; the resulting uneven tick distribution against
-   wall clock manifests as small drift.
-4. **Frame-logging key mismatch** (fixed): keying log by local
+1. **Intentional pauses** (`stop_rendering`, door animations) where
+   `elapsed_secs` / `frame_number` are paused by design but the
+   controller wall-clock keeps ticking. The verifier excludes these via
+   the `is_animating` flag — see
+   `tools/verify_trial_logs.py::_active_drift_series()`.
+2. **Display ≠ 60 Hz** on 120 Hz / VRR displays. The game ticks at the
+   display refresh rate, so `frame_number / 60` is no longer a faithful
+   wall-clock proxy. The measured rate is now reported in
+   `timing_health.refresh_rate_hz_measured`; divide by that instead.
+3. **Frame-logging key mismatch** (fixed): keying log by local
    `currentFrame` instead of `state.frame_number` caused intermediate
    ticks to overwrite and produced fake gaps. Both controllers now key
    by `state.frame_number`.
 
-"Active drift" in plots = `elapsed_secs − (non_animating_tick_count / 60)`.
+"Active drift" in plots = `elapsed_secs − Σ(non-animating Δpresent_elapsed_secs)`.
 
 ---
 
@@ -635,6 +686,40 @@ clock. Causes:
 
 ---
 
+## 14c. Vsync-only schedule + measured refresh rate (this session)
+
+- **`Time::<Fixed>` schedule removed.** All gameplay/command systems
+  (`handle_reset_command`, `handle_check_alignment`, `handle_rotation`,
+  `handle_zoom`, `handle_door_animation`, `handle_animation_door_command`,
+  `update_score_bar`) run in `Update`. `increment_timing` /
+  `clear_pending_commands` / `update_shared_memory_local` /
+  `write_shared_memory_game_state` run in `PostUpdate`. `Time::<Fixed>`
+  is no longer inserted as a resource in [lib.rs](game_node/src/lib.rs).
+  Motivation: with FixedUpdate at 60 Hz drifting against vsync, the
+  rendered transform was up to one fixed step stale relative to the
+  current frame — visible as judder. Single-domain vsync eliminates it.
+- **`REFRESH_RATE_HZ` constant deleted** from
+  [shared/src/constants.rs](shared/src/constants.rs). Removed PyO3 export
+  (`monkey_shared.REFRESH_RATE_HZ`) and wasm-bindgen export
+  (`refresh_rate_hz()`). Also deleted unused `timing::frames_to_seconds`
+  / `seconds_to_frames` / `WIN_BLANK_DURATION_FRAMES`.
+- **Controllers query the OS/browser for refresh rate.**
+  `session_info.refresh_rate_hz` is filled once at startup:
+  `_query_display_refresh_rate_hz()` shells out to `xrandr --current`
+  on Python; `_queryDisplayRefreshRateHz()` reads `screen.refreshRate`
+  on JS. Returns `None` / `null` if the OS / browser doesn't expose it
+  (no fallback to measurement). The measured value lives separately in
+  `timing_health.refresh_rate_hz_measured` as a sanity check.
+- **`frame_number` + `render_frame_number` both retained in SHM and trial
+  logs** for downstream compatibility. They differ only in pause
+  semantics (frame_number pauses on `stop_rendering` / `is_animating`).
+- **`force_redraw_every_frame` + `WinitSettings::continuous()`** added in
+  [systems_logic.rs](game_node/src/utils/systems_logic.rs) and
+  [lib.rs](game_node/src/lib.rs) so `Update` keeps firing each vsync
+  even without input.
+
+---
+
 ## 15. Known Open Issues / Follow-ups
 
 1. ~~**Warmup reads the now-paused frame counter.**~~ **Fixed.**
@@ -656,6 +741,16 @@ clock. Causes:
    buffer is what's logged, but worth noting.
 4. **Trial-0 still shows residual drift in some sessions**, mostly from
    browser vsync alignment on the first few frames. Not blocking.
+5. **Camera rotation and zoom are per-tick, not per-second.**
+   [shared_memory_reader.rs:75-98](game_node/src/shared_memory/shared_memory_reader.rs#L75-L98)
+   increments `pending.rotation`/`pending.zoom` by `camera_speed_rotate`
+   / `CAMERA_3D_SPEED_ZOOM` on every read tick, without multiplying by
+   `time.delta_secs()`. Since the schedule migration (§4) all systems
+   tick at the display refresh rate, so on a 120 Hz monitor the camera
+   rotates at 2× the intended angular velocity. Door animations and
+   `elapsed_secs` are unaffected (both use `time.elapsed()` /
+   `time.delta()`). Fix: multiply both increments by
+   `time.delta_secs()` and rescale the speed constants accordingly.
 
 ---
 
@@ -691,8 +786,9 @@ clock. Causes:
 3. `cp target/release/libshared.so controller_python/monkey_shared.so`
 4. Start game; start controller; start monitor `python controller_python/monitor.py --hz 60`.
 5. Monitor sanity:
-   - `g_dt` = 16.67 ms with no jitter.
-   - `r_dt` ≈ 16.67 ms.
+   - `g_dt` ≈ `r_dt` ≈ 1/display_refresh (16.67 ms on 60 Hz, 8.33 ms on
+     120 Hz). Both clocks are vsync-driven now (§8), so any divergence
+     between them is a bug.
    - `gaps = 0`, `dups = 0`, `frz = 0`, `out% = 0.0%`.
 6. Press **B** to enable photodiode. Verify `pdi` alternates.
 7. Run photodiode calibration (§10). Record `T_offset`.
@@ -704,22 +800,27 @@ clock. Causes:
 
 ## 18. Timing Field Reference
 
-```
-Timeline:     ──── FixedUpdate ticks ────────────────────────────────
-                   │    │    │    │    │    │    │
-                   ▼    ▼    ▼    ▼    ▼    ▼    ▼
-  frame_number:    1    2    3    4    5    6    7    (game logic; 0 on reset, paused if stop_rendering)
-  elapsed_secs:  0.000 .017 .033 .050 .067 .083 .100 (deterministic)
+All counters tick on the same vsync schedule (see §8). The only
+difference between the two pairs is the pause behavior under
+`stop_rendering` / `is_animating`.
 
-Timeline:     ──── Update ticks (vsync) ─────────────────────────────
+```
+Timeline:     ──── Render frames (vsync) ────────────────────────────
                   │         │         │         │
                   ▼         ▼         ▼         ▼
-  render_frame:   1         2         3         4    (render; 0 on reset, never paused)
-  render_elapsed: 0.001     .018      .034      .051 (real clock ±jitter)
-  photodiode:     W         B         W         B    (alternating)
+  render_frame:   1         2         3         4    (never paused; 0 on reset)
+  render_elapsed: 0.000     .017      .033      .050 (round_start.delta sum, frame N)
+  present_elapsed:0.017     .033      .050      .067 (Time::<Real>::now at frame N+1's First)
+  photodiode:     W         B         W         B    (alternating; sampled at frame N)
+
+  frame_number:   1         2         3         4    (paused while stop_rendering/animating)
+  elapsed_secs:  0.000     .017      .033      .050 (paused with frame_number)
 
   T_offset:    ◄──────────────────────────────────▶  (constant, photodiode-measured)
 ```
 
 `render_elapsed_secs + T_offset` ⇒ actual display-onset time with
-sub-1 ms accuracy when §16 assumptions hold.
+sub-1 ms accuracy when §16 assumptions hold. For per-trial analysis,
+`present_elapsed_secs` deltas yield the real frame interval (1 / measured
+refresh rate; see `timing_health.refresh_rate_hz_measured` in level
+summaries).

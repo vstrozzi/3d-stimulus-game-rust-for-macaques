@@ -404,7 +404,6 @@ impl SharedMemoryWrapper {
 
         // Export constants from constants.rs so Python can import them directly.
         use crate::constants::game_constants;
-        m.add("REFRESH_RATE_HZ", game_constants::REFRESH_RATE_HZ)?;
         m.add("DECORATIONS_SEEDS", game_constants::DECORATIONS_SEEDS.to_vec())?;
         m.add("COSINE_ALIGNMENT_TO_WIN", game_constants::COSINE_ALIGNMENT_TO_WIN)?;
 
@@ -429,9 +428,6 @@ impl SharedMemoryWrapper {
         m.add("MAX_SPOTLIGHT_INTENSITY", lighting_constants::MAX_SPOTLIGHT_INTENSITY)?;
 
         m.add("PROGRESS_BAR_WRAP_AROUND_SIZE", game_constants::PROGRESS_BAR_WRAP_AROUND_SIZE)?;
-        // timing
-        use crate::constants::timing;
-        m.add("WIN_BLANK_DURATION_FRAMES", timing::WIN_BLANK_DURATION_FRAMES)?;
 
         // camera_3d_constants
         use crate::constants::camera_3d_constants;

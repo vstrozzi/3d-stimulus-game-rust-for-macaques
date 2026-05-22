@@ -23,8 +23,6 @@ use bevy::winit::WinitSettings;
 #[cfg(target_arch = "wasm32")]
 pub use shared::{create_shared_memory_wasm, WebSharedMemory};
 
-use shared::constants::game_constants::REFRESH_RATE_HZ;
-
 // Shared memory helpers
 pub mod shared_memory {
     pub mod shared_memory_reader;

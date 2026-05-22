@@ -82,11 +82,6 @@ export function create_shared_memory_wasm(): number;
 export function editor_constants(): any;
 
 /**
- * REFRESH_RATE_HZ from constants.rs — mirrors Python's monkey_shared.REFRESH_RATE_HZ
- */
-export function refresh_rate_hz(): number;
-
-/**
  * Return the byte-size of SharedGameState so JS knows the extent of each region.
  */
 export function shared_game_state_byte_size(): number;
@@ -105,7 +100,6 @@ export interface InitOutput {
     readonly controller_constants: () => number;
     readonly create_shared_memory_wasm: () => number;
     readonly editor_constants: () => number;
-    readonly refresh_rate_hz: () => number;
     readonly shared_game_state_byte_size: () => number;
     readonly websharedmemory_get_command_ack_ptr: (a: number) => number;
     readonly websharedmemory_get_command_seq_ptr: (a: number) => number;
@@ -121,20 +115,20 @@ export interface InitOutput {
     readonly websharedmemory_get_game_structure_game_ptr: (a: number) => number;
     readonly websharedmemory_new: (a: number) => number;
     readonly websharedmemory_get_ptr: (a: number) => number;
-    readonly __wasm_bindgen_func_elem_195338: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_4324: (a: number, b: number, c: number, d: number) => void;
-    readonly __wasm_bindgen_func_elem_4326: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_108158: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_4: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_5: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_6: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_7: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_8: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_9: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4326_10: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4335: (a: number, b: number, c: number) => void;
-    readonly __wasm_bindgen_func_elem_4331: (a: number, b: number) => void;
-    readonly __wasm_bindgen_func_elem_92605: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_195336: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_4322: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_4324: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_108156: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_4: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_5: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_6: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_7: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_8: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_9: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4324_10: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4333: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_4329: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_92603: (a: number, b: number) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number) => void;

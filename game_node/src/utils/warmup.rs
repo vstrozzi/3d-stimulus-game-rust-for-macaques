@@ -30,7 +30,7 @@ pub struct WarmupState {
     /// after this so the GPU pipeline cache is populated. Stored in the
     /// render-frame domain (`RenderFrameCounterResource`) so that warmup
     /// progresses even when the controller has set `stop_rendering=true`,
-    /// which pauses the FixedUpdate-driven `FrameCounterResource`.
+    /// which pauses `FrameCounterResource`.
     pub all_loaded_at_frame: Option<u64>,
     pub complete: bool,
 }

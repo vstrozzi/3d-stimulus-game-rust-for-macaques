@@ -48,8 +48,8 @@ Column reference:
     pend     seq − ack: commands sent but not yet acknowledged
     head     Ring-buffer write_head (monotonic frame counter in SHM)
     Δhead    Frames written to ring buffer since last monitor poll
-    frame#   Game tick counter (+1 per Bevy FixedUpdate, even during stop_rendering)
-    rnd#     Render frame counter (+1 per Bevy Update/render frame, matches photodiode)
+    frame#   Game tick counter (+1 per rendered frame, paused during stop_rendering / animations)
+    rnd#     Render frame counter (+1 per rendered frame unconditionally, matches photodiode)
     dt_ms    Monitor poll interval in ms (wall-clock between samples)
     rtt_ms   Round-trip latency: seq change → ack catch-up ('...' = waiting, '-' = idle)
     p99rt    99th percentile of rtt_ms over the last 1000 samples

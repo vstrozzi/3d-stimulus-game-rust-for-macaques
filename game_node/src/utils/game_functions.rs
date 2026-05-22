@@ -71,17 +71,10 @@ pub fn handle_door_animation(
         0.0
     };
 
-    // Determine target intensity
     let target_intensity = {
         let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);
-        let base_intensity = max_spotlight_intensity * intensity_factor;
-        
-        // If animating everything
-        if door_win_entities.animate_all {  
-            0.0
-        } else {
-            base_intensity
-        }
+        let factor = if door_win_entities.animate_all { FAINT_ALIGNED_SPOTLIGHT_FACTOR } else { 1.0 };
+        max_spotlight_intensity * intensity_factor * factor
     };
 
     // Update helpers

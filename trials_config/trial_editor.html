@@ -495,6 +495,7 @@ function defaultTrial() {
     nr_attempts_to_retroceed: 10,
     elapsed_time_to_win: 4.0,
     elapsed_time_to_retroceed: 10.0,
+    show_all: false,
   };
 }
 
@@ -511,6 +512,8 @@ function defaultLevel(nObjects = 2) {
       // Keeping it -1 makes that obvious in saved JSONL files.
       start_orient: -1,
       start_trial: 0,
+      // -1 = controller picks at random; otherwise chain index 0..N-1.
+      start_object: -1,
       base_radius: PYRAMID_DEFAULTS.base_radius,
       height: PYRAMID_DEFAULTS.height,
       cosine_alignment_threshold: GAME_DEFAULTS.cosine_alignment_to_win,
@@ -570,6 +573,11 @@ function enforceLevel(lv) {
   if (f.camera_rotation_sense == null) f.camera_rotation_sense = CAMERA_DEFAULTS.rotation_sense;
   if (f.pr_switching_chain == null) f.pr_switching_chain = 1 / lv.objects.length;
   f.pr_switching_chain = Math.max(0, Math.min(1, f.pr_switching_chain));
+  if (f.start_object == null) f.start_object = -1;
+  if (f.start_object >= 0) f.start_object = Math.min(f.start_object, lv.objects.length - 1);
+  for (const t of (lv.trials || [])) {
+    if (t.show_all == null) t.show_all = false;
+  }
   f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));
 
   let firstSharedIdx = -1;
@@ -916,6 +924,9 @@ function renderTrials(trials) {
         <input type="number" class="num-sm trial-in" data-ti="${ti}" data-tf="elapsed_time_to_retroceed" value="${t.elapsed_time_to_retroceed}" min="0" step="0.5">
         <span>s</span>
       </span>
+      <span class="trial-field" title="Show wrong/right light on ALL doors instead of just the target one.">
+        <label><input type="checkbox" class="trial-in" data-ti="${ti}" data-tf="show_all" ${t.show_all ? 'checked' : ''}> show_all</label>
+      </span>
       <span class="trial-btns">
         ${ti > 0 ? `<button data-tmove="${ti}" data-dir="-1">↑</button>` : ''}
         ${ti < trials.length - 1 ? `<button data-tmove="${ti}" data-dir="1">↓</button>` : ''}
@@ -968,6 +979,13 @@ function renderFixed(fixed, lv) {
       <div class="fixed-row" title="Probability of switching to another (uniformly random) chain after each trial. 0 = never; 1 = always reroll.">
         <label>pr_switch</label>
         <input type="number" class="fixed-in" data-ff="pr_switching_chain" value="${prVal}" step="0.01" min="0" max="1">
+      </div>
+      <div class="fixed-row" title="Object the level starts on. Random = controller picks u.a.r.">
+        <label>start_object</label>
+        <select class="fixed-sel" data-ff="start_object">
+          <option value="-1"${(fixed.start_object ?? -1) === -1 ? ' selected' : ''}>Random</option>
+          ${lv.objects.map((_, i) => `<option value="${i}"${(fixed.start_object ?? -1) === i ? ' selected' : ''}>${i}</option>`).join('')}
+        </select>
       </div>
       <div class="fixed-row">
         <label>start_orient</label>
@@ -1167,13 +1185,19 @@ function attachEvents() {
 
   // Trial field inputs
   editor.querySelectorAll('.trial-in').forEach(el => {
-    el.addEventListener('input', e => {
+    const evt = el.type === 'checkbox' ? 'change' : 'input';
+    el.addEventListener(evt, e => {
       const ti = +e.target.dataset.ti;
       const field = e.target.dataset.tf;
+      const boolFields = ['show_all'];
       const intFields = ['nr_attempts_to_win', 'nr_attempts_suggestion', 'nr_attempts_to_retroceed'];
-      levels[sel].trials[ti][field] = intFields.includes(field)
-        ? Math.round(+e.target.value)
-        : +e.target.value;
+      if (boolFields.includes(field)) {
+        levels[sel].trials[ti][field] = !!e.target.checked;
+      } else if (intFields.includes(field)) {
+        levels[sel].trials[ti][field] = Math.round(+e.target.value);
+      } else {
+        levels[sel].trials[ti][field] = +e.target.value;
+      }
     });
   });
 

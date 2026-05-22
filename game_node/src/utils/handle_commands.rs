@@ -82,29 +82,12 @@ pub fn handle_animation_door_command(
         return;
     }
 
-    // Start animation
     door_win_entities.animation_start_time = Some(time.elapsed());
     door_win_entities.animate_all = pending.animation_all_door;
-
-    // Request of color
-    door_win_entities.color =
-    if pending.animation_colored{
-        // Single door with requested animation of color, then green
-        if !pending.animation_all_door {
-            LIGHT_GREEN
-        }
-        else {
-            // All door with requested animation of color, then red
-            LIGHT_RED
-        }
-    }
-    // Single animation not colored
-    else if !pending.animation_colored && !pending.animation_all_door {
-        // No animation colored, then red TODO: change name
+    door_win_entities.color = if pending.animation_colored && !pending.animation_all_door {
+        LIGHT_GREEN
+    } else {
         LIGHT_RED
-    }
-    else {
-        LIGHT_GREEN.with_alpha(0.0)
     };
 
     // Set animation flag

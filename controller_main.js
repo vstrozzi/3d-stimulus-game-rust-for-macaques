@@ -648,7 +648,7 @@ function flatTrial() {
   const flat = {};
   for (const k in obj) flat[k] = obj[k];
   for (const k in fixed) {
-    if (k !== "pr_switching_chain") flat[k] = fixed[k];
+    if (k !== "pr_switching_chain" && k !== "start_object") flat[k] = fixed[k];
   }
   for (const k in trialCfg) flat[k] = trialCfg[k];
   _flatTrialCache = flat;
@@ -695,6 +695,13 @@ function _progressBarSize() {
   const level = currentLevel();
   const remaining = Math.max(0, level.trials.length);
   return remaining * level.objects.length;
+}
+
+function _levelStartObject(level) {
+  const n = level.objects.length;
+  const v = (level.fixed.start_object ?? -1);
+  if (v < 0) return Math.floor(Math.random() * n);
+  return Math.max(0, Math.min(v | 0, n - 1));
 }
 
 // Mirrors Python's state_schema — drives buildTrialState conversion without a switch.
@@ -1408,19 +1415,23 @@ function handlePlaying(state) {
 
     // Stop rendering for the duration of the animation (only toggle if currently running)
     const stopRenderForAnim = !state.is_rendering_stopped;
+    const showAll = !!trial.show_all;
 
-    // Branch 1: Last attempt AND fail → single door (no all-door, no colored), mirrors Python
+    // Branch 1: Last attempt AND fail → retroceed.
+    // Default: red on the target door. With show_all: red on all doors
+    // (which the game maps to via colored=true + animation_all_door=true).
     if ((nrAttempts) === retroceedThreshold && cosineAlignment < cosineThreshold) {
-      console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed`);
-      cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true });
+      console.log(`[PLAY] Attempt ${nrAttempts} == ${retroceedThreshold} → retroceed (${showAll ? "all" : "single"})`);
+      cmds = showAll
+        ? makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true, animation_colored: true })
+        : makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true });
       writeCommands(cmds);
       fsmState = FSM.WAITING_ANIMATION_START;
       nrAttempts += 1;
       logFrame(state, cmds);
       return;
     }
-    // Branch 2: Single hint (below suggestion & miss, OR STAY & correct)
-    // colored if close enough (cosine > cos(π/6)), white otherwise
+    // Branch 2: Single hint (below suggestion & miss, OR STAY & correct).
     else if (
       (nrAttempts < suggestionThreshold && cosineAlignment < cosineThreshold) ||
       (inStayBudget && cosineAlignment > cosineThreshold)
@@ -1429,12 +1440,12 @@ function handlePlaying(state) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → hint (single ${coloredLight ? "colored" : "white"})`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: coloredLight });
     }
-    // Branch 3: Single green (in win budget & correct & below suggestion)
+    // Branch 3: Single green (in win budget & correct).
     else if (inWinBudget && cosineAlignment > cosineThreshold) {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → win with hint (single green)`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_colored: true });
     }
-    // Branch 4: All doors white
+    // Branch 4: No suggestion left → door animates with no visible light.
     else {
       console.log(`[PLAY] Attempt ${nrAttempts + 1} → check (all white)`);
       cmds = makeCmd({ check: true, toggle_stop_rendering: stopRenderForAnim, animation_door: true, animation_all_door: true });
@@ -1518,7 +1529,7 @@ function handleTrialIndexUpdate() {
     const newLevel = currentLevel();
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);
-    activeChain = 0;
+    activeChain = _levelStartObject(newLevel);
     _invalidateFlatTrial();
     console.log(`[LEVEL] Level complete → level ${currentLevelIndex}`);
     return;
@@ -2027,8 +2038,12 @@ function setupInput() {
 function backfillLevelDefaults(level) {
   level.fixed ??= {};
   if (level.fixed.camera_rotation_sense == null) level.fixed.camera_rotation_sense = 1;
+  if (level.fixed.start_object == null) level.fixed.start_object = -1;
   for (const obj of (level.objects || [])) {
     if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
+  }
+  for (const t of (level.trials || [])) {
+    if (t.show_all == null) t.show_all = false;
   }
 }
 
@@ -2143,6 +2158,7 @@ async function start() {
   if (levels.length > 0) {
     const startIdx = levels[0].fixed.start_trial ?? 0;
     chainIdxs = new Array(levels[0].objects.length).fill(startIdx);
+    activeChain = _levelStartObject(levels[0]);
   }
 
   if (levels.length === 0) {

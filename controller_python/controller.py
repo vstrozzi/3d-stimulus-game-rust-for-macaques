@@ -198,7 +198,7 @@ def expand_flat_trial(obj, trial_cfg, fixed):
         flat[k] = v
     # Fixed fields (base_radius, height, start_orient, lighting, animation, camera)
     for k, v in fixed.items():
-        if k not in ("pr_switching_chain", "start_trial"):
+        if k not in ("pr_switching_chain", "start_trial", "start_object"):
             flat[k] = v
     # Controller meta fields
     for k, v in trial_cfg.items():
@@ -211,8 +211,11 @@ def _backfill_level_defaults(level):
     trials.jsonl files keep loading."""
     fixed = level.setdefault("fixed", {})
     fixed.setdefault("camera_rotation_sense", 1)
+    fixed.setdefault("start_object", -1)
     for obj in level.get("objects", []):
         obj.setdefault("decorations_rotation", [0, 0, 0])
+    for trial in level.get("trials", []):
+        trial.setdefault("show_all", False)
 
 
 def load_levels(trials_path=None):
@@ -356,6 +359,7 @@ class MonkeyGameController:
         if self.levels:
             start = self.levels[0]["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.levels[0]["objects"])
+            self.active_chain = self._level_start_object(self.levels[0])
 
         # Frame tracking
         self.current_frame = -1
@@ -446,6 +450,17 @@ class MonkeyGameController:
     def _level_start_trial(self):
         return self.level["fixed"].get("start_trial", 0)
 
+    def _level_start_object(self, level=None):
+        """Resolve the initial active_chain for a level.
+        `start_object`: -1 → controller picks uniformly at random over
+        chains; >= 0 → use that chain index (clamped)."""
+        lv = level if level is not None else self.level
+        n = len(lv["objects"])
+        v = lv["fixed"].get("start_object", -1)
+        if v < 0:
+            return random.randrange(n)
+        return max(0, min(int(v), n - 1))
+
     def _level_complete(self):
         n = len(self.level["trials"])
         return all(idx >= n for idx in self.chain_idxs)
@@ -507,31 +522,27 @@ class MonkeyGameController:
         """Check if there are unacknowledged commands in SHM."""
         return self.shm_wrapper.read_command_ack() < self.shm_wrapper.command_seq()
 
+    _CMD_KEYS = (
+        "rotate_left", "rotate_right", "zoom_in", "zoom_out",
+        "check", "reset", "toggle_blank", "toggle_stop_rendering",
+        "animation_door", "animation_all_door", "animation_colored",
+    )
+
     def write_commands(self, commands=None):
         if commands is None:
             data_to_write = {**self.inputs, **self.triggers}
         else:
             data_to_write = commands
-
+        # Backfill any missing key with False so PyO3 doesn't reject the call.
+        for k in self._CMD_KEYS:
+            data_to_write.setdefault(k, False)
         self.shm_wrapper.write_commands(**data_to_write)
         cmds_snapshot = dict(data_to_write)
         self.reset_triggers()
         return cmds_snapshot
     
     def write_no_commands(self):
-        cmds = {
-            "rotate_left": False,
-            "rotate_right": False,
-            "zoom_in": False,
-            "zoom_out": False,
-            "check": False,
-            "reset": False,
-            "toggle_blank": False,
-            "toggle_stop_rendering": False,
-            "animation_door": False,
-            "animation_all_door": False,
-            "animation_colored": False,
-        }
+        cmds = {k: False for k in self._CMD_KEYS}
         self.shm_wrapper.write_commands(**cmds)
         return cmds
 
@@ -1044,6 +1055,8 @@ class MonkeyGameController:
             cosine_current = self.current_state.get("current_alignment", 0.0)
             cosine_threshold = flat.get("cosine_alignment_threshold", 0.0)
 
+            show_all = bool(flat.get("show_all", False))
+
             # Since animating stop rendering
             cmds =  {
                     "rotate_left": False, "rotate_right": False,
@@ -1055,6 +1068,12 @@ class MonkeyGameController:
                 }
             if (self.nr_attempts) == retroceeds_threshold and cosine_current < cosine_threshold:
                 print(f"[PLAY] Attempt {self.nr_attempts} == {retroceeds_threshold} → retroceed")
+                # show_all flips the retroceed light from single-door red to
+                # all-doors red. In the existing game color logic, all-doors-red
+                # corresponds to (colored=True, all_door=True).
+                if show_all:
+                    cmds["animation_all_door"] = True
+                    cmds["animation_colored"] = True
                 cmds = self.write_commands(cmds)
                 self.fsm_state = ControllerState.WAITING_ANIMATION_START
                 self.nr_attempts += 1
@@ -1164,7 +1183,7 @@ class MonkeyGameController:
             self.current_level_index = (self.current_level_index + 1) % self.total_levels
             start = self.level["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.level["objects"])
-            self.active_chain = 0
+            self.active_chain = self._level_start_object()
             print(f"[LEVEL] Level complete → level {self.current_level_index}")
             return
 

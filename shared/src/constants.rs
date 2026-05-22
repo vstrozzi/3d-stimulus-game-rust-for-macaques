@@ -235,7 +235,9 @@ pub mod controller_constants {
         "elapsed_time_to_win",
         "elapsed_time_to_retroceed",
         "start_trial",
+        "start_object",
         "camera_y",
+        "show_all",
     ];
 
     /// FSM state names. Used as string labels in logs and for cross-language

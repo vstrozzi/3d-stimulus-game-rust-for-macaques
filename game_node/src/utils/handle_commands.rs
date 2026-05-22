@@ -9,6 +9,13 @@ use crate::utils::setup::{setup_round};
 use shared::constants::camera_3d_constants::{CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
 
+// Door/light palette. sRGB hex spelled out as (byte / 255) so the source
+// values remain obvious. Bevy's `Color::srgba` is sRGB-encoded.
+//   #8B0000 dark red               (139, 0,   0)
+//   #CCFF00 yellow-green/chartreuse (204, 255, 0)
+pub const LIGHT_RED:   Color = Color::srgba(0x8B as f32 / 255.0, 0x00 as f32 / 255.0, 0x00 as f32 / 255.0, 1.0);
+pub const LIGHT_GREEN: Color = Color::srgba(0xCC as f32 / 255.0, 0xFF as f32 / 255.0, 0x00 as f32 / 255.0, 1.0);
+
 /// Reset state
 pub fn handle_reset_command(
     pending: ResMut<PendingCommands>,
@@ -84,25 +91,26 @@ pub fn handle_animation_door_command(
     door_win_entities.animate_all = pending.animation_all_door;
 
     // Request of color
-    door_win_entities.color = 
+    door_win_entities.color =
     if pending.animation_colored{
         // Single door with requested animation of color, then green
         if !pending.animation_all_door {
-        Color::srgba(0.0, 1.0, 0.0, 1.0)
+            LIGHT_GREEN
         }
         else {
-        // All door with requested animation of color, then red
-        Color::srgba(1.0, 0.0, 0.0, 1.0)
+            // All door with requested animation of color, then red
+            LIGHT_RED
         }
-    }   
+    }
     // Single animation not colored
     else if !pending.animation_colored && !pending.animation_all_door {
         // No animation colored, then red TODO: change name
-        Color::srgba(1.0, 0.0, 0.0, 1.0)
+        LIGHT_RED
     }
     else {
-        // No color change if animation colored is not requested, then white
-        Color::srgba(0.0, 1.0, 0.0, 0.0)
+        // No animation requested → invisible (alpha=0) but keep the green hue
+        // so any leftover fade-out interpolates from the right palette.
+        LIGHT_GREEN.with_alpha(0.0)
     };
 
     // Set animation flag

@@ -79,13 +79,21 @@ pub struct Pyramid;
 #[derive(Component)]
 pub struct RotableComponent;
 
-// A component that marks a pointlight as being one of the hole
+// A component that marks a pointlight as being one of the hole.
+// `door_index` is the same value as on the parent `BaseFrame`, duplicated
+// here so the faint-aligned-door system can filter without joining through
+// `ChildOf` every frame.
 #[derive(Component)]
-pub struct HoleLight;
+pub struct HoleLight {
+    pub door_index: usize,
+}
 
-// A component that marks an emissive mesh as being the hole glow effect
+// A component that marks an emissive mesh as being the hole glow effect.
+// `door_index` mirrors the parent `BaseFrame`.
 #[derive(Component)]
-pub struct HoleEmissive;
+pub struct HoleEmissive {
+    pub door_index: usize,
+}
 
 /// A component that marks an entity as a game entity, which can be cleared during setup
 #[derive(Component)]

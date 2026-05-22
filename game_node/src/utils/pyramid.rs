@@ -222,7 +222,7 @@ pub fn spawn_pyramid_base(
                     ..default()
                 })),
                 Transform::default(),
-                HoleEmissive,
+                HoleEmissive { door_index: i },
                 GameEntity,
                 Visibility::Hidden,
                 ChildOf(frame_id),
@@ -241,7 +241,7 @@ pub fn spawn_pyramid_base(
                     ..default()
                 },
                 GameEntity,
-                HoleLight,
+                HoleLight { door_index: i },
                 Visibility::Hidden,
                 Transform::from_translation(center)
                     .looking_at(center + 2.0 * normal, Vec3::Y),

@@ -717,10 +717,6 @@ function _initChainCycle(level) {
 
 function _nextChainFromCycle() {
   const level = currentLevel();
-  if (_removeCompletedObjects(level)) {
-    const eligible = new Set(_eligibleChains(level));
-    chainCycle = chainCycle.filter(i => eligible.has(i));
-  }
   if (chainCycle.length === 0) {
     chainCycle = _eligibleChains(level);
     _shuffleInPlace(chainCycle);

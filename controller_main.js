@@ -69,6 +69,7 @@ let paradigmName = "trials.jsonl";
 let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
 let activeChain = 0;
+let chainCycle = [];     // pseudo-random chain order (draw without repetition)
 let scoreBarValue = 0;
 
 // FSM
@@ -659,7 +660,7 @@ function flatTrial() {
   const flat = {};
   for (const k in obj) flat[k] = obj[k];
   for (const k in fixed) {
-    if (k !== "pr_switching_chain" && k !== "start_object") flat[k] = fixed[k];
+    if (k !== "pr_switching_chain" && k !== "start_object" && k !== "remove_completed_objects") flat[k] = fixed[k];
   }
   for (const k in trialCfg) flat[k] = trialCfg[k];
   _flatTrialCache = flat;
@@ -683,19 +684,54 @@ function _levelComplete() {
   return chainIdxs.every(idx => idx >= n);
 }
 
-function _maybeSwitch() {
-  const level = currentLevel();
+function _removeCompletedObjects(level) {
+  return !!level.fixed.remove_completed_objects;
+}
+
+function _eligibleChains(level) {
   const nObjects = level.objects.length;
-  if (nObjects <= 1) return;
-  const pr = level.fixed.pr_switching_chain ?? (1.0 / nObjects);
-  if (Math.random() >= pr) return;
-  // Pick uniformly at random from the OTHER chains (finished ones included —
-  // they can be re-visited but cannot advance past their terminal index).
-  const candidates = [];
-  for (let i = 0; i < nObjects; i++) {
-    if (i !== activeChain) candidates.push(i);
+  if (!_removeCompletedObjects(level)) {
+    return Array.from({ length: nObjects }, (_, i) => i);
   }
-  activeChain = candidates[Math.floor(Math.random() * candidates.length)];
+  const nTrials = level.trials.length;
+  const eligible = [];
+  for (let i = 0; i < nObjects; i++) {
+    if ((chainIdxs[i] ?? 0) < nTrials) eligible.push(i);
+  }
+  return eligible;
+}
+
+function _shuffleInPlace(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function _initChainCycle(level) {
+  chainCycle = _eligibleChains(level);
+  _shuffleInPlace(chainCycle);
+  const shownIdx = chainCycle.indexOf(activeChain);
+  if (shownIdx >= 0) chainCycle.splice(shownIdx, 1);
+}
+
+function _nextChainFromCycle() {
+  const level = currentLevel();
+  if (_removeCompletedObjects(level)) {
+    const eligible = new Set(_eligibleChains(level));
+    chainCycle = chainCycle.filter(i => eligible.has(i));
+  }
+  if (chainCycle.length === 0) {
+    chainCycle = _eligibleChains(level);
+    _shuffleInPlace(chainCycle);
+  }
+  if (chainCycle.length === 0) return activeChain;
+  return chainCycle.pop();
+}
+
+function _maybeSwitch() {
+  if (currentLevel().objects.length <= 1) return;
+  activeChain = _nextChainFromCycle();
   _invalidateFlatTrial();
 }
 
@@ -1556,6 +1592,7 @@ function handleTrialIndexUpdate() {
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);
     activeChain = _levelStartObject(newLevel);
+    _initChainCycle(newLevel);
     _invalidateFlatTrial();
     console.log(`[LEVEL] Level complete → level ${currentLevelIndex}`);
     return;
@@ -2071,6 +2108,7 @@ function backfillLevelDefaults(level) {
   level.fixed ??= {};
   if (level.fixed.camera_rotation_sense == null) level.fixed.camera_rotation_sense = 1;
   if (level.fixed.start_object == null) level.fixed.start_object = -1;
+  if (level.fixed.remove_completed_objects == null) level.fixed.remove_completed_objects = false;
   if (level.fixed.score_bar_max == null) level.fixed.score_bar_max = 10;
   if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
   if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;
@@ -2194,6 +2232,7 @@ async function start() {
     const startIdx = levels[0].fixed.start_trial ?? 0;
     chainIdxs = new Array(levels[0].objects.length).fill(startIdx);
     activeChain = _levelStartObject(levels[0]);
+    _initChainCycle(levels[0]);
     const sbMax0 = levels[0].fixed.score_bar_max ?? 10;
     scoreBarValue = Math.floor(sbMax0 / 2);
   }

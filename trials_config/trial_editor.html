@@ -506,7 +506,6 @@ function defaultLevel(nObjects = 2) {
     objects: objs,
     trials: [defaultTrial()],
     fixed: {
-      pr_switching_chain: 1 / nObjects,
       // Sentinel: the controller always overrides start_orient with a random
       // choice from START_ORIENTS, so the value stored here is never used.
       // Keeping it -1 makes that obvious in saved JSONL files.
@@ -514,6 +513,11 @@ function defaultLevel(nObjects = 2) {
       start_trial: 0,
       // -1 = controller picks at random; otherwise chain index 0..N-1.
       start_object: -1,
+      // If true, completed chains are dropped from the shuffle bag at refill.
+      remove_completed_chains: false,
+      // -1 = controller draws a fresh entropy seed at level start (and logs
+      // the resolved value); any other int → that exact seed.
+      random_seed: -1,
       score_bar_max: 10,
       shake_amplitude: 0.5,
       shake_duration: 1.0,
@@ -574,10 +578,14 @@ function enforceLevel(lv) {
   if (f.camera_y == null) f.camera_y = CAMERA_DEFAULTS.default_y;
   if (f.camera_speed_rotate == null) f.camera_speed_rotate = CAMERA_DEFAULTS.speed_rotate;
   if (f.camera_rotation_sense == null) f.camera_rotation_sense = CAMERA_DEFAULTS.rotation_sense;
-  if (f.pr_switching_chain == null) f.pr_switching_chain = 1 / lv.objects.length;
-  f.pr_switching_chain = Math.max(0, Math.min(1, f.pr_switching_chain));
+  delete f.pr_switching_chain;
   if (f.start_object == null) f.start_object = -1;
   if (f.start_object >= 0) f.start_object = Math.min(f.start_object, lv.objects.length - 1);
+  if (f.remove_completed_chains == null) f.remove_completed_chains = false;
+  f.remove_completed_chains = !!f.remove_completed_chains;
+  if (f.random_seed == null) f.random_seed = -1;
+  f.random_seed = Math.trunc(f.random_seed);
+  if (!Number.isFinite(f.random_seed)) f.random_seed = -1;
   if (f.score_bar_max == null) f.score_bar_max = 10;
   f.score_bar_max = Math.max(0, Math.round(f.score_bar_max));
   if (f.shake_amplitude == null) f.shake_amplitude = 0.5;
@@ -959,9 +967,6 @@ function renderFixed(fixed, lv) {
     `${Math.round(k * stepDeg)}°`
   ).join(' · ');
 
-  const N = lv ? lv.objects.length : 2;
-  const prVal = fixed.pr_switching_chain ?? (1 / N);
-
   const numRow = (label, field, val, step, min = '') =>
     `<div class="fixed-row">
       <label>${label}</label>
@@ -985,16 +990,20 @@ function renderFixed(fixed, lv) {
     <div class="fixed-group">
       <div class="fixed-group-title">Trials</div>
       ${numRow('start_trial', 'start_trial', fixed.start_trial || 0, '1', '0')}
-      <div class="fixed-row" title="Probability of switching to another (uniformly random) chain after each trial. 0 = never; 1 = always reroll.">
-        <label>pr_switch</label>
-        <input type="number" class="fixed-in" data-ff="pr_switching_chain" value="${prVal}" step="0.01" min="0" max="1">
-      </div>
       <div class="fixed-row" title="Object the level starts on. Random = controller picks u.a.r.">
         <label>start_object</label>
         <select class="fixed-sel" data-ff="start_object">
           <option value="-1"${(fixed.start_object ?? -1) === -1 ? ' selected' : ''}>Random</option>
           ${lv.objects.map((_, i) => `<option value="${i}"${(fixed.start_object ?? -1) === i ? ' selected' : ''}>${i}</option>`).join('')}
         </select>
+      </div>
+      <div class="fixed-row" title="Pseudo-random draw order: each cycle visits every chain once before any repeats. If checked, completed chains drop out of the bag.">
+        <label>remove_completed</label>
+        <input type="checkbox" class="fixed-chk" data-ff="remove_completed_chains"${fixed.remove_completed_chains ? ' checked' : ''}>
+      </div>
+      <div class="fixed-row" title="Seed for all controller randomness on this level (chain bag shuffle, start_object, start_orient). -1 = controller draws fresh entropy at level start (logged for replay); any other int → reproducible runs.">
+        <label>random_seed</label>
+        <input type="number" class="fixed-in" data-ff="random_seed" value="${fixed.random_seed ?? -1}" step="1">
       </div>
       <div class="fixed-row" title="Capacity of the left-side score bar. 0 hides the bar. Persists across levels; starts at max/2 at session start.">
         <label>score_bar_max</label>
@@ -1256,12 +1265,12 @@ function attachEvents() {
       if (field === 'start_trial') {
         val = Math.max(0, Math.min(Math.round(val), levels[sel].trials.length - 1));
         e.target.value = val;
-      } else if (field === 'pr_switching_chain') {
-        if (!Number.isFinite(val)) val = 0;
-        val = Math.max(0, Math.min(1, val));
-        e.target.value = val;
       } else if (field === 'score_bar_max') {
         val = Math.max(0, Math.round(val));
+        e.target.value = val;
+      } else if (field === 'random_seed') {
+        if (!Number.isFinite(val)) val = -1;
+        val = Math.trunc(val);
         e.target.value = val;
       }
       levels[sel].fixed[field] = val;
@@ -1272,6 +1281,11 @@ function attachEvents() {
       const field = e.target.dataset.ff;
       // All currently-defined fixed-sel options are integers (e.g. ±1).
       levels[sel].fixed[field] = parseInt(e.target.value, 10);
+    });
+  });
+  editor.querySelectorAll('.fixed-chk').forEach(el => {
+    el.addEventListener('change', e => {
+      levels[sel].fixed[e.target.dataset.ff] = e.target.checked;
     });
   });
 }

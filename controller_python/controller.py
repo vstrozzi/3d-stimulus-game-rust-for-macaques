@@ -198,7 +198,7 @@ def expand_flat_trial(obj, trial_cfg, fixed):
         flat[k] = v
     # Fixed fields (base_radius, height, start_orient, lighting, animation, camera)
     for k, v in fixed.items():
-        if k not in ("pr_switching_chain", "start_trial", "start_object"):
+        if k not in ("pr_switching_chain", "start_trial", "start_object", "remove_completed_chains", "random_seed"):
             flat[k] = v
     # Controller meta fields
     for k, v in trial_cfg.items():
@@ -212,6 +212,8 @@ def _backfill_level_defaults(level):
     fixed = level.setdefault("fixed", {})
     fixed.setdefault("camera_rotation_sense", 1)
     fixed.setdefault("start_object", -1)
+    fixed.setdefault("remove_completed_chains", False)
+    fixed.setdefault("random_seed", -1)
     fixed.setdefault("score_bar_max", 10)
     fixed.setdefault("shake_amplitude", 0.5)
     fixed.setdefault("shake_duration", 1.0)
@@ -360,10 +362,15 @@ class MonkeyGameController:
         self.current_level_index = 0
         self.chain_idxs = []
         self.active_chain = 0
+        self.chain_bag = []
+        self._rng = random.Random()
+        self._level_random_seed = 0
         if self.levels:
             start = self.levels[0]["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.levels[0]["objects"])
+            self._reseed_rng_for_level()
             self.active_chain = self._level_start_object(self.levels[0])
+            self._refill_chain_bag(exclude=self.active_chain)
 
         # Session-wide score bar. Starts at half the first level's capacity
         # and persists across all levels — increment on correct, decrement
@@ -468,25 +475,50 @@ class MonkeyGameController:
         n = len(lv["objects"])
         v = lv["fixed"].get("start_object", -1)
         if v < 0:
-            return random.randrange(n)
+            return self._rng.randrange(n)
         return max(0, min(int(v), n - 1))
 
     def _level_complete(self):
         n = len(self.level["trials"])
         return all(idx >= n for idx in self.chain_idxs)
 
-    def _maybe_switch_chain(self):
-        """With probability pr, switch the active chain to one of the OTHER
-        chains uniformly at random. Finished chains are still candidates —
-        they can be re-visited but cannot advance past their terminal index."""
-        n_objects = len(self.level["objects"])
-        if n_objects <= 1:
+    def _reseed_rng_for_level(self):
+        """Reseed `self._rng` from the active level's `random_seed` (saved in
+        `self._level_random_seed` and logged). `-1` → draw a fresh u32 from
+        system entropy so the run stays non-reproducible but the resolved
+        value is still recorded for post-hoc replay."""
+        cfg = self.level["fixed"].get("random_seed", -1)
+        if cfg is None or int(cfg) < 0:
+            seed = random.SystemRandom().getrandbits(32)
+        else:
+            seed = int(cfg) & 0xFFFFFFFF
+        self._level_random_seed = seed
+        self._rng.seed(seed)
+
+    def _refill_chain_bag(self, exclude=None):
+        """Shuffle a fresh bag of chain indices to draw from. Excludes chains
+        already at terminal idx when `remove_completed_chains` is set. The
+        `exclude` arg drops one specific index (used at level start to avoid
+        the starter reappearing as the next pick of the same cycle)."""
+        n = len(self.level["trials"])
+        remove_done = bool(self.level["fixed"].get("remove_completed_chains", False))
+        indices = [
+            i for i in range(len(self.level["objects"]))
+            if (not remove_done) or self.chain_idxs[i] < n
+        ]
+        if exclude is not None:
+            indices = [i for i in indices if i != exclude]
+        self._rng.shuffle(indices)
+        self.chain_bag = indices
+
+    def _draw_next_chain(self):
+        """Pop the next chain from the shuffled bag. Refills when empty so
+        each cycle visits every (eligible) chain once before any repeats."""
+        if not self.chain_bag:
+            self._refill_chain_bag()
+        if not self.chain_bag:
             return
-        pr = self.level["fixed"].get("pr_switching_chain", 1.0 / n_objects)
-        if random.random() >= pr:
-            return
-        candidates = [i for i in range(n_objects) if i != self.active_chain]
-        self.active_chain = random.choice(candidates)
+        self.active_chain = self.chain_bag.pop()
 
     def game_state_fields(self, flat):
         """Return only the game-state keys (no controller meta)."""
@@ -822,6 +854,7 @@ class MonkeyGameController:
             "trial_run_counter": self.trial_run_counter,
             "trial_config": {k: v for k, v in self.flat_trial.items() if k != "start_orient"},
             "start_orient": self.trial_start_orient,
+            "level_random_seed": self._level_random_seed,
             "outcome": outcome,
             "nr_attempts": self.nr_attempts,
             "elapsed_time_no_anim": elapsed_time_no_anim,
@@ -848,6 +881,7 @@ class MonkeyGameController:
             "elapsed_time_no_anim": elapsed_time_no_anim,
             "elapsed_time_anim": elapsed_time_anim,
             "start_orient": self.trial_start_orient,
+            "level_random_seed": self._level_random_seed,
             "win_event": self.win_event,
             "file": trial_filename,
             "_frames_for_health": frames_for_health,
@@ -952,7 +986,7 @@ class MonkeyGameController:
         # Sample start orientation randomly from the 6 evenly-spaced door angles.
         # Editor stores a sentinel (-1) for this field; the real value is chosen
         # here and recorded into the trial log so analyses can recover it.
-        trial_state["start_orient"] = random.choice(START_ORIENTS)
+        trial_state["start_orient"] = self._rng.choice(START_ORIENTS)
         self.trial_start_orient = float(trial_state["start_orient"])
         trial_state["progress_bar_cur_size"] = self._progress_bar_cur()
         trial_state["progress_bar_size"] = self._progress_bar_size()
@@ -1212,11 +1246,13 @@ class MonkeyGameController:
             self.current_level_index = (self.current_level_index + 1) % self.total_levels
             start = self.level["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.level["objects"])
+            self._reseed_rng_for_level()
             self.active_chain = self._level_start_object()
+            self._refill_chain_bag(exclude=self.active_chain)
             print(f"[LEVEL] Level complete → level {self.current_level_index}")
             return
 
-        self._maybe_switch_chain()
+        self._draw_next_chain()
 
     def _resync_with_game(self):
         self.current_frame = -1

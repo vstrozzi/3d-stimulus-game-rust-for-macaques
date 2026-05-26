@@ -69,7 +69,10 @@ let paradigmName = "trials.jsonl";
 let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
 let activeChain = 0;
+let chainBag = [];       // shuffled queue of upcoming chain picks
 let scoreBarValue = 0;
+let levelRandomSeed = 0; // resolved seed used by _rand() for the active level
+let _rngState = 0;
 
 // FSM
 let fsmState = FSM.INIT;
@@ -659,7 +662,7 @@ function flatTrial() {
   const flat = {};
   for (const k in obj) flat[k] = obj[k];
   for (const k in fixed) {
-    if (k !== "pr_switching_chain" && k !== "start_object") flat[k] = fixed[k];
+    if (k !== "pr_switching_chain" && k !== "start_object" && k !== "remove_completed_chains" && k !== "random_seed") flat[k] = fixed[k];
   }
   for (const k in trialCfg) flat[k] = trialCfg[k];
   _flatTrialCache = flat;
@@ -683,19 +686,50 @@ function _levelComplete() {
   return chainIdxs.every(idx => idx >= n);
 }
 
-function _maybeSwitch() {
-  const level = currentLevel();
-  const nObjects = level.objects.length;
-  if (nObjects <= 1) return;
-  const pr = level.fixed.pr_switching_chain ?? (1.0 / nObjects);
-  if (Math.random() >= pr) return;
-  // Pick uniformly at random from the OTHER chains (finished ones included —
-  // they can be re-visited but cannot advance past their terminal index).
-  const candidates = [];
-  for (let i = 0; i < nObjects; i++) {
-    if (i !== activeChain) candidates.push(i);
+// Mulberry32: small deterministic PRNG so a level's draws are reproducible
+// from its `random_seed`. Mirrors Python's `self._rng = random.Random(seed)`.
+function _seedRng(seed) { _rngState = seed >>> 0; }
+function _rand() {
+  _rngState = (_rngState + 0x6D2B79F5) >>> 0;
+  let t = _rngState;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function _reseedRngForLevel() {
+  const cfg = currentLevel().fixed.random_seed;
+  let seed;
+  if (cfg == null || (cfg | 0) < 0) {
+    seed = (Math.random() * 0x100000000) >>> 0;
+  } else {
+    seed = (cfg | 0) >>> 0;
   }
-  activeChain = candidates[Math.floor(Math.random() * candidates.length)];
+  levelRandomSeed = seed;
+  _seedRng(seed);
+}
+
+function _refillChainBag(exclude) {
+  const level = currentLevel();
+  const n = level.trials.length;
+  const removeDone = !!level.fixed.remove_completed_chains;
+  const indices = [];
+  for (let i = 0; i < level.objects.length; i++) {
+    if (!removeDone || chainIdxs[i] < n) {
+      if (i !== exclude) indices.push(i);
+    }
+  }
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(_rand() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  chainBag = indices;
+}
+
+function _drawNextChain() {
+  if (chainBag.length === 0) _refillChainBag();
+  if (chainBag.length === 0) return;
+  activeChain = chainBag.pop();
   _invalidateFlatTrial();
 }
 
@@ -711,7 +745,7 @@ function _progressBarSize() {
 function _levelStartObject(level) {
   const n = level.objects.length;
   const v = (level.fixed.start_object ?? -1);
-  if (v < 0) return Math.floor(Math.random() * n);
+  if (v < 0) return Math.floor(_rand() * n);
   return Math.max(0, Math.min(v | 0, n - 1));
 }
 
@@ -1121,6 +1155,7 @@ function saveTrialLog(outcome) {
     trial_run_counter: trialRunCounter,
     trial_config: (() => { const { start_orient: _drop, ...rest } = flatTrial(); return rest; })(),
     start_orient: trialStartOrient,
+    level_random_seed: levelRandomSeed,
     outcome,
     nr_attempts: nrAttempts,
     elapsed_time_no_anim: elapsedNoAnim,
@@ -1155,6 +1190,7 @@ function saveTrialLog(outcome) {
     elapsed_time_no_anim: elapsedNoAnim,
     elapsed_time_anim: elapsedAnim,
     start_orient: trialStartOrient,
+    level_random_seed: levelRandomSeed,
     win_event: winEvent,
     file: filename,
     _frames_for_health: framesForHealth,
@@ -1269,7 +1305,7 @@ function handleInit(state) {
   // Randomise start orientation (mirrors Python's random.choice(START_ORIENTS)).
   // Editor stores a sentinel (-1) for this field; the real value is chosen
   // here and recorded into the trial log so analyses can recover it.
-  const chosenStartOrient = START_ORIENTS[Math.floor(Math.random() * START_ORIENTS.length)];
+  const chosenStartOrient = START_ORIENTS[Math.floor(_rand() * START_ORIENTS.length)];
   trialState.start_orient = floatToU32Bits(chosenStartOrient);
   trialStartOrient = chosenStartOrient;
 
@@ -1555,13 +1591,15 @@ function handleTrialIndexUpdate() {
     const newLevel = currentLevel();
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);
+    _reseedRngForLevel();
     activeChain = _levelStartObject(newLevel);
+    _refillChainBag(activeChain);
     _invalidateFlatTrial();
     console.log(`[LEVEL] Level complete → level ${currentLevelIndex}`);
     return;
   }
 
-  _maybeSwitch();
+  _drawNextChain();
 }
 
 function handleTrialComplete(state) {
@@ -2071,6 +2109,8 @@ function backfillLevelDefaults(level) {
   level.fixed ??= {};
   if (level.fixed.camera_rotation_sense == null) level.fixed.camera_rotation_sense = 1;
   if (level.fixed.start_object == null) level.fixed.start_object = -1;
+  if (level.fixed.remove_completed_chains == null) level.fixed.remove_completed_chains = false;
+  if (level.fixed.random_seed == null) level.fixed.random_seed = -1;
   if (level.fixed.score_bar_max == null) level.fixed.score_bar_max = 10;
   if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
   if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;
@@ -2193,7 +2233,9 @@ async function start() {
   if (levels.length > 0) {
     const startIdx = levels[0].fixed.start_trial ?? 0;
     chainIdxs = new Array(levels[0].objects.length).fill(startIdx);
+    _reseedRngForLevel();
     activeChain = _levelStartObject(levels[0]);
+    _refillChainBag(activeChain);
     const sbMax0 = levels[0].fixed.score_bar_max ?? 10;
     scoreBarValue = Math.floor(sbMax0 / 2);
   }

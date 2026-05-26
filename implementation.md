@@ -737,13 +737,43 @@ None of the §8 timing semantics changed.
   `_level_start_object` (Python) / `_levelStartObject` (JS) on every
   level transition (first level too). Editor exposes a select with
   `Random` plus one option per object.
-- **`fixed.pr_switching_chain`** — was a locked computed value; now
-  editable in [trial_editor.html](trials_config/trial_editor.html) (range `[0, 1]`, default `1/N`).
-  `_maybe_switch_chain` reroll picks u.a.r. over the **other** chains
-  (current chain excluded); finished chains stay eligible — they can be
-  revisited but cannot advance past terminal index. ADVANCE caps `idx`
-  at `n`. The old "force switch to a non-exhausted chain" path is gone;
-  a level only completes when every chain hits terminal simultaneously.
+- **Pseudo-random chain selection (shuffle bag).** The active chain for
+  each trial is drawn from a `chain_bag` (Python: `self.chain_bag`; JS:
+  `chainBag`) — a shuffled queue of chain indices for the current level.
+  Each `complete_trial` pops the next index; when the bag empties it is
+  refilled and reshuffled. Net effect: every (eligible) chain is visited
+  exactly once before any chain can repeat, eliminating the long-tail
+  starvation that the old memoryless `pr_switching_chain` reroll could
+  produce. At level start the bag is built from
+  `_refill_chain_bag(exclude=active_chain)` / `_refillChainBag(activeChain)`
+  so the starter is not re-drawn within its own first cycle. ADVANCE
+  still caps `idx` at `n`; finished chains can be re-visited but cannot
+  advance past their terminal index; a level completes only when every
+  chain hits terminal simultaneously. The old `pr_switching_chain` field
+  and `_maybe_switch_chain` / `_maybeSwitch` logic are gone; legacy
+  trial JSONs that still contain the key are silently ignored (the
+  editor strips it on import).
+- **`fixed.remove_completed_chains`** — bool, default `false`. When
+  `true`, chains whose `chain_idxs[i] >= n_trials` are filtered out of
+  the bag at refill time (matches the original "remove finished chains
+  from the pool" behaviour). When `false` (default), completed chains
+  stay in the bag and can be revisited — they just won't advance.
+  Toggle in the editor under Trials.
+- **`fixed.random_seed`** — int, default `-1`. Seeds every controller-
+  side random draw on this level (chain-bag shuffle in
+  `_refill_chain_bag` / `_refillChainBag`, random `start_object` in
+  `_level_start_object` / `_levelStartObject`, and per-trial
+  `start_orient` pick in `_handle_init`). `-1` = the controller draws
+  a fresh u32 from system entropy at level start; any other value is
+  used verbatim. Re-seeding happens once at controller startup and
+  again on every level transition, so revisiting a level under
+  modulo-wrap produces a bit-identical run (assuming the explicit-seed
+  case). Python uses a per-instance `random.Random` (`self._rng`); JS
+  uses a module-level mulberry32 (`_rand()` / `_seedRng()`) since
+  `Math.random` is not seedable. **The resolved seed** (the literal int
+  actually used, even in entropy mode) is stamped into each trial log
+  and each `trials_runs[]` entry as `level_random_seed` so a recorded
+  session can be replayed by copying the int back into the editor.
 - **`fixed.score_bar_max`** — editor int (`0` hides the bar). Persists
   across levels; the bar value is session-scoped.
 - **`fixed.shake_amplitude`, `fixed.shake_duration`** — per-level camera-

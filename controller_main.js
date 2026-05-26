@@ -662,7 +662,7 @@ function flatTrial() {
   const flat = {};
   for (const k in obj) flat[k] = obj[k];
   for (const k in fixed) {
-    if (k !== "pr_switching_chain" && k !== "start_object" && k !== "remove_completed_chains" && k !== "random_seed") flat[k] = fixed[k];
+    if (k !== "pr_switching_chain" && k !== "start_object" && k !== "remove_completed_chains" && k !== "random_seed" && k !== "show_progress_bar") flat[k] = fixed[k];
   }
   for (const k in trialCfg) flat[k] = trialCfg[k];
   _flatTrialCache = flat;
@@ -738,6 +738,7 @@ function _progressBarCur() {
 }
 function _progressBarSize() {
   const level = currentLevel();
+  if (level.fixed.show_progress_bar === false) return 0;
   const remaining = Math.max(0, level.trials.length);
   return remaining * level.objects.length;
 }
@@ -2111,6 +2112,7 @@ function backfillLevelDefaults(level) {
   if (level.fixed.start_object == null) level.fixed.start_object = -1;
   if (level.fixed.remove_completed_chains == null) level.fixed.remove_completed_chains = false;
   if (level.fixed.random_seed == null) level.fixed.random_seed = -1;
+  if (level.fixed.show_progress_bar == null) level.fixed.show_progress_bar = true;
   if (level.fixed.score_bar_max == null) level.fixed.score_bar_max = 10;
   if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
   if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;

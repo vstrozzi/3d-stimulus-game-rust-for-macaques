@@ -776,6 +776,15 @@ None of the §8 timing semantics changed.
   session can be replayed by copying the int back into the editor.
 - **`fixed.score_bar_max`** — editor int (`0` hides the bar). Persists
   across levels; the bar value is session-scoped.
+- **`fixed.show_progress_bar`** — bool, default `true`. Hides the
+  trial-progress dots column without touching chain logic. Implemented
+  by gating `_progress_bar_size` / `_progressBarSize` to return `0`
+  when the flag is false; the game-side dot visibility predicate
+  (`dot.index < progress_bar_size` in
+  [game_functions.rs::update_score_bar](game_node/src/utils/game_functions.rs))
+  then hides every dot. Toggling back on resumes from the correct
+  `progress_bar_cur_size` because that counter is computed from
+  `chain_idxs` and was never zeroed.
 - **`fixed.shake_amplitude`, `fixed.shake_duration`** — per-level camera-
   shake config. Defaults `0.5` and `1.0`. Forwarded as `f32::to_bits()`
   in the dedicated SHM fields (see below).

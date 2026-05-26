@@ -198,7 +198,7 @@ def expand_flat_trial(obj, trial_cfg, fixed):
         flat[k] = v
     # Fixed fields (base_radius, height, start_orient, lighting, animation, camera)
     for k, v in fixed.items():
-        if k not in ("pr_switching_chain", "start_trial", "start_object", "remove_completed_chains", "random_seed"):
+        if k not in ("pr_switching_chain", "start_trial", "start_object", "remove_completed_chains", "random_seed", "show_progress_bar"):
             flat[k] = v
     # Controller meta fields
     for k, v in trial_cfg.items():
@@ -214,6 +214,7 @@ def _backfill_level_defaults(level):
     fixed.setdefault("start_object", -1)
     fixed.setdefault("remove_completed_chains", False)
     fixed.setdefault("random_seed", -1)
+    fixed.setdefault("show_progress_bar", True)
     fixed.setdefault("score_bar_max", 10)
     fixed.setdefault("shake_amplitude", 0.5)
     fixed.setdefault("shake_duration", 1.0)
@@ -537,6 +538,8 @@ class MonkeyGameController:
         return sum(max(0, idx) for idx in self.chain_idxs)
 
     def _progress_bar_size(self):
+        if not self.level["fixed"].get("show_progress_bar", True):
+            return 0
         remaining = max(0, len(self.level["trials"]))
         return remaining * len(self.level["objects"])
 

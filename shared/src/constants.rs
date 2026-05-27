@@ -1,13 +1,6 @@
 // Constants used in the game_node and shared across libraries.
 /// Generic game constants
 pub mod game_constants {
-    // NOTE: there is intentionally no `REFRESH_RATE_HZ` constant. The game
-    // runs all logic (gameplay, command handling, SHM writes) once per
-    // rendered frame — i.e. at whatever rate the OS compositor / browser
-    // delivers vsync. Trial logs report the *measured* refresh rate from
-    // observed `present_elapsed_secs` deltas, populated in the controllers'
-    // `_compute_timing_health` (see controller.py / controller_main.js).
-
     // Cosine alignment with door to win
     pub const COSINE_ALIGNMENT_TO_WIN: f32 = 0.95; // approx ~8 degrees
 
@@ -53,7 +46,7 @@ pub mod camera_3d_constants {
 
     // Radius range for the camera's orbit.
     pub const CAMERA_3D_MIN_RADIUS: f32 = 5.0;
-    pub const CAMERA_3D_MAX_RADIUS: f32 = 150.0;
+    pub const CAMERA_3D_MAX_RADIUS: f32 = 50.0;
 
     /// Default rotation sense (`+1` or `-1`). Multiplies the rotation
     /// applied per tick, so `-1` swaps left/right at the level scope.
@@ -207,12 +200,7 @@ pub mod controller_constants {
     /// (one per door of the hexagonal base = 2 × N_FACES).
     pub const N_START_ORIENTS: usize = N_FACES * 2;
 
-    /// Upper bound on per-trial frame log length (20 min × 60 Hz).
-    /// Both controllers preallocate fixed-size frame-log buffers sized to
-    /// this so per-frame logging never triggers heap growth or GC during a
-    /// trial. A trial that would exceed this is clamped and skips logging
-    /// the overflow frames (with a warning).
-    pub const MAX_TRIAL_FRAMES: usize = 72_000;
+    pub const MAX_SESSION_DURATION_MIN: u32 = 20;
 
     /// SHM-direct state fields written into each frame entry of a trial log.
     /// Both the Python and JS controllers consume this list; the verifier

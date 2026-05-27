@@ -459,7 +459,7 @@ impl SharedMemoryWrapper {
         m.add("N_COLOR_CHANNELS", cc::N_COLOR_CHANNELS)?;
         m.add("N_COLOR_FLOATS", cc::N_COLOR_FLOATS)?;
         m.add("N_START_ORIENTS", cc::N_START_ORIENTS)?;
-        m.add("MAX_TRIAL_FRAMES", cc::MAX_TRIAL_FRAMES)?;
+        m.add("MAX_SESSION_DURATION_MIN", cc::MAX_SESSION_DURATION_MIN)?;
         m.add("LOGGED_STATE_FIELDS", cc::LOGGED_STATE_FIELDS.to_vec())?;
         m.add("CONTROLLER_META_FIELDS", cc::CONTROLLER_META_FIELDS.to_vec())?;
         m.add("FSM_STATES", cc::FSM_STATES.to_vec())?;

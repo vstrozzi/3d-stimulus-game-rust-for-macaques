@@ -57,7 +57,10 @@ pub fn controller_constants() -> JsValue {
     set("N_COLOR_CHANNELS", JsValue::from_f64(cc::N_COLOR_CHANNELS as f64));
     set("N_COLOR_FLOATS", JsValue::from_f64(cc::N_COLOR_FLOATS as f64));
     set("N_START_ORIENTS", JsValue::from_f64(cc::N_START_ORIENTS as f64));
-    set("MAX_TRIAL_FRAMES", JsValue::from_f64(cc::MAX_TRIAL_FRAMES as f64));
+    set(
+        "MAX_SESSION_DURATION_MIN",
+        JsValue::from_f64(cc::MAX_SESSION_DURATION_MIN as f64),
+    );
 
     let to_array = |items: &[&str]| -> JsValue {
         let arr = js_sys::Array::new();

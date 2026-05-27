@@ -105,7 +105,10 @@ COLOR_SUGGESTION_COS_SIM = monkey_shared.COLOR_SUGGESTION_COS_SIM
 DEFAULT_CAMERA_Y = monkey_shared.DEFAULT_CAMERA_Y
 CAMERA_3D_INITIAL_RADIUS = monkey_shared.CAMERA_3D_INITIAL_RADIUS
 N_START_ORIENTS = monkey_shared.N_START_ORIENTS
-MAX_TRIAL_FRAMES = monkey_shared.MAX_TRIAL_FRAMES
+MAX_SESSION_DURATION_MIN = monkey_shared.MAX_SESSION_DURATION_MIN
+MAX_SESSION_DURATION_S = MAX_SESSION_DURATION_MIN * 60
+# Per-trial frame-log buffer sized to cover the whole session at up to 120 Hz.
+MAX_TRIAL_FRAMES = MAX_SESSION_DURATION_S * 120
 
 # Frozen iteration order for hot loops — matches LOGGED_STATE_FIELDS as a list.
 _LOGGED_STATE_FIELDS_LIST = list(monkey_shared.LOGGED_STATE_FIELDS)
@@ -390,6 +393,10 @@ class MonkeyGameController:
         # Special commands
         self._start = False
         self._time_win_expired = False
+
+        # Wall-clock anchor for the MAX_SESSION_DURATION_S cap. Set on the
+        # first transition into PLAYING and never reset.
+        self.session_start_time = None
 
         # Per-trial tracking
         self.nr_attempts = 0
@@ -943,8 +950,16 @@ class MonkeyGameController:
             self.current_state["shake_amplitude"] = float(self.level["fixed"].get("shake_amplitude", 0.5))
             self.current_state["shake_duration"] = float(self.level["fixed"].get("shake_duration", 1.0))
             
-            # Clear commands    
+            # Clear commands
             self.write_no_commands()
+
+            # Session-duration cap: finalize current level run and stop.
+            if (self.session_start_time is not None
+                    and time.time() - self.session_start_time >= MAX_SESSION_DURATION_S):
+                print(f"[SESSION] Reached {MAX_SESSION_DURATION_MIN}-minute cap → stopping")
+                self._finalize_level_run_safe("timeout")
+                self._running = False
+                break
 
             # This modify the current state
             if self.fsm_state == ControllerState.INIT:
@@ -1069,6 +1084,8 @@ class MonkeyGameController:
                 "animation_colored": False,
             })
             self.fsm_state = ControllerState.PLAYING
+            if self.session_start_time is None:
+                self.session_start_time = time.time()
             self.log_frame(self.current_state, cmds)
             print(f"[FSM] R pressed → PLAYING (level {self.current_level_index} chain {self.active_chain} trial {self._trial_idx()})")
             return

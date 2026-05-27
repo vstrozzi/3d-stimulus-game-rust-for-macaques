@@ -40,7 +40,9 @@ let LOGGED_STATE_FIELDS_LIST = null;  // string[]  (frozen iteration order for h
 let CONTROLLER_META_FIELDS = null;    // Set<string>
 let FSM_STATES = null;                // string[]
 let PROCEEDING_VALUES = null;         // string[]
-let MAX_TRIAL_FRAMES = 0;             // from Rust; preallocated frame-log capacity
+let MAX_SESSION_DURATION_MIN = 0;     // from Rust; session wall-clock cap in minutes
+let MAX_SESSION_DURATION_MS = 0;      // derived; cap in milliseconds (used by the loop)
+let MAX_TRIAL_FRAMES = 0;             // derived; per-trial frame-log capacity (session cap × 120 Hz)
 
 const APP_START_UNIX_NS = Date.now() * 1_000_000;
 
@@ -128,6 +130,7 @@ let gameTimeUnresponsive = 0;
 // Special flags
 let _start = false;
 let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
+let sessionStartMs = null;  // Date.now() when the first trial starts; anchor for MAX_SESSION_DURATION_MS
 let _running = false;
 let _sceneReadyPromptShown = false;
 let _downloadPopupShown = false;
@@ -1406,6 +1409,7 @@ function handleWaitingForStart(state) {
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
+    if (sessionStartMs === null) sessionStartMs = Date.now();
     // Re-sync frame tracking: the reset we just shipped will re-zero the
     // game's frame_number on the next tick. Anchoring frameZero now to the
     // pre-reset state.frame_number causes every post-reset frame to compute
@@ -1707,6 +1711,15 @@ function controllerLoop() {
   state.shake_duration = floatToU32Bits(currentLevel().fixed.shake_duration ?? 1.0);
 
   writeNoCommands();
+
+  // Session-duration cap: finalize the current level run, auto-download, stop.
+  if (sessionStartMs !== null && Date.now() - sessionStartMs >= MAX_SESSION_DURATION_MS) {
+    console.log(`[SESSION] Reached ${MAX_SESSION_DURATION_MIN}-minute cap → finalizing + download`);
+    _finalizeLevelRun("timeout");
+    _running = false;
+    showDownloadPopup();
+    return;
+  }
 
   // Dispatch FSM — handlers may modify state in-place
   switch (fsmState) {
@@ -2204,7 +2217,9 @@ async function start() {
   CAMERA_3D_INITIAL_RADIUS = cc.CAMERA_3D_INITIAL_RADIUS;
   LOGGED_STATE_FIELDS = new Set(cc.LOGGED_STATE_FIELDS);
   LOGGED_STATE_FIELDS_LIST = cc.LOGGED_STATE_FIELDS.slice();
-  MAX_TRIAL_FRAMES = cc.MAX_TRIAL_FRAMES | 0;
+  MAX_SESSION_DURATION_MIN = cc.MAX_SESSION_DURATION_MIN | 0;
+  MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_MIN * 60 * 1000;
+  MAX_TRIAL_FRAMES = MAX_SESSION_DURATION_MIN * 60 * 120;
   _initFrameLogScratch();
   CONTROLLER_META_FIELDS = new Set(cc.CONTROLLER_META_FIELDS);
   FSM_STATES = cc.FSM_STATES;

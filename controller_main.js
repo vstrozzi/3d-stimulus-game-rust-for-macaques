@@ -1384,7 +1384,6 @@ function handleInit(state) {
   // Show start overlay with loading text until is_scene_ready comes back true
   showStartOverlay(true);
   setOverlayPrompt("Loading scene & textures…", true);
-  updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Loading scene…`);
   _sceneReadyPromptShown = false;
   console.log("[FSM] → WAITING_FOR_START");
 }
@@ -1399,7 +1398,6 @@ function handleWaitingForStart(state) {
   if (!_sceneReadyPromptShown) {
     _sceneReadyPromptShown = true;
     setOverlayPrompt("Press the screen<br>or press space bar", false);
-    updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Press START`);
   }
 
   if (_start) {
@@ -1420,7 +1418,6 @@ function handleWaitingForStart(state) {
     frameZero = null;
     renderFrameZero = null;
     showStartOverlay(false);
-    updateStatusBar(`Level ${currentLevelIndex + 1}/${levels.length} chain ${activeChain} trial ${_trialIdx() + 1}/${currentLevel().trials.length} — Playing`);
     console.log(`[FSM] START pressed → PLAYING (level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()})`);
     return;
   }
@@ -1584,7 +1581,6 @@ function handleTrialIndexUpdate() {
     if (wasLastLevel) {
       console.log("[SESSION] All levels finished → showing download popup");
       _running = false;
-      updateStatusBar("Session complete");
       showDownloadPopup();
       return;
     }
@@ -1849,12 +1845,6 @@ function setOverlayPrompt(html, isLoading = false) {
   if (spinner) spinner.classList.toggle("visible", isLoading);
 }
 
-
-function updateStatusBar(text) {
-  const el = document.getElementById("status-bar");
-  if (el) el.innerText = text;
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
 // INPUT SETUP
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1883,7 +1873,7 @@ function tryEnterFullscreenThenStart() {
   if (p && typeof p.then === "function") {
     p.then(() => { _start = true; })
      .catch(() => {
-       updateStatusBar("Fullscreen required to start — tap or press space again");
+       console.log("Fullscreen required to start — tap or press space again");
      });
   } else {
     // Prefixed APIs (older Safari/IE) return undefined — start immediately.
@@ -2012,7 +2002,6 @@ function setupInput() {
     // 'q' exits from any state
     if (e.code === "KeyQ") {
       _running = false;
-      updateStatusBar("Stopped (Q pressed)");
       return;
     }
 
@@ -2170,7 +2159,6 @@ async function start() {
   // ── Step 1: Download WASM with progress bar ──────────────────────────────
   setLoadingStep("Downloading game (WASM)...");
   setLoadingProgress(0);
-  updateStatusBar("Loading WASM...");
 
   const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz", import.meta.url);
   let wasmBuffer;
@@ -2229,7 +2217,6 @@ async function start() {
   // ── Step 3: Load levels ──────────────────────────────────────────────────
   setLoadingStep("Loading levels...");
   setLoadingProgress(-1);
-  updateStatusBar("Loading levels...");
   await loadLevels();
 
   if (levels.length > 0) {
@@ -2244,7 +2231,6 @@ async function start() {
 
   if (levels.length === 0) {
     setLoadingStep("ERROR: No levels loaded");
-    updateStatusBar("ERROR: No levels loaded");
     return;
   }
 
@@ -2301,13 +2287,29 @@ async function start() {
   if (dlBtn) {
     dlBtn.addEventListener("click", downloadLogs);
   }
-  
+
+  // Tab-close guard: trigger the browser's native "Leave site?" prompt when
+  // unsaved logs exist, and reveal the download popup so the user can press
+  // it if they choose to stay. The native prompt is the only API that can
+  // intercept a tab close.
+  window.addEventListener("beforeunload", (e) => {
+    const hasLogs = allTrialLogs.length > 0 || levelSummaries.length > 0 || currentLevelSummary !== null;
+    if (!hasLogs) return;
+    const popup = document.getElementById("download-popup");
+    if (popup) {
+      popup.hidden = false;
+      _downloadPopupShown = true;
+    }
+    e.preventDefault();
+    e.returnValue = "";
+  });
+
+
   _running = true;
   setLoadingStep("Ready!");
   setLoadingProgress(100);
   // Small delay so "Ready!" is visible, then hide the overlay
   setTimeout(hideLoadingOverlay, 300);
-  updateStatusBar("Ready");
 
 
   resyncWithGame();

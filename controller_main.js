@@ -1383,7 +1383,7 @@ function handleInit(state) {
 
   // Show start overlay with loading text until is_scene_ready comes back true
   showStartOverlay(true);
-  setOverlayPrompt("Loading scene & textures…", true);
+  setOverlayPrompt("Downloading textures…", true);
   _sceneReadyPromptShown = false;
   console.log("[FSM] → WAITING_FOR_START");
 }

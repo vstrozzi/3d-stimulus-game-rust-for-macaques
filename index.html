@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>3D Stimulus Game</title>
+<title>Object Manipulation</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -288,20 +288,20 @@
 <!-- ─────────────────── LANDING ─────────────────── -->
 <div id="landing-root">
   <div class="session-name-wrap">
-    <label for="session-name">Session name (for log filenames)</label>
+    <label for="session-name">Session name (log)</label>
     <input type="text" id="session-name" placeholder="e.g. monkey_A_session_03"
            autocomplete="off" spellcheck="false" maxlength="64">
   </div>
 
   <div class="landing">
-    <h1>3D Stimulus Game</h1>
+    <h1>Object Manipulation</h1>
 
     <div class="actions">
       <button class="action-btn" id="btn-play" type="button">
         <span class="action-icon">&#9654;</span>
         <span class="action-text">
           <span class="action-title" id="btn-play-title">Play</span>
-          <span class="action-desc" id="btn-play-desc">Make the game fullscreen</span>
+          <span class="action-desc" id="btn-play-desc">Fullscreen + start</span>
         </span>
       </button>
 
@@ -427,7 +427,7 @@
       btnPlayDesc.textContent = 'Press again to start the session';
     } else {
       btnPlayTitle.textContent = 'Play';
-      btnPlayDesc.textContent = 'Make the game fullscreen';
+      btnPlayDesc.textContent = 'Fullscreen + start';
     }
   }
   document.addEventListener('fullscreenchange', setPlayLabelForState);

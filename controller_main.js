@@ -134,6 +134,7 @@ let sessionStartMs = null;  // Date.now() when the first trial starts; anchor fo
 let _running = false;
 let _sceneReadyPromptShown = false;
 let _downloadPopupShown = false;
+let _instructionsShown = false;
 
 // All accumulated trial logs (for download)
 let allTrialLogs = [];
@@ -1400,7 +1401,20 @@ function handleWaitingForStart(state) {
   // Textures just became ready — flip overlay and status bar to "Press START" (runs once per trial)
   if (!_sceneReadyPromptShown) {
     _sceneReadyPromptShown = true;
-    setOverlayPrompt("Press the screen<br>or press space bar", false);
+    // First-level-only instructions: show once on the very first WAITING_FOR_START
+    // after pressing Play, then revert to the bare prompt for subsequent trials.
+    if (!_instructionsShown && currentLevelIndex === 0) {
+      _instructionsShown = true;
+      setOverlayPrompt(
+        "Left arrow: rotate the object to the left<br>" +
+        "Right arrow: rotate the object to the right<br>" +
+        "Press spacebar: interact and select a view<br><br>" +
+        "Press the screen or press space bar to start",
+        false
+      );
+    } else {
+      setOverlayPrompt("Press the screen<br>or press space bar", false);
+    }
   }
 
   if (_start) {
@@ -1912,9 +1926,32 @@ function setupInput() {
   });
 
   // ── TOUCH ──────────────────────────────────────────────────────────────
+  // 5-second longpress on the screen opens the download popup. Cancelled by
+  // movement >30px, multi-touch, or release.
+  let _longPressTimer = null;
+  let _longPressStartX = 0;
+  let _longPressStartY = 0;
+  function _clearLongPress() {
+    if (_longPressTimer !== null) {
+      clearTimeout(_longPressTimer);
+      _longPressTimer = null;
+    }
+  }
+
   window.addEventListener("touchstart", (e) => {
     if (e.target.closest("#download-popup")) return;
     e.preventDefault();
+    if (e.touches.length === 1) {
+      _longPressStartX = e.touches[0].clientX;
+      _longPressStartY = e.touches[0].clientY;
+      _clearLongPress();
+      _longPressTimer = setTimeout(() => {
+        _longPressTimer = null;
+        showDownloadPopup();
+      }, 5000);
+    } else {
+      _clearLongPress();
+    }
     if (fsmState === FSM.WAITING_FOR_START) {
       tryEnterFullscreenThenStart();
       return;
@@ -1941,6 +1978,13 @@ function setupInput() {
 
   window.addEventListener("touchmove", (e) => {
     e.preventDefault();
+    if (_longPressTimer !== null && e.touches.length >= 1) {
+      const t = e.touches[0];
+      if (Math.abs(t.clientX - _longPressStartX) > 30 ||
+          Math.abs(t.clientY - _longPressStartY) > 30) {
+        _clearLongPress();
+      }
+    }
     if (fsmState !== FSM.PLAYING) return;
     const now = performance.now();
 
@@ -1966,6 +2010,7 @@ function setupInput() {
   window.addEventListener("touchend", (e) => {
     if (e.target.closest("#download-popup")) return;
     e.preventDefault();
+    _clearLongPress();
     const now = performance.now();
     if (e.touches.length === 0) {
       // Tap detection (suppress after pinch, suppress in tap grace period)
@@ -2003,6 +2048,7 @@ function setupInput() {
   }, { passive: false });
 
   window.addEventListener("touchcancel", () => {
+    _clearLongPress();
     swipe.active = false; swipe.energy = 0; swipe.velocity = 0; swipe.samples = [];
     pinch.active = false; pinch.energy = 0; pinch.velocity = 0; pinch.samples = [];
     pinch.wasPinching = false;
@@ -2012,6 +2058,14 @@ function setupInput() {
   // Use capture phase so we intercept keys BEFORE Bevy's canvas handler
   // can call preventDefault() and swallow them.
   window.addEventListener("keydown", (e) => {
+    // Ctrl+D / Cmd+D opens the download popup from any state
+    if (e.code === "KeyD" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      e.stopPropagation();
+      showDownloadPopup();
+      return;
+    }
+
     // 'q' exits from any state
     if (e.code === "KeyQ") {
       _running = false;

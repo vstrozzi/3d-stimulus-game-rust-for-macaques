@@ -1,8 +1,15 @@
 use bevy::prelude::*;
+use bevy::audio::Volume;
 use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, ImageAddressMode};
 use bevy::math::Affine2;
 use crate::{PreloadedTextures, GameConditions, GameStateLocal};
-use crate::shared_memory::shared_memory_writer::{FrameCounterResource, RenderFrameCounterResource, StagedRenderSample, StagedFrame}; 
+use crate::utils::objects::{GameEntity, LoadingCountdown, LoadingCountdownText};
+use crate::utils::pyramid::spawn_pyramid;
+use crate::utils::setup::build_pyramid_config;
+use crate::shared_memory::shared_memory_writer::{FrameCounterResource, RenderFrameCounterResource, StagedRenderSample, StagedFrame};
+
+/// Duration of the black pre-start countdown.
+const LOADING_COUNTDOWN_SECS: f32 = 3.0;
 
 /// Holds all loaded handles for one PBR texture set
 /// Store this as a resource so handles stay alive
@@ -34,19 +41,13 @@ impl SoundSet {
     }
 }
 
-/// Load sound effects into a resource and start the looping background music.
+/// Load all sounds into a resource so the handles stay alive.
 pub fn load_sounds(asset_server: Res<AssetServer>, mut commands: Commands) {
-    let background = asset_server.load("sounds/wind_sound.ogg");
-    // Looping background wind music, always playing.
-    commands.spawn((
-        AudioPlayer::new(background.clone()),
-        PlaybackSettings::LOOP,
-    ));
     commands.insert_resource(SoundSet {
         win: asset_server.load("sounds/win_sound.ogg"),
         hint: asset_server.load("sounds/hint_sound.ogg"),
         earthquake: asset_server.load("sounds/audio_earthquake.ogg"),
-        background,
+        background: asset_server.load("sounds/wind_sound.ogg"),
     });
 }
 
@@ -196,9 +197,16 @@ pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMu
     }
 }
 
-/// Each frame while `is_scene_ready` is false, check whether all textures used by the
-/// current trial are fully loaded (including GPU upload) **and** the GPU warmup
-/// pass has finished. 
+/// Gates `is_scene_ready` behind a black pre-start countdown.
+///
+/// Phase 1: wait until every texture (GPU-uploaded) and sound is loaded and
+/// the GPU warmup pass has finished, then start the countdown — spawn a black
+/// overlay with a `3/2/1` number, a fake pyramid (warms the spawn/render path
+/// while the controller is still idle), and the muted background music (warms
+/// the audio graph so it doesn't scratch when it turns on).
+/// Phase 2: tick the countdown, updating the number each frame.
+/// Phase 3: at the end, tear the loading scene down, unmute the music, reset
+/// the timing counters, and finally set `is_scene_ready`.
 pub fn check_scene_ready(
     mut game_conditions: ResMut<GameConditions>,
     preloaded: Res<PreloadedTextures>,
@@ -208,6 +216,14 @@ pub fn check_scene_ready(
     local_game_struct: Res<GameStateLocal>,
     warmup: Res<crate::utils::warmup::WarmupState>,
     mut counters: (ResMut<FrameCounterResource>, ResMut<RenderFrameCounterResource>, ResMut<StagedRenderSample>),
+    mut countdown: ResMut<LoadingCountdown>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    time: Res<Time>,
+    mut sink_query: Query<&mut AudioSink>,
+    mut text_query: Query<&mut Text, With<LoadingCountdownText>>,
+    game_entities: Query<Entity, With<GameEntity>>,
 ) {
     if game_conditions.is_scene_ready {
         return;
@@ -217,32 +233,97 @@ pub fn check_scene_ready(
         return;
     }
 
-    use shared::Texture;
-    let gs = &local_game_struct.0;
+    // Phase 1: wait for all assets, then start the countdown.
+    if countdown.start.is_none() {
+        use shared::Texture;
+        let gs = &local_game_struct.0;
+        // All six texture slots (face + decoration) used by the current trial config must be loaded
+        let textures_loaded = gs.textures.iter()
+            .chain(gs.decorations_texture.iter())
+            .all(|&t| {
+                preloaded.0.get(&Texture::from_u32(t))
+                    .map(|set| set.all_loaded(&images))
+                    .unwrap_or(false)
+            });
+        if !(textures_loaded && sounds.all_loaded(&audio_sources)) {
+            return;
+        }
 
-    // All six texture slots (face + decoration) used by the current trial config must be loaded
-    let all_loaded = gs.textures.iter()
-        .chain(gs.decorations_texture.iter())
-        .all(|&t| {
-            let tex = Texture::from_u32(t);
-            let res =
-            preloaded.0.get(&tex)
-                .map(|set| set.all_loaded(&images))
-                .unwrap_or(false);
-            res
-        });
+        countdown.start = Some(time.elapsed());
 
-    if all_loaded && sounds.all_loaded(&audio_sources) {
-        // Reset time counters
-        counters.0.0 = 0;
-        counters.1.0 = 0;
+        // Black overlay with the countdown number centered.
+        let overlay = commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::BLACK),
+            GlobalZIndex(2000),
+        )).with_children(|parent| {
+            parent.spawn((
+                Text::new(format!("{}", LOADING_COUNTDOWN_SECS as i32)),
+                TextFont { font_size: 120.0, ..default() },
+                TextColor(Color::WHITE),
+                LoadingCountdownText,
+            ));
+        }).id();
+        countdown.overlay = Some(overlay);
 
-        counters.2.pending = Some(StagedFrame {
-            render_frame_number: 0,
-            render_elapsed_secs_bits: 0,
-            photodiode_white: false,
-        });
+        // Fake pyramid (a GameEntity, cleaned up at the end) to warm the path.
+        let config = build_pyramid_config(&local_game_struct.0);
+        spawn_pyramid(&mut commands, &mut meshes, &mut materials, &preloaded, &config);
 
-        game_conditions.is_scene_ready = true;
+        // Muted looping background music to warm the audio graph.
+        let music = commands.spawn((
+            AudioPlayer::new(sounds.background.clone()),
+            PlaybackSettings { volume: Volume::Linear(0.0), ..PlaybackSettings::LOOP },
+        )).id();
+        countdown.music = Some(music);
+        return;
     }
+
+    // Phase 2: countdown running — update the number (3, 2, 1).
+    let elapsed = (time.elapsed() - countdown.start.unwrap()).as_secs_f32();
+    if let Ok(mut text) = text_query.single_mut() {
+        let n = (LOADING_COUNTDOWN_SECS - elapsed).max(0.0).ceil() as i32;
+        let s = n.to_string();
+        if text.0 != s {
+            text.0 = s;
+        }
+    }
+    if elapsed < LOADING_COUNTDOWN_SECS {
+        return;
+    }
+
+    // Phase 3: tear down the loading scene and hand off to the controller.
+    if let Some(overlay) = countdown.overlay.take() {
+        if let Ok(mut ec) = commands.get_entity(overlay) {
+            ec.despawn();
+        }
+    }
+    for e in &game_entities {
+        commands.entity(e).try_despawn();
+    }
+    if let Some(music) = countdown.music {
+        if let Ok(mut sink) = sink_query.get_mut(music) {
+            sink.set_volume(Volume::Linear(1.0));
+        }
+    }
+
+    // Reset time counters
+    counters.0.0 = 0;
+    counters.1.0 = 0;
+    counters.2.pending = Some(StagedFrame {
+        render_frame_number: 0,
+        render_elapsed_secs_bits: 0,
+        photodiode_white: false,
+    });
+
+    game_conditions.is_scene_ready = true;
 }

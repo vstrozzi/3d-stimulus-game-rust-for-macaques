@@ -116,7 +116,8 @@ pub fn build_app() -> App {
     .insert_resource(GameStateLocal::default())
     .insert_resource(PreloadedTextures::default())
     .insert_resource(crate::utils::warmup::WarmupState::default())
-    .insert_resource(crate::utils::objects::CameraShakeState::default());
+    .insert_resource(crate::utils::objects::CameraShakeState::default())
+    .insert_resource(crate::utils::objects::LoadingCountdown::default());
 
     app
 }

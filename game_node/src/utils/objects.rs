@@ -64,6 +64,23 @@ pub struct DoorWinEntities {
     pub earthquake_sound: Option<Entity>,
 }
 
+/// State for the pre-start loading countdown that gates `is_scene_ready`.
+/// While it runs, a black overlay covers a fake pyramid and muted background
+/// music, so the spawn/render/audio paths warm up before the controller starts.
+#[derive(Resource, Default)]
+pub struct LoadingCountdown {
+    /// `time.elapsed()` when the countdown started, or `None` before it begins.
+    pub start: Option<Duration>,
+    /// Root entity of the black overlay (despawned recursively at the end).
+    pub overlay: Option<Entity>,
+    /// Background-music entity, spawned muted to warm the audio graph.
+    pub music: Option<Entity>,
+}
+
+/// Marker for the countdown number text, updated each frame (3, 2, 1).
+#[derive(Component)]
+pub struct LoadingCountdownText;
+
 /// Resource to track the start time of the current trial
 #[derive(Resource, Default)]
 pub struct RoundStartTimestamp(pub Option<Duration>);

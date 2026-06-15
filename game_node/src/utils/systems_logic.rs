@@ -54,7 +54,8 @@ impl Plugin for SystemsLogicPlugin {
             // Tick warmup state machine each frame; despawns warmup entities
             // and flips `WarmupState.complete` once GPU pipelines are hot.
             .add_systems(Update, tick_warmup)
-            // Check texture readiness each frame (gated on warmup completion).
+            // Check texture readiness each frame (gated on warmup completion);
+            // runs the black 3-2-1 countdown before flipping `is_scene_ready`.
             .add_systems(Update, check_scene_ready)
             // Commit the previous render frame's sample at the very top of
             // the new frame (in `First`). At this point `present()` has just

@@ -63,7 +63,7 @@ fn setup_photodiode(mut commands: Commands) {
         Node {
             position_type: PositionType::Absolute,
             top: Val::Px(0.0),
-            right: Val::Px(0.0),
+            left: Val::Px(0.0),
             width: Val::Px(50.0),
             height: Val::Px(50.0),
             ..default()

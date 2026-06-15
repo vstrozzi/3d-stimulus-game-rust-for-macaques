@@ -117,7 +117,7 @@ pub fn setup_round(
 }
 
 /// Constructs a `PyramidConfig` from the current local game state
-fn build_pyramid_config(gs_game: &shared::SharedGameStateLocal) -> PyramidConfig {
+pub(crate) fn build_pyramid_config(gs_game: &shared::SharedGameStateLocal) -> PyramidConfig {
     PyramidConfig {
         decoration_seeds: gs_game.decorations_seeds,
         radius: f32::from_bits(gs_game.base_radius),

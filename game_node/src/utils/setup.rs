@@ -9,7 +9,7 @@ use bevy::render::render_resource::PrimitiveTopology;
 use shared::DecorationShape;
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
-use crate::utils::load_textures::{load_texture_set, natural_material_tiled};
+use crate::utils::load_assets::{load_texture_set, natural_material_tiled};
 use crate::utils::objects::PreloadedTextures;
 use shared::constants::{
     lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},

@@ -2,7 +2,7 @@
 
 use crate::utils::helpers::build_mesh;
 use crate::utils::objects::{Decoration, DecorationSet, GameEntity, PreloadedTextures};
-use crate::utils::load_textures::tinted_material_tiled;
+use crate::utils::load_assets::tinted_material_tiled;
 use shared::{DecorationShape, Texture};
 use bevy::prelude::*;
 use bevy::prelude::ops::sqrt;

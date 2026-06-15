@@ -1,6 +1,6 @@
 //! Logic for spawning the pyramid base with interactive doors.
 
-use crate::utils::load_textures::{natural_material, tinted_material};
+use crate::utils::load_assets::{natural_material, tinted_material};
 use crate::utils::objects::{
     BaseDoor, BaseFrame, DecorationSet, GameEntity, HoleEmissive, HoleLight, Pyramid,
     PyramidConfig, RotableComponent, PreloadedTextures,

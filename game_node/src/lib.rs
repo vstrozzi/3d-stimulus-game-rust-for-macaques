@@ -43,7 +43,7 @@ pub mod utils {
     pub mod decorations;
     pub mod setup;
     pub mod systems_logic;
-    pub mod load_textures;
+    pub mod load_assets;
     pub mod warmup;
 }
 

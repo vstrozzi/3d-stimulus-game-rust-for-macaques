@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use std::time::Duration;
 use std::collections::HashMap;
 use shared::{SharedGameState, SharedGameStateLocal, DecorationShape, Texture};
-use crate::utils::load_textures::TextureSet;
+use crate::utils::load_assets::TextureSet;
 
 /// Holds strong handles for every texture set so they are never GC'd between resets.
 /// Populated once at startup; keeps assets hot in WASM so resets don't trigger new fetches.
@@ -56,6 +56,12 @@ pub struct DoorWinEntities {
     // Animate all doors flag
     pub animate_all: bool,
     pub color: Color,
+    // Guards the one-shot  sound effect so it plays once per animation
+    pub phase_sound_played: bool,
+    // Sound-effect entities spawned for the current animation, despawned when it ends
+    pub active_sounds: Vec<Entity>,
+    // The earthquake sound entity, kept separately so its volume can be faded out
+    pub earthquake_sound: Option<Entity>,
 }
 
 /// Resource to track the start time of the current trial

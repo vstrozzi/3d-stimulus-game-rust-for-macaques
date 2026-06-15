@@ -16,6 +16,40 @@ pub struct TextureSet {
     depth:              Option<Handle<Image>>,
 }
 
+/// Handles for the game's sounds, kept alive as a resource.
+#[derive(Resource)]
+pub struct SoundSet {
+    pub win: Handle<AudioSource>,
+    pub hint: Handle<AudioSource>,
+    pub earthquake: Handle<AudioSource>,
+    pub background: Handle<AudioSource>,
+}
+
+impl SoundSet {
+    /// Returns true once every sound is present in the Assets<AudioSource> store
+    pub fn all_loaded(&self, audio: &Assets<AudioSource>) -> bool {
+        [&self.win, &self.hint, &self.earthquake, &self.background]
+            .iter()
+            .all(|h| audio.get(h.id()).is_some())
+    }
+}
+
+/// Load sound effects into a resource and start the looping background music.
+pub fn load_sounds(asset_server: Res<AssetServer>, mut commands: Commands) {
+    let background = asset_server.load("sounds/wind_sound.ogg");
+    // Looping background wind music, always playing.
+    commands.spawn((
+        AudioPlayer::new(background.clone()),
+        PlaybackSettings::LOOP,
+    ));
+    commands.insert_resource(SoundSet {
+        win: asset_server.load("sounds/win_sound.ogg"),
+        hint: asset_server.load("sounds/hint_sound.ogg"),
+        earthquake: asset_server.load("sounds/audio_earthquake.ogg"),
+        background,
+    });
+}
+
 impl TextureSet {
     /// Returns true once every handle in this set is present in the Assets<Image> store
     pub fn all_loaded(&self, images: &Assets<Image>) -> bool {
@@ -164,16 +198,13 @@ pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMu
 
 /// Each frame while `is_scene_ready` is false, check whether all textures used by the
 /// current trial are fully loaded (including GPU upload) **and** the GPU warmup
-/// pass has finished. Once both are true, set the flag so the controller
-/// knows it is safe to remove the blank screen.
-///
-/// Gating on warmup ensures the first trial doesn't pay the
-/// pipeline-compilation / GPU-upload cost that previously produced
-/// multi-hundred-millisecond Δt spikes in trial 0. See `warmup.rs`.
+/// pass has finished. 
 pub fn check_scene_ready(
     mut game_conditions: ResMut<GameConditions>,
     preloaded: Res<PreloadedTextures>,
     images: Res<Assets<Image>>,
+    sounds: Res<SoundSet>,
+    audio_sources: Res<Assets<AudioSource>>,
     local_game_struct: Res<GameStateLocal>,
     warmup: Res<crate::utils::warmup::WarmupState>,
     mut counters: (ResMut<FrameCounterResource>, ResMut<RenderFrameCounterResource>, ResMut<StagedRenderSample>),
@@ -201,7 +232,7 @@ pub fn check_scene_ready(
             res
         });
 
-    if all_loaded {
+    if all_loaded && sounds.all_loaded(&audio_sources) {
         // Reset time counters
         counters.0.0 = 0;
         counters.1.0 = 0;

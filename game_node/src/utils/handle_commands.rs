@@ -68,7 +68,7 @@ pub fn handle_reset_command(
 }
 
 
-/// Handle animation door command
+/// Handle animation door command and sounds
 pub fn handle_animation_door_command(
     pending: ResMut<PendingCommands>,
     mut door_win_entities: ResMut<DoorWinEntities>,
@@ -83,6 +83,7 @@ pub fn handle_animation_door_command(
     let gs_game= &mut local_game_struct.0;
     door_win_entities.animation_start_time = Some(time.elapsed());
     door_win_entities.animate_all = pending.animation_all_door;
+    // Determine color based on animation flags and play sounds
     door_win_entities.color = if pending.animation_colored && !pending.animation_all_door {
         LIGHT_GREEN
     } else{ 

@@ -13,7 +13,7 @@ use strum::IntoEnumIterator;
 
 use crate::shared_memory::shared_memory_writer::RenderFrameCounterResource;
 use crate::utils::decorations::create_decoration_mesh;
-use crate::utils::load_textures::{natural_material, tinted_material_tiled};
+use crate::utils::load_assets::{natural_material, tinted_material_tiled};
 use crate::utils::objects::PreloadedTextures;
 
 /// Marker for entities spawned during warmup; despawned once warmup

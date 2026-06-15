@@ -1,13 +1,18 @@
 //! Core game and UI functions.
 use bevy::prelude::*;
+use bevy::audio::Volume;
 
 use crate::utils::objects::{BaseDoor, DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain, ScoreBarUI, GameStateLocal};
+use crate::utils::load_assets::SoundSet;
 use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
+use shared::constants::pyramid_constants::LIGHT_GREEN;
 use shared::constants::lighting_constants::{FAINT_ALIGNED_INTENSITY_FACTOR,FAINT_ALIGNED_SPOTLIGHT_FACTOR, FAINT_ALIGNED_SPOTLIGHT_RANGE,HOLE_SPOTLIGHT_RANGE
 };
 
 /// Handles the light animation
 pub fn handle_door_animation(
+    mut commands: Commands,
+    sounds: Res<SoundSet>,
     mut door_win_entities: ResMut<DoorWinEntities>,
     mut local_game_struct: ResMut<GameStateLocal>,
     time: Res<Time>,
@@ -17,6 +22,7 @@ pub fn handle_door_animation(
         (With<HoleEmissive>, Without<HoleLight>),
     >,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut sink_query: Query<&mut AudioSink>,
 ) {
     let gs_game = &mut local_game_struct.0;
     if !gs_game.is_animating {
@@ -50,18 +56,43 @@ pub fn handle_door_animation(
                 material.emissive = Color::BLACK.to_linear();
             }
         }
+        // Stop the sound effects so they last exactly the animation duration
+        for e in door_win_entities.active_sounds.drain(..) {
+            if let Ok(mut ec) = commands.get_entity(e) {
+                ec.despawn();
+            }
+        }
         // Clean up state
         door_win_entities.animation_start_time = None;
+        door_win_entities.earthquake_sound = None;
+        door_win_entities.phase_sound_played = false;
         gs_game.is_animating = false;
         return;
     }
 
     // Not finished, calculate intensity factor (0.0 to 1.0) based on phase
     let intensity_factor = if elapsed < fade_out_end {
-        // Phase 1: Fade Out (Opening) - 0.0 to 1.0
+        // Phase 1: Fade Out (Opening) - 0.0 to 1.0. Play the win/hint sound once on entry, 
+        // depending on the light color (green => win, otherwise => hint).
+        if !door_win_entities.phase_sound_played {
+            door_win_entities.phase_sound_played = true;
+            if door_win_entities.color == LIGHT_GREEN {
+                let e = commands.spawn((AudioPlayer::new(sounds.win.clone()), PlaybackSettings::ONCE)).id();
+                door_win_entities.active_sounds.push(e);
+            } else {
+                // Hint: play the hint sound together with the earthquake rumble.
+                let hint = commands.spawn((AudioPlayer::new(sounds.hint.clone()), PlaybackSettings::ONCE)).id();
+                let eq = commands.spawn((AudioPlayer::new(sounds.earthquake.clone()), PlaybackSettings::ONCE)).id();
+                door_win_entities.active_sounds.push(hint);
+                door_win_entities.active_sounds.push(eq);
+                door_win_entities.earthquake_sound = Some(eq);
+            }
+        }
+
         elapsed / fade_out_end + 0.0001 // Add to avoid edge case
     } else if elapsed < stay_open_end {
         // Phase 2: Stay Open - 1.0
+
         1.0
     } else if elapsed < fade_in_end {
         // Phase 3: Fade In (Closing) - 1.0 to 0.0
@@ -70,6 +101,14 @@ pub fn handle_door_animation(
         // Animation finished
         0.0
     };
+
+    // Fade the earthquake rumble out over the last 0.5s of the animation.
+    if let Some(eq) = door_win_entities.earthquake_sound {
+        if let Ok(mut sink) = sink_query.get_mut(eq) {
+            let volume = ((fade_in_end - elapsed) / 0.5).clamp(0.0, 1.0);
+            sink.set_volume(Volume::Linear(volume));
+        }
+    }
 
     let target_intensity = {
         let max_spotlight_intensity = f32::from_bits(gs_game.max_spotlight_intensity);

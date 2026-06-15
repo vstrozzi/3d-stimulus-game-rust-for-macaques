@@ -8,9 +8,7 @@ use crate::utils::helpers::{spawn_blank_screen, despawn_all_game_and_ui};
 use crate::utils::setup::{setup_round};
 use shared::constants::camera_3d_constants::{CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
 };
-
-pub const LIGHT_RED:   Color = Color::srgba(0x8B as f32 / 255.0, 0x00 as f32 / 255.0, 0x00 as f32 / 255.0, 1.0);
-pub const LIGHT_GREEN: Color = Color::srgba(0xCC as f32 / 255.0, 0xFF as f32 / 255.0, 0x00 as f32 / 255.0, 1.0);
+use shared::constants::pyramid_constants::{LIGHT_GREEN, LIGHT_BLUE};
 
 /// Reset state
 pub fn handle_reset_command(
@@ -81,17 +79,18 @@ pub fn handle_animation_door_command(
     if !pending.animation_door{
         return;
     }
-
+    // Load shared memory
+    let gs_game= &mut local_game_struct.0;
     door_win_entities.animation_start_time = Some(time.elapsed());
     door_win_entities.animate_all = pending.animation_all_door;
     door_win_entities.color = if pending.animation_colored && !pending.animation_all_door {
         LIGHT_GREEN
-    } else {
-        LIGHT_RED
+    } else{ 
+        LIGHT_BLUE
     };
 
     // Set animation flag
-    local_game_struct.0.is_animating = true;
+    gs_game.is_animating = true;
     
 }
 

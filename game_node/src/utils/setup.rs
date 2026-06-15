@@ -25,19 +25,21 @@ pub fn setup_environment(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
+    // Ground
     let marble = load_texture_set(&asset_server, "textures/Rock024_1K-JPG/bevy_ready");
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 200.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            ..natural_material_tiled(&marble, 8.0)
+            ..natural_material_tiled(&marble, 40.0)
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 
+    // Wall
     let metal = load_texture_set(&asset_server, "textures/Tiles017_1K-JPG/bevy_ready");
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 40.0, 50.0, 64))),
-        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 8.0))),
+        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 9.0))),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
     ));
 

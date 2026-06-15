@@ -119,11 +119,6 @@ pub fn natural_material(tex: &TextureSet) -> StandardMaterial {
         occlusion_texture: tex.occlusion.clone(),
 
         depth_map: tex.depth.clone(),
-        // PERF: parallax fragment cost is the dominant fragment-shader cost
-        // in the scene (every surface uses this material). 32 layers ×
-        // 80+ surfaces was producing the "missed one vsync" pattern in
-        // data_perf/. See documentation_performance.md §F1 — revert to
-        // (0.05, 32.0) if a regression in surface depth-detail appears.
         parallax_depth_scale: 1.0,
         parallax_mapping_method: ParallaxMappingMethod::Occlusion,
         max_parallax_layer_count: 32.0,

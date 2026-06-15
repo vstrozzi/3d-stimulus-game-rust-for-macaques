@@ -42,7 +42,7 @@ pub mod camera_3d_constants {
     pub const CAMERA_3D_INITIAL_RADIUS: f32 = 15.0; 
 
     pub const CAMERA_3D_SPEED_ROTATE: f32 = 0.05;
-    pub const CAMERA_3D_SPEED_ZOOM: f32 = 0.10;
+    pub const CAMERA_3D_SPEED_ZOOM: f32 = 0.0;  // Set on 0 means no zoom
 
     // Radius range for the camera's orbit.
     pub const CAMERA_3D_MIN_RADIUS: f32 = 5.0;
@@ -146,8 +146,13 @@ pub mod pyramid_constants {
     pub const DOOR_ANIM_FADE_OUT: f32 = 0.5; // seconds
     pub const DOOR_ANIM_STAY_OPEN: f32 = 0.5; // seconds
     pub const DOOR_ANIM_FADE_IN: f32 = 0.5; // seconds
-}
 
+    // Lights color
+    pub const LIGHT_RED:   bevy_color::Color = bevy_color::Color::srgba(0x8B as f32 / 255.0, 0x00 as f32 / 255.0, 0x00 as f32 / 255.0, 1.0);
+    pub const LIGHT_GREEN: bevy_color::Color = bevy_color::Color::srgba(0xCC as f32 / 255.0, 0xFF as f32 / 255.0, 0x00 as f32 / 255.0, 1.0);
+    pub const LIGHT_BLUE:  bevy_color::Color = bevy_color::Color::srgba(0x77 as f32 / 255.0, 0xB1 as f32 / 255.0, 0xD4 as f32 / 255.0, 1.0);
+
+}
 /// Lighting constants
 pub mod lighting_constants {
     // Shadow settings
@@ -164,9 +169,7 @@ pub mod lighting_constants {
     pub const FAINT_ALIGNED_SPOTLIGHT_FACTOR: f32 = 1.0 / 64.0;
     pub const FAINT_ALIGNED_SPOTLIGHT_RANGE: f32 = 4.0;
     pub const HOLE_SPOTLIGHT_RANGE: f32 = 25.0;
-
 }
-
 
 /// Constants shared between the Python and JS controllers. Single source of
 /// truth — both controllers import these via PyO3 / wasm-bindgen.

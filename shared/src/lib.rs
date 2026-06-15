@@ -115,6 +115,7 @@ pub enum Texture {
     Rope001_1K                  = 9,
     Tiles017_1K                 = 10,
     WoodFloor057_1K             = 11,
+    Wood035_1K                  = 12,
 }
 
 impl Texture {
@@ -183,13 +184,7 @@ macro_rules! shared_game_state {
             pub render_frame_number: $U64,
             pub elapsed_secs: $U32,
             pub render_elapsed_secs: $U32,
-            /// Time at which this frame's pixels actually became visible on
-            /// screen, sampled at the start of the *following* frame.
-            /// On native, this is `Instant::now()` in Bevy's `First` schedule
-            /// after `present()` returned (back-pressured by Fifo vsync).
-            /// On WASM, this is the `requestAnimationFrame` timestamp of the
-            /// next frame. Constant compositor + scanout offset remains; the
-            /// photodiode absorbs it during calibration.
+            /// Time at which this frame's pixels actually became visible on screen
             pub present_elapsed_secs: $U32,
             pub photodiode_white: $B,
             pub camera_radius: $U32,

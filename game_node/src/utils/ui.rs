@@ -7,7 +7,7 @@ use crate::utils::objects::{
     ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot, ScoreBarRoot,
     LeftScoreBarRoot, LeftScoreBarFill, GameStateLocal,
 };
-use crate::utils::handle_commands::{LIGHT_GREEN, LIGHT_RED};
+use shared::constants::pyramid_constants::{LIGHT_RED, LIGHT_GREEN};
 
 const LEFT_SCORE_BAR_WIDTH_PX: f32 = 24.0;
 const LEFT_SCORE_BAR_HEIGHT_PERCENT: f32 = 60.0;

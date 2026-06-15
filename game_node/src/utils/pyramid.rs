@@ -202,12 +202,12 @@ pub fn spawn_pyramid_base(
             create_pentagon_mesh(pentagon_center_inset, pentagon_radius, local_right, local_up, normal);
 
         let is_target = i == target_door;
-        let wood = preloaded.get(Texture::WoodFloor057_1K);
+        let texture_base = preloaded.get(Texture::Wood035_1K);
 
         let frame_id = commands
             .spawn((
                 Mesh3d(meshes.add(frame_mesh)),
-                MeshMaterial3d(materials.add(natural_material(wood))),
+                MeshMaterial3d(materials.add(natural_material(texture_base))),
                 Transform::default(),
                 BaseFrame { door_index: i },
                 GameEntity,
@@ -271,11 +271,11 @@ pub fn spawn_pyramid_base(
 
     let top_y = GROUND_Y + BASE_HEIGHT;
     let top_lid_mesh = create_top_lid_mesh(base_radius, BASE_NR_SIDES, p_start_orientation_rad);
-    let wood = preloaded.get(Texture::WoodFloor057_1K);
+    let texture_base = preloaded.get(Texture::Wood035_1K);
 
     commands.spawn((
         Mesh3d(meshes.add(top_lid_mesh)),
-        MeshMaterial3d(materials.add(natural_material(wood))),
+        MeshMaterial3d(materials.add(natural_material(texture_base))),
         Transform::from_xyz(0.0, top_y, 0.0),
         RotableComponent,
         GameEntity,

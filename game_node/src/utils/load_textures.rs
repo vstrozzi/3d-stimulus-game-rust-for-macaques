@@ -73,7 +73,7 @@ pub fn load_texture_set(
 
     let color = |name: &str| -> Option<Handle<Image>> {
         #[cfg(not(target_arch = "wasm32"))]
-        {
+         {
             let full = base.join(name);
             if !full.exists() {
                 println!("  ✗ missing {}", name);

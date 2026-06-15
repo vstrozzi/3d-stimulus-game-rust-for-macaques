@@ -1,6 +1,3 @@
-# remove or make base texture uniform
-# cheange base of the textures without signalsb
-# change color of light from red to blue
 # sounds to reward and discourage
 # load data on a backend (host it somewhere)	
 

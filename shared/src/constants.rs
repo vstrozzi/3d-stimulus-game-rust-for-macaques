@@ -29,8 +29,48 @@ pub mod game_constants {
     /// session-persistent; starts at `max / 2` on session start.
     pub const SCORE_BAR_DEFAULT_MAX: u32 = 0;
 
+    /// Amplitude of the camera shake effect on failed attempts.
     pub const SHAKE_AMPLITUDE_DEFAULT: f32 = 0.5;
     pub const SHAKE_DURATION_DEFAULT: f32 = 1.0;
+
+    /// Duration of the black pre-start countdown.
+    pub const LOADING_COUNTDOWN_SECS: f32 = 3.0;
+}
+
+/// Audio toggles and levels. Both effects and the background loop are on by
+/// default. Source files should be peak-equalized first (see
+/// `game_node/src/scripts/equalize_audio.py`) so these volumes balance the
+/// tracks against each other rather than fighting per-file peak differences.
+pub mod sound_constants {
+    /// Master switch for one-shot sound effects (win / hint). When `false`,
+    /// no effect is spawned during door animations.
+    pub const ENABLE_SOUND_EFFECTS: bool = true;
+
+    /// Master switch for the looping background music. When `false`, the
+    /// background track is never spawned.
+    pub const ENABLE_BACKGROUND_MUSIC: bool = true;
+
+    /// Linear playback volume for one-shot sound effects (1.0 = source level).
+    pub const SOUND_EFFECTS_VOLUME: f32 = 1.0;
+
+    /// Linear playback volume for the looping background music. Kept below the
+    /// effects so the ambience doesn't mask the win/hint cues.
+    pub const BACKGROUND_MUSIC_VOLUME: f32 = 0.20;
+}
+
+/// Offscreen render scaling.
+pub mod render_constants {
+    /// When `true`, the 3D scene is rendered to a fixed-resolution offscreen
+    /// target (display aspect ratio, height capped at [`FIXED_RENDER_HEIGHT`])
+    /// and upscaled to fill the native window. The UI (score bars, photodiode)
+    /// is drawn separately at native resolution, so it stays crisp. Trades
+    /// sharpness of the 3D scene for a stable, lower GPU cost.
+    pub const RENDER_AT_FIXED_RESOLUTION: bool = true;
+
+    /// Internal render height in pixels. Width is derived from the display
+    /// aspect ratio (no distortion, no letterboxing). Capped at the native
+    /// height so we never render at more than native resolution.
+    pub const FIXED_RENDER_HEIGHT: u32 = 1080;
 }
 
 /// 3D camera

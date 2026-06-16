@@ -62,6 +62,13 @@ Create Custom levels by using trials_editor.html
 python game_node/src/scripts/prepare_bevy_textures.py ./Metal061B_1K-JPG
 
 
+### Prepare / equalize sounds
+
+When you add or replace any audio in `game_node/assets/sounds/`
+
+python game_node/src/scripts/equalize_audio.py game_node/assets/sounds
+
+
 ### Verify run
 
 python tools/verify_trial_logs.py out/trial_logs/

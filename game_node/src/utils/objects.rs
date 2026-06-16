@@ -60,8 +60,6 @@ pub struct DoorWinEntities {
     pub phase_sound_played: bool,
     // Sound-effect entities spawned for the current animation, despawned when it ends
     pub active_sounds: Vec<Entity>,
-    // The earthquake sound entity, kept separately so its volume can be faded out
-    pub earthquake_sound: Option<Entity>,
 }
 
 /// State for the pre-start loading countdown that gates `is_scene_ready`.
@@ -141,6 +139,24 @@ pub struct UIEntity;
 /// A component that marks an entity as persistent (not despawned on reset)
 #[derive(Component)]
 pub struct PersistentCamera;
+
+/// Offscreen image the 3D scene renders into when `RENDER_AT_FIXED_RESOLUTION`
+/// is on. 
+#[derive(Resource, Default)]
+pub struct RenderTargetImage {
+    pub handle: Option<Handle<Image>>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Marker for the native-resolution 2D camera that draws the upscaled
+/// backdrop and the UI on top.
+#[derive(Component)]
+pub struct UpscaleCamera;
+
+/// Marker for the full-window UI node that shows the upscaled render image.
+#[derive(Component)]
+pub struct RenderBackdrop;
 
 /// Component to mark the base frame (wooden panel with hole)
 #[derive(Component)]

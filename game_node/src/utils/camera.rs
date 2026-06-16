@@ -1,7 +1,15 @@
 //! Camera handler
 use bevy::prelude::*;
+use bevy::asset::RenderAssetUsages;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages};
+use bevy::window::{PrimaryWindow, WindowResized};
+use bevy::camera::RenderTarget;
 use crate::shared_memory::shared_memory_reader::PendingCommands;
-use crate::utils::objects::{CameraShakeState, GameStateLocal, PersistentCamera};
+use crate::utils::objects::{
+    CameraShakeState, GameStateLocal, PersistentCamera,
+    RenderBackdrop, RenderTargetImage, UpscaleCamera,
+};
+use shared::constants::render_constants::{FIXED_RENDER_HEIGHT, RENDER_AT_FIXED_RESOLUTION};
 
 /// Game camera, persistent across levels and trials
 pub fn spawn_persistent_camera(mut commands: Commands, local_game_struct: Res<GameStateLocal>) {
@@ -15,6 +23,116 @@ pub fn spawn_persistent_camera(mut commands: Commands, local_game_struct: Res<Ga
         .looking_at(Vec3::ZERO, Vec3::Y),
         PersistentCamera,
     ));
+}
+
+/// Internal render size: native aspect ratio, height capped at
+/// `FIXED_RENDER_HEIGHT`. `None` until the window reports a real size.
+fn fixed_target_size(window: &Window) -> Option<(u32, u32)> {
+    let w = window.physical_width();
+    let h = window.physical_height();
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let height = FIXED_RENDER_HEIGHT.min(h);
+    let width = (((height as f32) * (w as f32 / h as f32)).round() as u32).max(1);
+    Some((width, height))
+}
+
+/// Build the offscreen image the 3D scene renders into.
+fn make_render_image(width: u32, height: u32) -> Image {
+    let size = Extent3d { width, height, depth_or_array_layers: 1 };
+    let mut image = Image::new_fill(
+        size,
+        TextureDimension::D2,
+        &[0, 0, 0, 0],
+        // Rgba8UnormSrgb is render-attachment-capable on both native wgpu and
+        // WebGPU; Bgra8UnormSrgb is not a portable render target on the web.
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    image.texture_descriptor.usage =
+        TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::RENDER_ATTACHMENT;
+    image
+}
+
+/// When `RENDER_AT_FIXED_RESOLUTION` is on, retarget the 3D camera to a
+/// fixed-resolution offscreen image and spawn a native-res 2D camera that
+/// upscales it (with the UI on top). Runs once, as soon as the window has a
+/// real size (borderless-fullscreen)
+pub fn setup_fixed_resolution(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    mut target: ResMut<RenderTargetImage>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    mut camera_q: Query<&mut RenderTarget, With<PersistentCamera>>,
+    mut done: Local<bool>,
+) {
+    if !RENDER_AT_FIXED_RESOLUTION || *done {
+        return;
+    }
+    let Ok(window) = windows.single() else { return };
+    let Some((width, height)) = fixed_target_size(window) else { return };
+    let Ok(mut render_target) = camera_q.single_mut() else { return };
+
+    let handle = images.add(make_render_image(width, height));
+
+    // 3D scene now renders into the offscreen image instead of the window.
+    *render_target = handle.clone().into();
+
+    // 2D camera draws to the window: upscaled image as backdrop + UI on top.
+    commands.spawn((
+        Camera2d,
+        Camera { order: 1, ..default() },
+        IsDefaultUiCamera,
+        UpscaleCamera,
+    ));
+
+    // Full-window backdrop showing the upscaled image, behind all UI
+    // (blank screen = 1000, photodiode = 1001).
+    commands.spawn((
+        ImageNode::new(handle.clone()),
+        Node {
+            position_type: PositionType::Absolute,
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            ..default()
+        },
+        GlobalZIndex(-1),
+        RenderBackdrop,
+    ));
+
+    target.handle = Some(handle);
+    target.width = width;
+    target.height = height;
+    *done = true;
+}
+
+/// Resize the offscreen image when the window aspect changes (web canvas
+/// resize). The backdrop node fills 100% of the window, so pure scale changes
+/// need no work — only an aspect change reallocates the texture.
+pub fn on_window_resized(
+    mut resize_events: MessageReader<WindowResized>,
+    mut images: ResMut<Assets<Image>>,
+    mut target: ResMut<RenderTargetImage>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+) {
+    if !RENDER_AT_FIXED_RESOLUTION || resize_events.is_empty() {
+        return;
+    }
+    resize_events.clear();
+
+    let Some(handle) = target.handle.clone() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Some((width, height)) = fixed_target_size(window) else { return };
+
+    if width == target.width && height == target.height {
+        return; // aspect unchanged; backdrop restretches for free
+    }
+    if let Some(image) = images.get_mut(&handle) {
+        image.resize(Extent3d { width, height, depth_or_array_layers: 1 });
+        target.width = width;
+        target.height = height;
+    }
 }
 
 pub fn handle_camera_shake(

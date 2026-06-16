@@ -6,10 +6,9 @@ use crate::{PreloadedTextures, GameConditions, GameStateLocal};
 use crate::utils::objects::{GameEntity, LoadingCountdown, LoadingCountdownText};
 use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::setup::build_pyramid_config;
-use crate::shared_memory::shared_memory_writer::{FrameCounterResource, RenderFrameCounterResource, StagedRenderSample, StagedFrame};
+use shared::constants::game_constants::LOADING_COUNTDOWN_SECS;
+use shared::constants::sound_constants::{ENABLE_BACKGROUND_MUSIC, BACKGROUND_MUSIC_VOLUME};
 
-/// Duration of the black pre-start countdown.
-const LOADING_COUNTDOWN_SECS: f32 = 3.0;
 
 /// Holds all loaded handles for one PBR texture set
 /// Store this as a resource so handles stay alive
@@ -28,14 +27,13 @@ pub struct TextureSet {
 pub struct SoundSet {
     pub win: Handle<AudioSource>,
     pub hint: Handle<AudioSource>,
-    pub earthquake: Handle<AudioSource>,
     pub background: Handle<AudioSource>,
 }
 
 impl SoundSet {
     /// Returns true once every sound is present in the Assets<AudioSource> store
     pub fn all_loaded(&self, audio: &Assets<AudioSource>) -> bool {
-        [&self.win, &self.hint, &self.earthquake, &self.background]
+        [&self.win, &self.hint, &self.background]
             .iter()
             .all(|h| audio.get(h.id()).is_some())
     }
@@ -45,8 +43,7 @@ impl SoundSet {
 pub fn load_sounds(asset_server: Res<AssetServer>, mut commands: Commands) {
     commands.insert_resource(SoundSet {
         win: asset_server.load("sounds/win_sound.ogg"),
-        hint: asset_server.load("sounds/hint_sound.ogg"),
-        earthquake: asset_server.load("sounds/audio_earthquake.ogg"),
+        hint: asset_server.load("sounds/audio_earthquake.ogg"),
         background: asset_server.load("sounds/wind_sound.ogg"),
     });
 }
@@ -202,8 +199,7 @@ pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMu
 /// Phase 1: wait until every texture (GPU-uploaded) and sound is loaded and
 /// the GPU warmup pass has finished, then start the countdown — spawn a black
 /// overlay with a `3/2/1` number, a fake pyramid (warms the spawn/render path
-/// while the controller is still idle), and the muted background music (warms
-/// the audio graph so it doesn't scratch when it turns on).
+/// while the controller is still idle)
 /// Phase 2: tick the countdown, updating the number each frame.
 /// Phase 3: at the end, tear the loading scene down, unmute the music, reset
 /// the timing counters, and finally set `is_scene_ready`.
@@ -215,7 +211,6 @@ pub fn check_scene_ready(
     audio_sources: Res<Assets<AudioSource>>,
     local_game_struct: Res<GameStateLocal>,
     warmup: Res<crate::utils::warmup::WarmupState>,
-    mut counters: (ResMut<FrameCounterResource>, ResMut<RenderFrameCounterResource>, ResMut<StagedRenderSample>),
     mut countdown: ResMut<LoadingCountdown>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -279,12 +274,16 @@ pub fn check_scene_ready(
         let config = build_pyramid_config(&local_game_struct.0);
         spawn_pyramid(&mut commands, &mut meshes, &mut materials, &preloaded, &config);
 
-        // Muted looping background music to warm the audio graph.
-        let music = commands.spawn((
-            AudioPlayer::new(sounds.background.clone()),
-            PlaybackSettings { volume: Volume::Linear(0.0), ..PlaybackSettings::LOOP },
-        )).id();
-        countdown.music = Some(music);
+        // Muted looping background music to warm the audio graph; unmuted at
+        // the end of the countdown. Skipped entirely when disabled.
+        if ENABLE_BACKGROUND_MUSIC {
+            let music = commands.spawn((
+                AudioPlayer::new(sounds.background.clone()),
+                PlaybackSettings { volume: Volume::Linear(0.0), ..PlaybackSettings::LOOP },
+            )).id();
+            countdown.music = Some(music);
+        }
+
         return;
     }
 
@@ -310,20 +309,14 @@ pub fn check_scene_ready(
     for e in &game_entities {
         commands.entity(e).try_despawn();
     }
+
+    // Unmute the looping background music now that the countdown is over.
     if let Some(music) = countdown.music {
         if let Ok(mut sink) = sink_query.get_mut(music) {
-            sink.set_volume(Volume::Linear(1.0));
+            sink.set_volume(Volume::Linear(BACKGROUND_MUSIC_VOLUME));
         }
     }
 
-    // Reset time counters
-    counters.0.0 = 0;
-    counters.1.0 = 0;
-    counters.2.pending = Some(StagedFrame {
-        render_frame_number: 0,
-        render_elapsed_secs_bits: 0,
-        photodiode_white: false,
-    });
-
+    // Allow game to start
     game_conditions.is_scene_ready = true;
 }

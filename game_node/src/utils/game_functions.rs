@@ -8,6 +8,7 @@ use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
 use shared::constants::pyramid_constants::LIGHT_GREEN;
 use shared::constants::lighting_constants::{FAINT_ALIGNED_INTENSITY_FACTOR,FAINT_ALIGNED_SPOTLIGHT_FACTOR, FAINT_ALIGNED_SPOTLIGHT_RANGE,HOLE_SPOTLIGHT_RANGE
 };
+use shared::constants::sound_constants::{ENABLE_SOUND_EFFECTS, SOUND_EFFECTS_VOLUME};
 
 /// Handles the light animation
 pub fn handle_door_animation(
@@ -64,7 +65,6 @@ pub fn handle_door_animation(
         }
         // Clean up state
         door_win_entities.animation_start_time = None;
-        door_win_entities.earthquake_sound = None;
         door_win_entities.phase_sound_played = false;
         gs_game.is_animating = false;
         return;
@@ -76,23 +76,18 @@ pub fn handle_door_animation(
         // depending on the light color (green => win, otherwise => hint).
         if !door_win_entities.phase_sound_played {
             door_win_entities.phase_sound_played = true;
-            if door_win_entities.color == LIGHT_GREEN {
-                let e = commands.spawn((AudioPlayer::new(sounds.win.clone()), PlaybackSettings::ONCE)).id();
+            if ENABLE_SOUND_EFFECTS {
+                let settings = PlaybackSettings::ONCE.with_volume(Volume::Linear(SOUND_EFFECTS_VOLUME));
+                // Green light => win sound, otherwise => hint sound.
+                let clip = if door_win_entities.color == LIGHT_GREEN { sounds.win.clone() } else { sounds.hint.clone() };
+                let e = commands.spawn((AudioPlayer::new(clip), settings)).id();
                 door_win_entities.active_sounds.push(e);
-            } else {
-                // Hint: play the hint sound together with the earthquake rumble.
-                let hint = commands.spawn((AudioPlayer::new(sounds.hint.clone()), PlaybackSettings::ONCE)).id();
-                let eq = commands.spawn((AudioPlayer::new(sounds.earthquake.clone()), PlaybackSettings::ONCE)).id();
-                door_win_entities.active_sounds.push(hint);
-                door_win_entities.active_sounds.push(eq);
-                door_win_entities.earthquake_sound = Some(eq);
             }
         }
 
         elapsed / fade_out_end + 0.0001 // Add to avoid edge case
     } else if elapsed < stay_open_end {
         // Phase 2: Stay Open - 1.0
-
         1.0
     } else if elapsed < fade_in_end {
         // Phase 3: Fade In (Closing) - 1.0 to 0.0
@@ -102,10 +97,11 @@ pub fn handle_door_animation(
         0.0
     };
 
-    // Fade the earthquake rumble out over the last 0.5s of the animation.
-    if let Some(eq) = door_win_entities.earthquake_sound {
-        if let Ok(mut sink) = sink_query.get_mut(eq) {
-            let volume = ((fade_in_end - elapsed) / 0.5).clamp(0.0, 1.0);
+    // Fade the sounds out over the last 0.5s of the animation, scaled by the
+    // configured effects volume.
+    for eq in door_win_entities.active_sounds.iter() {
+        if let Ok(mut sink) = sink_query.get_mut(*eq) {
+            let volume = SOUND_EFFECTS_VOLUME * ((fade_in_end - elapsed) / 0.5).clamp(0.0, 1.0);
             sink.set_volume(Volume::Linear(volume));
         }
     }
@@ -168,12 +164,6 @@ pub fn handle_door_animation(
 }
 
 // Update the score bar based on the current level state.
-//
-// The dot/chain/row entities are spawned once at startup
-// (`spawn_score_bar_pool`). Every tick we toggle their `Node.display` so
-// only `index < progress_bar_size` are laid out, and recolor the visible
-// ones based on `progress_bar_cur_size`. Hidden subtrees are skipped by
-// taffy, so no per-tick grid/flexbox recomputation happens.
 pub fn update_score_bar(
     local_game_struct: Res<GameStateLocal>,
     mut dot_query: Query<(&ScoreBarDot, &mut BackgroundColor, &mut Node), (Without<ScoreBarChain>, Without<ScoreBarUI>)>,

@@ -197,6 +197,70 @@ pub mod pyramid_constants {
     pub const LIGHT_BLUE:  bevy_color::Color = bevy_color::Color::srgba(0x77 as f32 / 255.0, 0xB1 as f32 / 255.0, 0xD4 as f32 / 255.0, 1.0);
 
 }
+/// Mystical distance fog around the pyramid + gold firefly particles shown on
+/// a winning animation. Fog is centered on the pyramid (origin): the scene is
+/// within `FOG_START_RADIUS` of the center and dissolves into haze
+/// beyond it. Fireflies spawn at the start of a correct (green) animation and
+/// drift until the black screen appears.
+pub mod fog_constants {
+    use bevy_color::Color;
+
+    /// Master switch for the distance fog.
+    pub const FOG_ENABLED: bool = true;
+
+    /// Clear radius (world units) around the pyramid center. Inside this sphere
+    /// the scene stays sharp; beyond it the surroundings fade into fog. Keep it
+    /// `>=` the pyramid radius (~2.5) so the pyramid edges don't get fogged.
+    pub const FOG_START_RADIUS: f32 = 2.5;
+
+    /// Fog density. Larger = the fog saturates over a shorter distance past
+    /// `FOG_START_RADIUS` (thicker, hides the surroundings sooner). Full-fog
+    /// distance from the camera is `start + FOG_THICKNESS_BASE / FOG_DENSITY`.
+    pub const FOG_DENSITY: f32 = 0.5;
+
+    /// Base transition thickness (divided by `FOG_DENSITY`), in world units.
+    pub const FOG_THICKNESS_BASE: f32 = 25.0;
+
+    /// Fog color — desaturated cold blue-grey for a mystical haze.
+    pub const FOG_COLOR: Color = Color::srgb(0.55, 0.60, 0.70);
+
+    /// Number of fireflies spawned on a win (the particle "density"). `0`
+    /// disables them.
+    pub const FIREFLY_COUNT: u32 = 200;
+
+    /// Mean radius (world units) from the pyramid center where the fireflies
+    /// drift. Sit them near the misty edge for the best glow-in-fog look.
+    /// Keep `FIREFLY_RADIUS + FIREFLY_SPREAD` below the surrounding wall radius
+    /// (9.0, see `setup_environment`) — nothing renders behind the wall.
+    pub const FIREFLY_RADIUS: f32 = 6.0;
+
+    /// Half-width of the radial band the fireflies are scattered within.
+    pub const FIREFLY_SPREAD: f32 = 2.5;
+
+    /// Wander speed multiplier (scales how fast each firefly drifts/twinkles).
+    pub const FIREFLY_SPEED: f32 = 2.0;
+
+    /// Seconds the fireflies take to burst out from the winning hole and
+    /// reach their resting drift positions when they spawn.
+    pub const FIREFLY_EXPAND_SECS: f32 = 1.5;
+
+    /// Two-phase burst: in the first `FIREFLY_BURST_PHASE1` fraction of the
+    /// expansion the fireflies shoot `FIREFLY_BURST_TOWARD_CAMERA` world units
+    /// from the hole toward the player camera; the rest of the time they fan
+    /// out to their resting positions.
+    pub const FIREFLY_BURST_PHASE1: f32 = 1.0 / 3.0;
+    pub const FIREFLY_BURST_TOWARD_CAMERA: f32 = 1.0;
+
+    /// Particle size (world units).
+    pub const FIREFLY_SIZE: f32 = 0.013;
+
+    /// Emissive boost applied to `FIREFLY_COLOR` so the motes glow.
+    pub const FIREFLY_GLOW: f32 = 500.0;
+
+    /// Gold emissive color of the fireflies.
+    pub const FIREFLY_COLOR: Color = Color::srgb(1.0, 0.78, 0.25);
+}
+
 /// Lighting constants
 pub mod lighting_constants {
     // Shadow settings

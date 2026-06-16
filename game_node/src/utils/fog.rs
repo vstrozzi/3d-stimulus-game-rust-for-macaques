@@ -1,0 +1,221 @@
+//! Mystical distance fog centered on the pyramid, plus gold firefly particles
+//! shown during a winning animation.
+//!
+//! The fog lives on the persistent 3D camera as a [`DistanceFog`]. Because the
+//! camera always looks at and orbits the pyramid (origin), driving the fog's
+//! `start` distance off the camera's distance-to-origin keeps a clear bubble of
+//! radius `FOG_START_RADIUS` locked around the pyramid while the surroundings
+//! dissolve into haze — so it reads as fog centered on the pyramid.
+//!
+//! Fireflies spawn the moment a correct (green) animation begins and drift
+//! until the black screen appears, then despawn.
+use std::f32::consts::TAU;
+
+use bevy::pbr::{DistanceFog, FogFalloff};
+use bevy::prelude::*;
+use rand::Rng;
+
+use crate::utils::objects::{DoorWinEntities, GameStateLocal, PersistentCamera};
+use shared::constants::fog_constants::*;
+use shared::constants::pyramid_constants::{LIGHT_GREEN, PYRAMID_HEIGHT};
+
+/// Outer wall radius (see `setup_environment`). Nothing renders past it, so
+/// fireflies are clamped to stay inside.
+const WALL_RADIUS: f32 = 9.0;
+
+/// One drifting firefly. Position is `base + amp * sin(freq * t + phase)`.
+#[derive(Component)]
+pub struct Firefly {
+    base: Vec3,
+    amp: Vec3,
+    freq: Vec3,
+    phase: Vec3,
+    flicker_phase: f32,
+}
+
+/// Tracks whether a firefly swarm is currently alive and when it spawned (so
+/// the burst-from-center expansion can be timed).
+#[derive(Resource, Default)]
+pub struct FireflyState {
+    active: bool,
+    spawn_secs: f32,
+    /// World position the swarm bursts out from (the winning hole).
+    origin: Vec3,
+    /// Intermediate waypoint 1 unit toward the camera from `origin`.
+    waypoint: Vec3,
+}
+
+/// Fallback burst point if the winning hole transform isn't available — the
+/// pyramid's centroid (height/4).
+const FIREFLY_ORIGIN: Vec3 = Vec3::new(0.0, PYRAMID_HEIGHT * 0.25, 0.0);
+
+/// Attach the distance fog to the persistent camera once at startup.
+pub fn setup_fog(mut commands: Commands, camera: Query<Entity, With<PersistentCamera>>) {
+    if !FOG_ENABLED {
+        return;
+    }
+    if let Ok(entity) = camera.single() {
+        commands.entity(entity).insert(DistanceFog {
+            color: FOG_COLOR,
+            // Real values are written every frame by `update_fog`.
+            falloff: FogFalloff::Linear { start: 0.0, end: 1.0 },
+            ..default()
+        });
+    }
+}
+
+/// Keep the clear bubble centered on the pyramid by deriving the fog onset from
+/// the camera's current distance to the origin.
+pub fn update_fog(mut camera: Query<(&Transform, &mut DistanceFog), With<PersistentCamera>>) {
+    if !FOG_ENABLED {
+        return;
+    }
+    let Ok((transform, mut fog)) = camera.single_mut() else {
+        return;
+    };
+    let dist_to_center = transform.translation.length();
+    let start = dist_to_center + FOG_START_RADIUS;
+    let end = start + FOG_THICKNESS_BASE / FOG_DENSITY.max(0.0001);
+    fog.falloff = FogFalloff::Linear { start, end };
+}
+
+/// Spawn fireflies on win start, animate their drift/twinkle, and despawn them
+/// when the black screen appears.
+pub fn update_fireflies(
+    mut commands: Commands,
+    time: Res<Time>,
+    door_win: Res<DoorWinEntities>,
+    local_game_struct: Res<GameStateLocal>,
+    mut state: ResMut<FireflyState>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    transforms: Query<&GlobalTransform>,
+    camera: Query<&GlobalTransform, With<PersistentCamera>>,
+    mut fireflies: Query<(Entity, &Firefly, &mut Transform)>,
+) {
+    let gs = &local_game_struct.0;
+    let win_active = gs.is_animating && door_win.color == LIGHT_GREEN && !door_win.animate_all;
+
+    // Spawn once, at the start of a correct animation.
+    if win_active && !state.active && FIREFLY_COUNT > 0 {
+        // Burst out of the winning hole's current world position.
+        state.origin = door_win
+            .winning_light
+            .and_then(|e| transforms.get(e).ok())
+            .map(|t| t.translation())
+            .unwrap_or(FIREFLY_ORIGIN);
+        // Waypoint one unit from the hole toward the player camera.
+        let toward_cam = camera
+            .single()
+            .map(|t| (t.translation() - state.origin).normalize_or_zero())
+            .unwrap_or(Vec3::Y);
+        state.waypoint = state.origin + toward_cam * FIREFLY_BURST_TOWARD_CAMERA;
+        spawn_fireflies(&mut commands, &mut meshes, &mut materials, state.origin);
+        state.active = true;
+        state.spawn_secs = time.elapsed_secs();
+    }
+
+    // Persist through the whole animation; clear out when the screen blanks.
+    if state.active && gs.is_blank {
+        for (entity, _, _) in &fireflies {
+            commands.entity(entity).despawn();
+        }
+        state.active = false;
+        return;
+    }
+
+    if !state.active {
+        return;
+    }
+
+    let t = time.elapsed_secs();
+    let p = ((t - state.spawn_secs) / FIREFLY_EXPAND_SECS.max(0.0001)).clamp(0.0, 1.0);
+    // Scale grows in over the whole burst (ease-out).
+    let grow = 1.0 - (1.0 - p).powi(3);
+    let ease_out = |x: f32| 1.0 - (1.0 - x).powi(3);
+    let phase1 = FIREFLY_BURST_PHASE1.clamp(0.0001, 0.9999);
+    for (_, fly, mut transform) in &mut fireflies {
+        let resting = fly.base
+            + Vec3::new(
+                fly.amp.x * (fly.freq.x * t + fly.phase.x).sin(),
+                fly.amp.y * (fly.freq.y * t + fly.phase.y).sin(),
+                fly.amp.z * (fly.freq.z * t + fly.phase.z).sin(),
+            );
+        // Phase 1: hole -> toward-camera waypoint. Phase 2: waypoint -> resting.
+        transform.translation = if p < phase1 {
+            state.origin.lerp(state.waypoint, ease_out(p / phase1))
+        } else {
+            state
+                .waypoint
+                .lerp(resting, ease_out((p - phase1) / (1.0 - phase1)))
+        };
+        // Fire-like flicker (two frequencies), grown in over the expansion.
+        let flicker = 1.0
+            + 0.35 * (7.0 * t + fly.flicker_phase).sin()
+            + 0.15 * (19.0 * t + fly.flicker_phase * 1.7).sin();
+        transform.scale = Vec3::splat((flicker * grow).max(0.0));
+    }
+}
+
+fn spawn_fireflies(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    origin: Vec3,
+) {
+    let mesh = meshes.add(Sphere::new(FIREFLY_SIZE));
+    let glow = FIREFLY_COLOR.to_linear();
+    let material = materials.add(StandardMaterial {
+        base_color: FIREFLY_COLOR,
+        emissive: LinearRgba::new(
+            glow.red * FIREFLY_GLOW,
+            glow.green * FIREFLY_GLOW,
+            glow.blue * FIREFLY_GLOW,
+            1.0,
+        ),
+        unlit: true,
+        ..default()
+    });
+
+    // Clamp the band so no firefly spawns at or beyond the wall.
+    let max_radius = (WALL_RADIUS - FIREFLY_SIZE).min(FIREFLY_RADIUS + FIREFLY_SPREAD);
+    let min_radius = (FIREFLY_RADIUS - FIREFLY_SPREAD).max(0.0);
+
+    let mut rng = rand::rng();
+    for _ in 0..FIREFLY_COUNT {
+        let angle = rng.random_range(0.0..TAU);
+        let radius = rng.random_range(min_radius..=max_radius);
+        let base = Vec3::new(
+            radius * angle.cos(),
+            rng.random_range(0.5..(PYRAMID_HEIGHT + 0.5)),
+            radius * angle.sin(),
+        );
+        let firefly = Firefly {
+            base,
+            amp: Vec3::new(
+                rng.random_range(0.3..0.9),
+                rng.random_range(0.3..0.9),
+                rng.random_range(0.3..0.9),
+            ),
+            freq: Vec3::new(
+                rng.random_range(0.2..0.8) * FIREFLY_SPEED,
+                rng.random_range(0.2..0.8) * FIREFLY_SPEED,
+                rng.random_range(0.2..0.8) * FIREFLY_SPEED,
+            ),
+            phase: Vec3::new(
+                rng.random_range(0.0..TAU),
+                rng.random_range(0.0..TAU),
+                rng.random_range(0.0..TAU),
+            ),
+            flicker_phase: rng.random_range(0.0..TAU),
+        };
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            // Start at the winning hole, invisible: the first frame they render
+            // is already the start of the burst, so no outside-position flash.
+            Transform::from_translation(origin).with_scale(Vec3::ZERO),
+            firefly,
+        ));
+    }
+}

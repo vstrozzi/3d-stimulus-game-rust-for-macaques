@@ -12,6 +12,7 @@ use crate::utils::game_functions::{
     update_score_bar,
 };
 use crate::utils::setup::setup_environment;
+use crate::utils::fog::{setup_fog, update_fog, update_fireflies, FireflyState};
 use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
 use crate::utils::load_assets::{preload_all_textures, check_scene_ready, load_sounds};
 use crate::utils::warmup::{spawn_warmup_scene, tick_warmup};
@@ -31,12 +32,14 @@ impl Plugin for SystemsLogicPlugin {
     /// Builds the plugin by adding the systems to the app.
     fn build(&self, app: &mut App) {
         app
+            .init_resource::<FireflyState>()
             // Spawn persistent camera and static environment once at startup
             .add_systems(
                 Startup,
                 (
                     init_shared_memory_system,
                     spawn_persistent_camera,
+                    setup_fog,
                     setup_environment,
                     preload_all_textures,
                     load_sounds,
@@ -51,6 +54,8 @@ impl Plugin for SystemsLogicPlugin {
             )
             // Offscreen render-to-texture + upscale.
             .add_systems(Update, (setup_fixed_resolution, on_window_resized))
+            // Pyramid-centered distance fog + win-time gold fireflies.
+            .add_systems(Update, (update_fog, update_fireflies))
             // Global UI responsiveness system (runs every frame)
             .add_systems(Update, update_ui_scale)
             // Tick warmup state machine each frame; despawns warmup entities

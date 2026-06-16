@@ -149,12 +149,12 @@ pub struct RenderTargetImage {
     pub height: u32,
 }
 
-/// Set true once the window itself runs at the capped resolution (native
-/// exclusive fullscreen, or the web canvas-backing-store cap), so the offscreen
-/// render-to-texture path (`setup_fixed_resolution`) stays disabled — it would
-/// be redundant. On native it starts false and is flipped on by
-/// `setup_fixed_fullscreen`; if no suitable video mode exists it stays false
-/// and the offscreen path runs as a fallback.
+/// Set true once native exclusive fullscreen downscaling is active, so the
+/// offscreen render-to-texture path (`setup_fixed_resolution`) stays disabled
+/// — it would be redundant once the window itself runs at the capped mode.
+/// Starts false; flipped on by `setup_fixed_fullscreen` (native only). On web
+/// it stays false and the offscreen path always runs, since winit ignores the
+/// window-resolution cap there.
 #[derive(Resource, Default)]
 pub struct FixedFullscreenActive(pub bool);
 

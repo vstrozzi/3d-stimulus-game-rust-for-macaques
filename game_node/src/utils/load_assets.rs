@@ -5,6 +5,7 @@ use bevy::math::Affine2;
 use crate::{PreloadedTextures, GameConditions, GameStateLocal};
 use crate::utils::objects::{GameEntity, LoadingCountdown, LoadingCountdownText};
 use crate::utils::pyramid::spawn_pyramid;
+use crate::utils::helpers::spawn_blank_screen;
 use crate::utils::setup::build_pyramid_config;
 use shared::constants::game_constants::LOADING_COUNTDOWN_SECS;
 use shared::constants::sound_constants::{ENABLE_BACKGROUND_MUSIC, BACKGROUND_MUSIC_VOLUME};
@@ -224,6 +225,7 @@ pub fn check_scene_ready(
         return;
     }
 
+
     // Black full-screen overlay, spawned once on the first frame so the canvas
     // is covered (with text) during warmup + texture upload — before the
     // countdown. The same text entity then shows the 3/2/1 numbers once the
@@ -307,6 +309,11 @@ pub fn check_scene_ready(
     }
 
     // Phase 3: tear down the loading scene and hand off to the controller.
+    // Spawn a black BlankScreen first so the freshly built scene never flashes
+    // between the loading overlay despawn and the controller issuing its own
+    // blank command. The controller's `toggle_blank: !is_blank` logic then sees
+    // is_blank=true and leaves the screen black until the trial actually starts.
+    spawn_blank_screen(&mut commands);
     if let Some(overlay) = countdown.overlay.take() {
         if let Ok(mut ec) = commands.get_entity(overlay) {
             ec.despawn();

@@ -426,6 +426,7 @@ let PYRAMID_DEFAULTS = null;  // base_radius, height, fade-out/in/stay, colors, 
 let CAMERA_DEFAULTS = null;   // initial_radius, default_y, speed_rotate, rotation_sense
 let LIGHTING_DEFAULTS = null; // spotlight/ambient intensities
 let GAME_DEFAULTS = null;     // cosine_alignment_to_win, decorations_seeds
+let SCENE_DEFAULTS = null;    // sound effects volume, fog + firefly config
 let EDITOR_FACE_TEX_IDX = 0;        // default face texture index (resolved by name)
 let EDITOR_DECORATION_TEX_IDX = 0;  // default decoration texture index (resolved by name)
 
@@ -524,6 +525,12 @@ function defaultLevel(nObjects = 2) {
       score_bar_max: 10,
       shake_amplitude: 0.5,
       shake_duration: 1.0,
+      sound_effects_volume: SCENE_DEFAULTS.sound_effects_volume,
+      fog_enabled: SCENE_DEFAULTS.fog_enabled,
+      fog_thickness_base: SCENE_DEFAULTS.fog_thickness_base,
+      firefly_count: SCENE_DEFAULTS.firefly_count,
+      firefly_size: SCENE_DEFAULTS.firefly_size,
+      firefly_expand_secs: SCENE_DEFAULTS.firefly_expand_secs,
       base_radius: PYRAMID_DEFAULTS.base_radius,
       height: PYRAMID_DEFAULTS.height,
       cosine_alignment_threshold: GAME_DEFAULTS.cosine_alignment_to_win,
@@ -597,6 +604,18 @@ function enforceLevel(lv) {
   if (f.shake_duration == null) f.shake_duration = 1.0;
   f.shake_amplitude = Math.max(0, f.shake_amplitude);
   f.shake_duration = Math.max(0, f.shake_duration);
+  if (f.sound_effects_volume == null) f.sound_effects_volume = SCENE_DEFAULTS.sound_effects_volume;
+  f.sound_effects_volume = Math.max(0, f.sound_effects_volume);
+  if (f.fog_enabled == null) f.fog_enabled = SCENE_DEFAULTS.fog_enabled;
+  f.fog_enabled = !!f.fog_enabled;
+  if (f.fog_thickness_base == null) f.fog_thickness_base = SCENE_DEFAULTS.fog_thickness_base;
+  f.fog_thickness_base = Math.max(0, f.fog_thickness_base);
+  if (f.firefly_count == null) f.firefly_count = SCENE_DEFAULTS.firefly_count;
+  f.firefly_count = Math.max(0, Math.round(f.firefly_count));
+  if (f.firefly_size == null) f.firefly_size = SCENE_DEFAULTS.firefly_size;
+  f.firefly_size = Math.max(0, f.firefly_size);
+  if (f.firefly_expand_secs == null) f.firefly_expand_secs = SCENE_DEFAULTS.firefly_expand_secs;
+  f.firefly_expand_secs = Math.max(0, f.firefly_expand_secs);
   for (const t of (lv.trials || [])) {
     if (t.show_all == null) t.show_all = false;
   }
@@ -1043,6 +1062,20 @@ function renderFixed(fixed, lv) {
       ${numRow('ambient', 'ambient_brightness', fixed.ambient_brightness, '10', '0')}
       ${numRow('max_intensity', 'max_spotlight_intensity', fixed.max_spotlight_intensity, '1000000', '0')}
     </div>
+    <div class="fixed-group">
+      <div class="fixed-group-title">Scene / Audio</div>
+      <div class="fixed-row" title="Linear playback volume for one-shot win/hint sound effects. 1.0 = source level; 0 mutes.">
+        ${numRow('sfx_volume', 'sound_effects_volume', fixed.sound_effects_volume ?? 1.0, '0.05', '0')}
+      </div>
+      <div class="fixed-row" title="Distance fog around the pyramid. Off pushes the fog onset past the wall so nothing is fogged.">
+        <label>fog_enabled</label>
+        <input type="checkbox" class="fixed-chk" data-ff="fog_enabled"${(fixed.fog_enabled ?? true) ? ' checked' : ''}>
+      </div>
+      ${numRow('fog_thickness', 'fog_thickness_base', fixed.fog_thickness_base ?? 25.0, '1', '0')}
+      ${numRow('firefly_count', 'firefly_count', fixed.firefly_count ?? 10000, '100', '0')}
+      ${numRow('firefly_size', 'firefly_size', fixed.firefly_size ?? 0.013, '0.001', '0')}
+      ${numRow('firefly_expand_s', 'firefly_expand_secs', fixed.firefly_expand_secs ?? 1.5, '0.1', '0')}
+    </div>
   </div>`;
 }
 
@@ -1280,6 +1313,9 @@ function attachEvents() {
       } else if (field === 'random_seed') {
         if (!Number.isFinite(val)) val = -1;
         val = Math.trunc(val);
+        e.target.value = val;
+      } else if (field === 'firefly_count') {
+        val = Math.max(0, Math.round(val));
         e.target.value = val;
       }
       levels[sel].fixed[field] = val;
@@ -1542,6 +1578,14 @@ document.getElementById('levelList').addEventListener('click', e => {
   GAME_DEFAULTS = {
     cosine_alignment_to_win: ec.COSINE_ALIGNMENT_TO_WIN,
     decorations_seeds: ec.DECORATIONS_SEEDS,
+  };
+  SCENE_DEFAULTS = {
+    sound_effects_volume: ec.SOUND_EFFECTS_VOLUME ?? 1.0,
+    fog_enabled: ec.FOG_ENABLED ?? true,
+    fog_thickness_base: ec.FOG_THICKNESS_BASE ?? 25.0,
+    firefly_count: ec.FIREFLY_COUNT ?? 200,
+    firefly_size: ec.FIREFLY_SIZE ?? 0.010,
+    firefly_expand_secs: ec.FIREFLY_EXPAND_SECS ?? 1.5,
   };
 
   // Sanity check — drift here means SHAPE_ICONS got out of sync with the Rust

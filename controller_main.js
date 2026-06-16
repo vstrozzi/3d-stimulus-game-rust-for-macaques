@@ -314,6 +314,9 @@ function _newStateScratch() {
     progress_bar_cur_size: 0, progress_bar_size: 0,
     score_bar_value: 0, score_bar_max: 10,
     shake_amplitude: 0, shake_duration: 0,
+    sound_effects_volume: 0, fog_enabled: false,
+    fog_thickness_base: 0, firefly_count: 0,
+    firefly_size: 0, firefly_expand_secs: 0,
   };
 }
 
@@ -579,6 +582,11 @@ function writeGameStateControl(state) {
   v.setUint32(base + o.score_bar_max, state.score_bar_max ?? 10, true);
   v.setUint32(base + o.shake_amplitude, state.shake_amplitude ?? 0, true);
   v.setUint32(base + o.shake_duration, state.shake_duration ?? 0, true);
+  v.setUint32(base + o.sound_effects_volume, state.sound_effects_volume ?? 0, true);
+  v.setUint32(base + o.fog_thickness_base, state.fog_thickness_base ?? 0, true);
+  v.setUint32(base + o.firefly_count, state.firefly_count ?? 0, true);
+  v.setUint32(base + o.firefly_size, state.firefly_size ?? 0, true);
+  v.setUint32(base + o.firefly_expand_secs, state.firefly_expand_secs ?? 0, true);
 
   // Dynamic fields
   if (state.frame_number !== undefined) {
@@ -605,6 +613,7 @@ function writeGameStateControl(state) {
   boolView[base + o.is_blank] = state.is_blank ? 1 : 0;
   boolView[base + o.is_rendering_stopped] = state.is_rendering_stopped ? 1 : 0;
   boolView[base + o.is_scene_ready] = state.is_scene_ready ? 1 : 0;
+  boolView[base + o.fog_enabled] = state.fog_enabled ? 1 : 0;
 
   v.setUint32(base + o.win_time, state.win_time ?? 0, true);
 }
@@ -636,6 +645,22 @@ function writeCurrentStateToControl(state) {
   s.camera_speed_rotate = floatToU32Bits(state.camera_speed_rotate ?? 0);
 
   writeGameStateControl(s);
+}
+
+/**
+ * Stamp the per-level audio + atmosphere config (sound effects volume, fog,
+ * fireflies) onto a control-state object, encoded the way writeGameStateControl
+ * expects (f32 fields as u32 bits; firefly_count raw u32; fog_enabled a bool).
+ * Mirrors the Python controller forwarding these `fixed` fields through SHM.
+ */
+function setSceneConfig(state, level) {
+  const f = level.fixed;
+  state.sound_effects_volume = floatToU32Bits(f.sound_effects_volume ?? 1.0);
+  state.fog_enabled = (f.fog_enabled ?? true) ? true : false;
+  state.fog_thickness_base = floatToU32Bits(f.fog_thickness_base ?? 25.0);
+  state.firefly_count = Math.max(0, Math.round(f.firefly_count ?? 10000));
+  state.firefly_size = floatToU32Bits(f.firefly_size ?? 0.013);
+  state.firefly_expand_secs = floatToU32Bits(f.firefly_expand_secs ?? 1.5);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1338,6 +1363,7 @@ function handleInit(state) {
   trialState.score_bar_max = sbMax;
   trialState.shake_amplitude = floatToU32Bits(level.fixed.shake_amplitude ?? 0.5);
   trialState.shake_duration = floatToU32Bits(level.fixed.shake_duration ?? 1.0);
+  setSceneConfig(trialState, level);
 
   // Read previous game state (to check is_blank / is_rendering_stopped)
   const stateOld = readGameState();
@@ -1682,6 +1708,34 @@ function controllerLoop() {
   if (currentFrame === -1) {
     currentFrame = states[states.length - 1].frame_number;
     console.log(`[FSM] Starting at frame ${currentFrame}`);
+        (function initCanvasDynamic() {
+      const canvas = document.getElementById('game-canvas');
+      const FIXED_W = 1920;
+      const FIXED_H = 1080;
+      
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      
+      if (w === 0 || h === 0) return;
+
+      // 1. Calculate bounding scale
+      const scale = Math.min(FIXED_W / w, FIXED_H / h, 1.0);
+      
+      // 2. Capped internal rendering resolution
+      const targetW = Math.max(Math.round(w * scale), 1);
+      const targetH = Math.max(Math.round(h * scale), 1);
+
+      // 3. Apply exact pixel dimensions inline
+      canvas.style.setProperty('width', `${targetW}px`, 'important');
+      canvas.style.setProperty('height', `${targetH}px`, 'important');
+
+      // 4. Stretch back to fill window
+      const upscale = 1.0 / scale;
+      canvas.style.transform = `scale(${upscale})`;
+
+      // Optional: Log for debugging
+      console.log(`[Init] Canvas dynamically sized to ${targetW}x${targetH} and scaled by ${upscale.toFixed(2)}`);
+    })();
     return;
   }
 
@@ -1729,6 +1783,7 @@ function controllerLoop() {
   state.score_bar_max = sbMaxLoop;
   state.shake_amplitude = floatToU32Bits(currentLevel().fixed.shake_amplitude ?? 0.5);
   state.shake_duration = floatToU32Bits(currentLevel().fixed.shake_duration ?? 1.0);
+  setSceneConfig(state, currentLevel());
 
   writeNoCommands();
 
@@ -2178,6 +2233,12 @@ function backfillLevelDefaults(level) {
   if (level.fixed.score_bar_max == null) level.fixed.score_bar_max = 10;
   if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
   if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;
+  if (level.fixed.sound_effects_volume == null) level.fixed.sound_effects_volume = 1.0;
+  if (level.fixed.fog_enabled == null) level.fixed.fog_enabled = true;
+  if (level.fixed.fog_thickness_base == null) level.fixed.fog_thickness_base = 25.0;
+  if (level.fixed.firefly_count == null) level.fixed.firefly_count = 10000;
+  if (level.fixed.firefly_size == null) level.fixed.firefly_size = 0.013;
+  if (level.fixed.firefly_expand_secs == null) level.fixed.firefly_expand_secs = 1.5;
   for (const obj of (level.objects || [])) {
     if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
   }
@@ -2229,6 +2290,7 @@ async function loadLevels() {
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function start() {
+
   // ── Step 1: Download WASM with progress bar ──────────────────────────────
   setLoadingStep("Downloading game (WASM)...");
   setLoadingProgress(0);
@@ -2255,6 +2317,8 @@ async function start() {
     console.error(e);
     return;
   }
+
+  
 
   // ── Step 2: Instantiate WASM ─────────────────────────────────────────────
   setLoadingStep("Initializing WASM...");

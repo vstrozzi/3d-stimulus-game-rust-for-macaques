@@ -49,11 +49,10 @@ pub struct FireflyState {
 /// pyramid's centroid (height/4).
 const FIREFLY_ORIGIN: Vec3 = Vec3::new(0.0, PYRAMID_HEIGHT * 0.25, 0.0);
 
-/// Attach the distance fog to the persistent camera once at startup.
+/// Attach the distance fog to the persistent camera once at startup. The fog is
+/// always attached; per-level `fog_enabled` is honoured each frame in
+/// `update_fog` (pushing the onset past the wall effectively disables it).
 pub fn setup_fog(mut commands: Commands, camera: Query<Entity, With<PersistentCamera>>) {
-    if !FOG_ENABLED {
-        return;
-    }
     if let Ok(entity) = camera.single() {
         commands.entity(entity).insert(DistanceFog {
             color: FOG_COLOR,
@@ -65,17 +64,25 @@ pub fn setup_fog(mut commands: Commands, camera: Query<Entity, With<PersistentCa
 }
 
 /// Keep the clear bubble centered on the pyramid by deriving the fog onset from
-/// the camera's current distance to the origin.
-pub fn update_fog(mut camera: Query<(&Transform, &mut DistanceFog), With<PersistentCamera>>) {
-    if !FOG_ENABLED {
-        return;
-    }
+/// the camera's current distance to the origin. `fog_enabled` /
+/// `fog_thickness_base` are per-level config read from shared memory.
+pub fn update_fog(
+    local_game_struct: Res<GameStateLocal>,
+    mut camera: Query<(&Transform, &mut DistanceFog), With<PersistentCamera>>,
+) {
     let Ok((transform, mut fog)) = camera.single_mut() else {
         return;
     };
+    let gs = &local_game_struct.0;
+    if !gs.fog_enabled {
+        // Push the fog onset far past the outer wall so nothing is fogged.
+        fog.falloff = FogFalloff::Linear { start: 1.0e9, end: 1.0e9 + 1.0 };
+        return;
+    }
+    let thickness_base = f32::from_bits(gs.fog_thickness_base);
     let dist_to_center = transform.translation.length();
     let start = dist_to_center + FOG_START_RADIUS;
-    let end = start + FOG_THICKNESS_BASE / FOG_DENSITY.max(0.0001);
+    let end = start + thickness_base / FOG_DENSITY.max(0.0001);
     fog.falloff = FogFalloff::Linear { start, end };
 }
 
@@ -95,9 +102,12 @@ pub fn update_fireflies(
 ) {
     let gs = &local_game_struct.0;
     let win_active = gs.is_animating && door_win.color == LIGHT_GREEN && !door_win.animate_all;
+    let firefly_count = gs.firefly_count;
+    let firefly_size = f32::from_bits(gs.firefly_size);
+    let expand_secs = f32::from_bits(gs.firefly_expand_secs);
 
     // Spawn once, at the start of a correct animation.
-    if win_active && !state.active && FIREFLY_COUNT > 0 {
+    if win_active && !state.active && firefly_count > 0 {
         // Burst out of the winning hole's current world position.
         state.origin = door_win
             .winning_light
@@ -110,7 +120,7 @@ pub fn update_fireflies(
             .map(|t| (t.translation() - state.origin).normalize_or_zero())
             .unwrap_or(Vec3::Y);
         state.waypoint = state.origin + toward_cam * FIREFLY_BURST_TOWARD_CAMERA;
-        spawn_fireflies(&mut commands, &mut meshes, &mut materials, state.origin);
+        spawn_fireflies(&mut commands, &mut meshes, &mut materials, state.origin, firefly_count, firefly_size);
         state.active = true;
         state.spawn_secs = time.elapsed_secs();
     }
@@ -129,7 +139,7 @@ pub fn update_fireflies(
     }
 
     let t = time.elapsed_secs();
-    let p = ((t - state.spawn_secs) / FIREFLY_EXPAND_SECS.max(0.0001)).clamp(0.0, 1.0);
+    let p = ((t - state.spawn_secs) / expand_secs.max(0.0001)).clamp(0.0, 1.0);
     // Scale grows in over the whole burst (ease-out).
     let grow = 1.0 - (1.0 - p).powi(3);
     let ease_out = |x: f32| 1.0 - (1.0 - x).powi(3);
@@ -162,8 +172,10 @@ fn spawn_fireflies(
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
     origin: Vec3,
+    firefly_count: u32,
+    firefly_size: f32,
 ) {
-    let mesh = meshes.add(Sphere::new(FIREFLY_SIZE));
+    let mesh = meshes.add(Sphere::new(firefly_size));
     let glow = FIREFLY_COLOR.to_linear();
     let material = materials.add(StandardMaterial {
         base_color: FIREFLY_COLOR,
@@ -178,11 +190,11 @@ fn spawn_fireflies(
     });
 
     // Clamp the band so no firefly spawns at or beyond the wall.
-    let max_radius = (WALL_RADIUS - FIREFLY_SIZE).min(FIREFLY_RADIUS + FIREFLY_SPREAD);
+    let max_radius = (WALL_RADIUS - firefly_size).min(FIREFLY_RADIUS + FIREFLY_SPREAD);
     let min_radius = (FIREFLY_RADIUS - FIREFLY_SPREAD).max(0.0);
 
     let mut rng = rand::rng();
-    for _ in 0..FIREFLY_COUNT {
+    for _ in 0..firefly_count {
         let angle = rng.random_range(0.0..TAU);
         let radius = rng.random_range(min_radius..=max_radius);
         let base = Vec3::new(

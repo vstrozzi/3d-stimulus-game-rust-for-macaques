@@ -83,8 +83,9 @@ pub fn controller_constants() -> JsValue {
 #[wasm_bindgen]
 pub fn editor_constants() -> JsValue {
     use crate::constants::{
-        camera_3d_constants as cam, controller_constants as cc, game_constants as gc,
-        lighting_constants as light, pyramid_constants as pyr,
+        camera_3d_constants as cam, controller_constants as cc, fog_constants as fog,
+        game_constants as gc, lighting_constants as light, pyramid_constants as pyr,
+        sound_constants as snd,
     };
 
     let obj = js_sys::Object::new();
@@ -138,6 +139,14 @@ pub fn editor_constants() -> JsValue {
     );
     set("N_FACES", JsValue::from_f64(cc::N_FACES as f64));
     set("N_START_ORIENTS", JsValue::from_f64(cc::N_START_ORIENTS as f64));
+
+    // Audio + atmosphere per-level defaults (mirrors SharedGameState::new()).
+    set("SOUND_EFFECTS_VOLUME", JsValue::from_f64(snd::SOUND_EFFECTS_VOLUME as f64));
+    set("FOG_ENABLED", JsValue::from_bool(fog::FOG_ENABLED));
+    set("FOG_THICKNESS_BASE", JsValue::from_f64(fog::FOG_THICKNESS_BASE as f64));
+    set("FIREFLY_COUNT", JsValue::from_f64(fog::FIREFLY_COUNT as f64));
+    set("FIREFLY_SIZE", JsValue::from_f64(fog::FIREFLY_SIZE as f64));
+    set("FIREFLY_EXPAND_SECS", JsValue::from_f64(fog::FIREFLY_EXPAND_SECS as f64));
 
     // Per-face arrays (length N_FACES). Editor uses these to populate a new
     // object's default shape/size/count/color/seed values.
@@ -345,6 +354,12 @@ impl WebSharedMemory {
         set("score_bar_max", off!(gs.score_bar_max));
         set("shake_amplitude", off!(gs.shake_amplitude));
         set("shake_duration", off!(gs.shake_duration));
+        set("sound_effects_volume", off!(gs.sound_effects_volume));
+        set("fog_enabled", off!(gs.fog_enabled));
+        set("fog_thickness_base", off!(gs.fog_thickness_base));
+        set("firefly_count", off!(gs.firefly_count));
+        set("firefly_size", off!(gs.firefly_size));
+        set("firefly_expand_secs", off!(gs.firefly_expand_secs));
 
         // Dynamic fields
         set("frame_number",       off!(gs.frame_number));
@@ -449,6 +464,12 @@ impl WebSharedMemory {
         set_u32("score_bar_max", def.score_bar_max.load(Relaxed));
         set_u32("shake_amplitude", def.shake_amplitude.load(Relaxed));
         set_u32("shake_duration", def.shake_duration.load(Relaxed));
+        set_u32("sound_effects_volume", def.sound_effects_volume.load(Relaxed));
+        set_bool("fog_enabled", def.fog_enabled.load(Relaxed));
+        set_u32("fog_thickness_base", def.fog_thickness_base.load(Relaxed));
+        set_u32("firefly_count", def.firefly_count.load(Relaxed));
+        set_u32("firefly_size", def.firefly_size.load(Relaxed));
+        set_u32("firefly_expand_secs", def.firefly_expand_secs.load(Relaxed));
 
         set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
         set_f64("render_frame_number", def.render_frame_number.load(Relaxed) as f64);

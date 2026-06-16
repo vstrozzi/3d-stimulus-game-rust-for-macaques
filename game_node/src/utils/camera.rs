@@ -129,10 +129,9 @@ pub fn setup_fixed_resolution(
     mut target: ResMut<RenderTargetImage>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut camera_q: Query<&mut RenderTarget, With<PersistentCamera>>,
-    active: Res<FixedFullscreenActive>,
     mut done: Local<bool>,
 ) {
-    if !RENDER_AT_FIXED_RESOLUTION || *done || active.0 {
+    if !RENDER_AT_FIXED_RESOLUTION || *done {
         return;
     }
     let Ok(window) = windows.single() else { return };

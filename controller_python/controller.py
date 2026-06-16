@@ -177,6 +177,12 @@ FIXED_FIELDS = {
     "camera_speed_rotate",
     "camera_rotation_sense",
     "camera_y",
+    "sound_effects_volume",
+    "fog_enabled",
+    "fog_thickness_base",
+    "firefly_count",
+    "firefly_size",
+    "firefly_expand_secs",
 }
 
 
@@ -221,6 +227,12 @@ def _backfill_level_defaults(level):
     fixed.setdefault("score_bar_max", 10)
     fixed.setdefault("shake_amplitude", 0.5)
     fixed.setdefault("shake_duration", 1.0)
+    fixed.setdefault("sound_effects_volume", 1.0)
+    fixed.setdefault("fog_enabled", True)
+    fixed.setdefault("fog_thickness_base", 25.0)
+    fixed.setdefault("firefly_count", 10000)
+    fixed.setdefault("firefly_size", 0.013)
+    fixed.setdefault("firefly_expand_secs", 1.5)
     for obj in level.get("objects", []):
         obj.setdefault("decorations_rotation", [0, 0, 0])
     for trial in level.get("trials", []):

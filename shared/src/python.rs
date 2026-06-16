@@ -197,6 +197,12 @@ impl SharedMemoryWrapper {
         score_bar_max: u32,
         shake_amplitude: f32,
         shake_duration: f32,
+        sound_effects_volume: f32,
+        fog_enabled: bool,
+        fog_thickness_base: f32,
+        firefly_count: u32,
+        firefly_size: f32,
+        firefly_expand_secs: f32,
         frame_number: u64,
         elapsed_secs: f32,
         camera_radius: f32,
@@ -277,6 +283,12 @@ impl SharedMemoryWrapper {
         gs.score_bar_max.store(score_bar_max, Ordering::Relaxed);
         gs.shake_amplitude.store(shake_amplitude.to_bits(), Ordering::Relaxed);
         gs.shake_duration.store(shake_duration.to_bits(), Ordering::Relaxed);
+        gs.sound_effects_volume.store(sound_effects_volume.to_bits(), Ordering::Relaxed);
+        gs.fog_enabled.store(fog_enabled, Ordering::Relaxed);
+        gs.fog_thickness_base.store(fog_thickness_base.to_bits(), Ordering::Relaxed);
+        gs.firefly_count.store(firefly_count, Ordering::Relaxed);
+        gs.firefly_size.store(firefly_size.to_bits(), Ordering::Relaxed);
+        gs.firefly_expand_secs.store(firefly_expand_secs.to_bits(), Ordering::Relaxed);
 
         gs.frame_number.store(frame_number, Ordering::Relaxed);
         gs.elapsed_secs.store(elapsed_secs.to_bits(), Ordering::Relaxed);
@@ -385,6 +397,12 @@ impl SharedMemoryWrapper {
             dict.set_item("score_bar_max", gs.score_bar_max.load(Ordering::Relaxed))?;
             dict.set_item("shake_amplitude", f32::from_bits(gs.shake_amplitude.load(Ordering::Relaxed)))?;
             dict.set_item("shake_duration", f32::from_bits(gs.shake_duration.load(Ordering::Relaxed)))?;
+            dict.set_item("sound_effects_volume", f32::from_bits(gs.sound_effects_volume.load(Ordering::Relaxed)))?;
+            dict.set_item("fog_enabled", gs.fog_enabled.load(Ordering::Relaxed))?;
+            dict.set_item("fog_thickness_base", f32::from_bits(gs.fog_thickness_base.load(Ordering::Relaxed)))?;
+            dict.set_item("firefly_count", gs.firefly_count.load(Ordering::Relaxed))?;
+            dict.set_item("firefly_size", f32::from_bits(gs.firefly_size.load(Ordering::Relaxed)))?;
+            dict.set_item("firefly_expand_secs", f32::from_bits(gs.firefly_expand_secs.load(Ordering::Relaxed)))?;
 
             // Dynamic trials fields
             dict.set_item("frame_number", gs.frame_number.load(Ordering::Relaxed))?;

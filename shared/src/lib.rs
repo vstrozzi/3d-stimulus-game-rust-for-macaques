@@ -179,6 +179,14 @@ macro_rules! shared_game_state {
             pub shake_amplitude: $U32,
             pub shake_duration: $U32,
 
+            // Audio + atmosphere (per-level config).
+            pub sound_effects_volume: $U32,
+            pub fog_enabled: $B,
+            pub fog_thickness_base: $U32,
+            pub firefly_count: $U32,
+            pub firefly_size: $U32,
+            pub firefly_expand_secs: $U32,
+
             // Dynamic trials fields
             pub frame_number: $U64,
             pub render_frame_number: $U64,
@@ -320,6 +328,13 @@ impl SharedGameState {
             shake_amplitude: AtomicU32::new(constants::game_constants::SHAKE_AMPLITUDE_DEFAULT.to_bits()),
             shake_duration: AtomicU32::new(constants::game_constants::SHAKE_DURATION_DEFAULT.to_bits()),
 
+            sound_effects_volume: AtomicU32::new(constants::sound_constants::SOUND_EFFECTS_VOLUME.to_bits()),
+            fog_enabled: AtomicBool::new(constants::fog_constants::FOG_ENABLED),
+            fog_thickness_base: AtomicU32::new(constants::fog_constants::FOG_THICKNESS_BASE.to_bits()),
+            firefly_count: AtomicU32::new(constants::fog_constants::FIREFLY_COUNT),
+            firefly_size: AtomicU32::new(constants::fog_constants::FIREFLY_SIZE.to_bits()),
+            firefly_expand_secs: AtomicU32::new(constants::fog_constants::FIREFLY_EXPAND_SECS.to_bits()),
+
             // Dynamic trials fields
             frame_number: AtomicU64::new(0),
             render_frame_number: AtomicU64::new(0),
@@ -381,6 +396,12 @@ impl SharedGameState {
         self.score_bar_max.store(other.score_bar_max.load(Ordering::Relaxed), Ordering::Relaxed);
         self.shake_amplitude.store(other.shake_amplitude.load(Ordering::Relaxed), Ordering::Relaxed);
         self.shake_duration.store(other.shake_duration.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.sound_effects_volume.store(other.sound_effects_volume.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.fog_enabled.store(other.fog_enabled.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.fog_thickness_base.store(other.fog_thickness_base.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.firefly_count.store(other.firefly_count.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.firefly_size.store(other.firefly_size.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.firefly_expand_secs.store(other.firefly_expand_secs.load(Ordering::Relaxed), Ordering::Relaxed);
 
         self.frame_number.store(other.frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.render_frame_number.store(other.render_frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -485,6 +506,12 @@ impl SharedGameState {
             score_bar_max: self.score_bar_max.load(Ordering::Relaxed),
             shake_amplitude: self.shake_amplitude.load(Ordering::Relaxed),
             shake_duration: self.shake_duration.load(Ordering::Relaxed),
+            sound_effects_volume: self.sound_effects_volume.load(Ordering::Relaxed),
+            fog_enabled: self.fog_enabled.load(Ordering::Relaxed),
+            fog_thickness_base: self.fog_thickness_base.load(Ordering::Relaxed),
+            firefly_count: self.firefly_count.load(Ordering::Relaxed),
+            firefly_size: self.firefly_size.load(Ordering::Relaxed),
+            firefly_expand_secs: self.firefly_expand_secs.load(Ordering::Relaxed),
             frame_number: self.frame_number.load(Ordering::Relaxed),
             render_frame_number: self.render_frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
@@ -540,6 +567,12 @@ impl SharedGameState {
         self.score_bar_max.store(state.score_bar_max, Ordering::Relaxed);
         self.shake_amplitude.store(state.shake_amplitude, Ordering::Relaxed);
         self.shake_duration.store(state.shake_duration, Ordering::Relaxed);
+        self.sound_effects_volume.store(state.sound_effects_volume, Ordering::Relaxed);
+        self.fog_enabled.store(state.fog_enabled, Ordering::Relaxed);
+        self.fog_thickness_base.store(state.fog_thickness_base, Ordering::Relaxed);
+        self.firefly_count.store(state.firefly_count, Ordering::Relaxed);
+        self.firefly_size.store(state.firefly_size, Ordering::Relaxed);
+        self.firefly_expand_secs.store(state.firefly_expand_secs, Ordering::Relaxed);
         self.frame_number.store(state.frame_number, Ordering::Relaxed);
         self.render_frame_number.store(state.render_frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);

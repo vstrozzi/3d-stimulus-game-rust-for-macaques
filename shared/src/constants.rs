@@ -248,17 +248,17 @@ pub mod fog_constants {
     /// expansion the fireflies shoot `FIREFLY_BURST_TOWARD_CAMERA` world units
     /// from the hole toward the player camera; the rest of the time they fan
     /// out to their resting positions.
-    pub const FIREFLY_BURST_PHASE1: f32 = 1.0 / 3.0;
-    pub const FIREFLY_BURST_TOWARD_CAMERA: f32 = 1.0;
+    pub const FIREFLY_BURST_PHASE1: f32 = 1.0 / 5.0;
+    pub const FIREFLY_BURST_TOWARD_CAMERA: f32 = 2.0;
 
     /// Particle size (world units).
-    pub const FIREFLY_SIZE: f32 = 0.013;
+    pub const FIREFLY_SIZE: f32 = 0.010;
 
     /// Emissive boost applied to `FIREFLY_COLOR` so the motes glow.
     pub const FIREFLY_GLOW: f32 = 500.0;
 
     /// Gold emissive color of the fireflies.
-    pub const FIREFLY_COLOR: Color = Color::srgb(1.0, 0.78, 0.25);
+    pub const FIREFLY_COLOR: Color = crate::constants::pyramid_constants::LIGHT_GREEN;
 }
 
 /// Lighting constants

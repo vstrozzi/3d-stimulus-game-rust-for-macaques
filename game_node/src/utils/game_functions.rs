@@ -8,7 +8,7 @@ use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
 use shared::constants::pyramid_constants::LIGHT_GREEN;
 use shared::constants::lighting_constants::{FAINT_ALIGNED_INTENSITY_FACTOR,FAINT_ALIGNED_SPOTLIGHT_FACTOR, FAINT_ALIGNED_SPOTLIGHT_RANGE,HOLE_SPOTLIGHT_RANGE
 };
-use shared::constants::sound_constants::{ENABLE_SOUND_EFFECTS, SOUND_EFFECTS_VOLUME};
+use shared::constants::sound_constants::ENABLE_SOUND_EFFECTS;
 
 /// Handles the light animation
 pub fn handle_door_animation(
@@ -42,6 +42,8 @@ pub fn handle_door_animation(
     let fade_out_end = f32::from_bits(gs_game.door_anim_fade_out);
     let stay_open_end = fade_out_end + f32::from_bits(gs_game.door_anim_stay_open);
     let fade_in_end = stay_open_end + f32::from_bits(gs_game.door_anim_fade_in);
+    // Per-level one-shot effects volume from SHM.
+    let sfx_volume = f32::from_bits(gs_game.sound_effects_volume);
 
     // Cleanup if animation is finished
     let is_finished = elapsed >= fade_in_end;
@@ -77,7 +79,7 @@ pub fn handle_door_animation(
         if !door_win_entities.phase_sound_played {
             door_win_entities.phase_sound_played = true;
             if ENABLE_SOUND_EFFECTS {
-                let settings = PlaybackSettings::ONCE.with_volume(Volume::Linear(SOUND_EFFECTS_VOLUME));
+                let settings = PlaybackSettings::ONCE.with_volume(Volume::Linear(sfx_volume));
                 // Green light => win sound, otherwise => hint sound.
                 let clip = if door_win_entities.color == LIGHT_GREEN { sounds.win.clone() } else { sounds.hint.clone() };
                 let e = commands.spawn((AudioPlayer::new(clip), settings)).id();
@@ -101,7 +103,7 @@ pub fn handle_door_animation(
     // configured effects volume.
     for eq in door_win_entities.active_sounds.iter() {
         if let Ok(mut sink) = sink_query.get_mut(*eq) {
-            let volume = SOUND_EFFECTS_VOLUME * ((fade_in_end - elapsed) / 0.5).clamp(0.0, 1.0);
+            let volume = sfx_volume * ((fade_in_end - elapsed) / 0.5).clamp(0.0, 1.0);
             sink.set_volume(Volume::Linear(volume));
         }
     }

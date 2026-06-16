@@ -1299,6 +1299,12 @@ function checkHasFinished(state) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function handleInit(state) {
+  // Wait for the game's startup countdown to finish before issuing reset —
+  // otherwise the end-of-countdown despawn-all would wipe the freshly spawned
+  // pyramid (empty scene). The game draws its own black loading + 3/2/1
+  // countdown screen during this wait, so nothing extra is shown here.
+  if (!state.is_scene_ready) return;
+
   console.log("[FSM] INIT → issuing toggle_blank + toggle_stop_rendering");
 
   const trialCfg = flatTrial();
@@ -2375,9 +2381,11 @@ async function start() {
 
 
   _running = true;
-  setLoadingStep("Ready!");
-  setLoadingProgress(100);
-  // Small delay so "Ready!" is visible, then hide the overlay
+  // WASM is up and the game now renders its own black loading + 3/2/1 countdown
+  // screen. Hand off to it (hide our overlay) so the countdown is visible. The
+  // text matches what the game draws underneath, so the handoff is seamless.
+  setLoadingStep("Loading textures…");
+  setLoadingProgress(-1);
   setTimeout(hideLoadingOverlay, 300);
 
 

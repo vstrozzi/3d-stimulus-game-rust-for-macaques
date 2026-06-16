@@ -994,6 +994,11 @@ class MonkeyGameController:
 
     # FSM handlers (command logic unchanged)
     def _handle_init(self):
+        # Wait for the game's startup countdown to finish before issuing reset.
+        # Otherwise the end-of-countdown despawn-all (check_scene_ready) wipes
+        # the trial pyramid we just spawned, leaving an empty scene on trial 0.
+        if not self.current_state.get("is_scene_ready", False):
+            return
         print("[FSM] INIT → issuing blank_screen + stop_rendering + load trial")
         flat = self.flat_trial
         print(f"[FSM] Level {self.current_level_index} chain {self.active_chain} "

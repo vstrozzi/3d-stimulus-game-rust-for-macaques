@@ -55,7 +55,7 @@ use crate::{
     },
     utils::{
         debug_functions::DebugFunctionsPlugin,
-        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions, PreloadedTextures, RenderTargetImage},
+        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions, PreloadedTextures, RenderTargetImage, FixedFullscreenActive},
         systems_logic::SystemsLogicPlugin,
     },
 };
@@ -118,7 +118,8 @@ pub fn build_app() -> App {
     .insert_resource(crate::utils::warmup::WarmupState::default())
     .insert_resource(crate::utils::objects::CameraShakeState::default())
     .insert_resource(crate::utils::objects::LoadingCountdown::default())
-    .insert_resource(RenderTargetImage::default());
+    .insert_resource(RenderTargetImage::default())
+    .insert_resource(FixedFullscreenActive::default());
 
     app
 }

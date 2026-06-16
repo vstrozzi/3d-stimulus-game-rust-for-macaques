@@ -224,11 +224,41 @@ pub fn check_scene_ready(
         return;
     }
 
+    // Black full-screen overlay, spawned once on the first frame so the canvas
+    // is covered (with text) during warmup + texture upload — before the
+    // countdown. The same text entity then shows the 3/2/1 numbers once the
+    // countdown starts (Phase 2), so the screen stays black throughout loading.
+    if countdown.overlay.is_none() {
+        let overlay = commands.spawn((
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                position_type: PositionType::Absolute,
+                left: Val::Px(0.0),
+                top: Val::Px(0.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::BLACK),
+            GlobalZIndex(2000),
+        )).with_children(|parent| {
+            parent.spawn((
+                Text::new("Loading textures"),
+                TextFont { font_size: 64.0, ..default() },
+                TextColor(Color::WHITE),
+                LoadingCountdownText,
+            ));
+        }).id();
+        countdown.overlay = Some(overlay);
+    }
+
     if !warmup.complete {
         return;
     }
 
-    // Phase 1: wait for all assets, then start the countdown.
+    // Phase 1: wait for all assets, then start the countdown. The overlay
+    // already exists; Phase 2 swaps its "Loading textures…" text to the number.
     if countdown.start.is_none() {
         use shared::Texture;
         let gs = &local_game_struct.0;
@@ -245,30 +275,6 @@ pub fn check_scene_ready(
         }
 
         countdown.start = Some(time.elapsed());
-
-        // Black overlay with the countdown number centered.
-        let overlay = commands.spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                position_type: PositionType::Absolute,
-                left: Val::Px(0.0),
-                top: Val::Px(0.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            BackgroundColor(Color::BLACK),
-            GlobalZIndex(2000),
-        )).with_children(|parent| {
-            parent.spawn((
-                Text::new(format!("{}", LOADING_COUNTDOWN_SECS as i32)),
-                TextFont { font_size: 120.0, ..default() },
-                TextColor(Color::WHITE),
-                LoadingCountdownText,
-            ));
-        }).id();
-        countdown.overlay = Some(overlay);
 
         // Fake pyramid (a GameEntity, cleaned up at the end) to warm the path.
         let config = build_pyramid_config(&local_game_struct.0);

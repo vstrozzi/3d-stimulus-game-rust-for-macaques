@@ -149,6 +149,13 @@ pub struct RenderTargetImage {
     pub height: u32,
 }
 
+/// Set true once exclusive-fullscreen downscaling has been applied, so the
+/// offscreen render-to-texture path (`setup_fixed_resolution`) stays disabled
+/// — the window itself is already at the capped resolution. Stays false on web
+/// and when no suitable video mode exists, leaving the offscreen path active.
+#[derive(Resource, Default)]
+pub struct FixedFullscreenActive(pub bool);
+
 /// Marker for the native-resolution 2D camera that draws the upscaled
 /// backdrop and the UI on top.
 #[derive(Component)]

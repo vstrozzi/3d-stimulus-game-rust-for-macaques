@@ -67,9 +67,13 @@ pub mod render_constants {
     /// sharpness of the 3D scene for a stable, lower GPU cost.
     pub const RENDER_AT_FIXED_RESOLUTION: bool = true;
 
-    /// Internal render height in pixels. Width is derived from the display
-    /// aspect ratio (no distortion, no letterboxing). Capped at the native
-    /// height so we never render at more than native resolution.
+    /// Internal render target bounding box, in pixels. The 3D scene is scaled
+    /// to fit inside `FIXED_RENDER_WIDTH` × `FIXED_RENDER_HEIGHT` while keeping
+    /// the display aspect ratio (no distortion, no letterboxing). Bounding
+    /// *both* dimensions caps the pixel count on wide displays — capping height
+    /// alone let the width (and GPU cost) balloon on ultrawide / high-res
+    /// monitors. Scale is clamped to <= 1 so we never render above native.
+    pub const FIXED_RENDER_WIDTH: u32 = 1920;
     pub const FIXED_RENDER_HEIGHT: u32 = 1080;
 }
 

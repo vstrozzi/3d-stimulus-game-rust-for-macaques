@@ -93,7 +93,13 @@ impl Plugin for SystemsLogicPlugin {
                 increment_timing,
                 update_shared_memory_local,
                 write_shared_memory_game_state).chain()
-            );  
+            );
+
+        // Native: switch to exclusive fullscreen at a capped, aspect-matched
+        // video mode so the whole pipeline runs at ~1080p (web stays on the
+        // offscreen render path above).
+        #[cfg(not(target_arch = "wasm32"))]
+        app.add_systems(Update, crate::utils::camera::setup_fixed_fullscreen);
     }
 }
 

@@ -8,7 +8,7 @@ use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::helpers::spawn_blank_screen;
 use crate::utils::setup::build_pyramid_config;
 use shared::constants::game_constants::LOADING_COUNTDOWN_SECS;
-use shared::constants::sound_constants::{ENABLE_BACKGROUND_MUSIC, BACKGROUND_MUSIC_VOLUME};
+use shared::constants::sound_constants::ENABLE_BACKGROUND_MUSIC;
 
 
 /// Holds all loaded handles for one PBR texture set
@@ -324,12 +324,33 @@ pub fn check_scene_ready(
     }
 
     // Unmute the looping background music now that the countdown is over.
+    // Per-level volume is then kept in sync by `update_background_music_volume`.
     if let Some(music) = countdown.music {
         if let Ok(mut sink) = sink_query.get_mut(music) {
-            sink.set_volume(Volume::Linear(BACKGROUND_MUSIC_VOLUME));
+            sink.set_volume(Volume::Linear(f32::from_bits(local_game_struct.0.background_music_volume)));
         }
     }
 
     // Allow game to start
     game_conditions.is_scene_ready = true;
+}
+
+/// Keep the looping background-music volume synced to the per-level
+/// `background_music_volume` (written by the controller into shared memory).
+/// Runs every frame so a new level's value takes effect at its trial reset.
+pub fn update_background_music_volume(
+    game_conditions: Res<GameConditions>,
+    countdown: Res<LoadingCountdown>,
+    local_game_struct: Res<GameStateLocal>,
+    mut sink_query: Query<&mut AudioSink>,
+) {
+    // Stay silent during warmup/countdown (the music is intentionally muted then);
+    // check_scene_ready unmutes it at handoff. Only track the level value after.
+    if !game_conditions.is_scene_ready {
+        return;
+    }
+    let Some(music) = countdown.music else { return };
+    if let Ok(mut sink) = sink_query.get_mut(music) {
+        sink.set_volume(Volume::Linear(f32::from_bits(local_game_struct.0.background_music_volume)));
+    }
 }

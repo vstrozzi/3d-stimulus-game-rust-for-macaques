@@ -314,7 +314,7 @@ function _newStateScratch() {
     progress_bar_cur_size: 0, progress_bar_size: 0,
     score_bar_value: 0, score_bar_max: 10,
     shake_amplitude: 0, shake_duration: 0,
-    sound_effects_volume: 0, fog_enabled: false,
+    sound_effects_volume: 0, background_music_volume: 0, fog_enabled: false,
     fog_thickness_base: 0, firefly_count: 0,
     firefly_size: 0, firefly_expand_secs: 0,
   };
@@ -583,6 +583,7 @@ function writeGameStateControl(state) {
   v.setUint32(base + o.shake_amplitude, state.shake_amplitude ?? 0, true);
   v.setUint32(base + o.shake_duration, state.shake_duration ?? 0, true);
   v.setUint32(base + o.sound_effects_volume, state.sound_effects_volume ?? 0, true);
+  v.setUint32(base + o.background_music_volume, state.background_music_volume ?? 0, true);
   v.setUint32(base + o.fog_thickness_base, state.fog_thickness_base ?? 0, true);
   v.setUint32(base + o.firefly_count, state.firefly_count ?? 0, true);
   v.setUint32(base + o.firefly_size, state.firefly_size ?? 0, true);
@@ -656,6 +657,7 @@ function writeCurrentStateToControl(state) {
 function setSceneConfig(state, level) {
   const f = level.fixed;
   state.sound_effects_volume = floatToU32Bits(f.sound_effects_volume ?? 1.0);
+  state.background_music_volume = floatToU32Bits(f.background_music_volume ?? 0.20);
   state.fog_enabled = (f.fog_enabled ?? true) ? true : false;
   state.fog_thickness_base = floatToU32Bits(f.fog_thickness_base ?? 25.0);
   state.firefly_count = Math.max(0, Math.round(f.firefly_count ?? 10000));
@@ -1708,34 +1710,6 @@ function controllerLoop() {
   if (currentFrame === -1) {
     currentFrame = states[states.length - 1].frame_number;
     console.log(`[FSM] Starting at frame ${currentFrame}`);
-        (function initCanvasDynamic() {
-      const canvas = document.getElementById('game-canvas');
-      const FIXED_W = 1920;
-      const FIXED_H = 1080;
-      
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      
-      if (w === 0 || h === 0) return;
-
-      // 1. Calculate bounding scale
-      const scale = Math.min(FIXED_W / w, FIXED_H / h, 1.0);
-      
-      // 2. Capped internal rendering resolution
-      const targetW = Math.max(Math.round(w * scale), 1);
-      const targetH = Math.max(Math.round(h * scale), 1);
-
-      // 3. Apply exact pixel dimensions inline
-      canvas.style.setProperty('width', `${targetW}px`, 'important');
-      canvas.style.setProperty('height', `${targetH}px`, 'important');
-
-      // 4. Stretch back to fill window
-      const upscale = 1.0 / scale;
-      canvas.style.transform = `scale(${upscale})`;
-
-      // Optional: Log for debugging
-      console.log(`[Init] Canvas dynamically sized to ${targetW}x${targetH} and scaled by ${upscale.toFixed(2)}`);
-    })();
     return;
   }
 
@@ -2234,6 +2208,7 @@ function backfillLevelDefaults(level) {
   if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
   if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;
   if (level.fixed.sound_effects_volume == null) level.fixed.sound_effects_volume = 1.0;
+  if (level.fixed.background_music_volume == null) level.fixed.background_music_volume = 0.20;
   if (level.fixed.fog_enabled == null) level.fixed.fog_enabled = true;
   if (level.fixed.fog_thickness_base == null) level.fixed.fog_thickness_base = 25.0;
   if (level.fixed.firefly_count == null) level.fixed.firefly_count = 10000;

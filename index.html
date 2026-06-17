@@ -135,15 +135,23 @@
   body:has(#game-root:not([hidden])) { background: #000; }
 
   /* ── Game canvas (Bevy renders here) ─────────────────────────────── */
-  #game-canvas {
-      background: #000;
+  /* The wrapper is sized by fitCanvas() to the capped render resolution
+     (≤1920x1080) and CSS-scaled up to fill the window. Bevy's
+     fit_canvas_to_parent sizes the canvas backing buffer to this wrapper,
+     so the swapchain/UI never exceed ~1080p — the browser compositor does
+     the final upscale for free. Keeps perf flat on >1080p external displays
+     (mirroring-like), pixel-perfect on a 1080p display. */
+  #canvas-wrap {
       position: absolute;
       top: 0; left: 0;
+      transform-origin: top left;
+    }
+  #game-canvas {
+      background: #000;
+      display: block;
       width: 100% !important;
       height: 100% !important;
-      display: block;
       cursor: none;
-      transform-origin: top left;
     }
 
   /* ── START TRIAL overlay ─────────────────────────────────────────── */
@@ -339,7 +347,7 @@
 
 <!-- ─────────────────── GAME (hidden until Play pressed) ─────────────────── -->
 <div id="game-root" hidden>
-  <canvas id="game-canvas"></canvas>
+  <div id="canvas-wrap"><canvas id="game-canvas"></canvas></div>
 
   <div id="loading-overlay">
     <div class="loading-box">
@@ -448,6 +456,7 @@
     _gameBooted = true;
     landingRoot.hidden = true;
     gameRoot.hidden = false;
+    fitCanvas();
     // Inject JSZip then the controller module. The controller's start()
     // runs on module load and begins the WASM download — at this point
     // we are already fullscreen, so the loading bar appears inside it.
@@ -504,55 +513,31 @@
     requestFullscreenForLanding();
   });
 
-  // ── Dynamic Hardware-Accelerated Upscaling ──────────────────────────
-  const canvas = document.getElementById('game-canvas');
-  const FIXED_W = 1920;
-  const FIXED_H = 1080;
-
-  const INITIAL_W = window.innerWidth;
-  const INITIAL_H = window.innerHeight;
-
-  function updateCanvasScale() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    console.log(`updateCanvasScale: window size ${w}x${h}`);
-    
-    if (w === 0 || h === 0) return;
-
-    // 1. Calculate bounding scale
-    const scale = Math.min(FIXED_W / w, FIXED_H / h, 1.0);
-    
-    // 2. Capped internal rendering resolution
-    const targetW = Math.max(Math.round(w * scale), 1);
-    const targetH = Math.max(Math.round(h * scale), 1);
-
-    // 3. Force Bevy/Winit to allocate exactly this many pixels
-    canvas.style.setProperty('width', `${targetW}px`, 'important');
-    canvas.style.setProperty('height', `${targetH}px`, 'important');
-
-    // 4. Stretch it back to exactly fill the window
-    const upscale = 1.0 / scale;
-
-    console.log(`updateCanvasScale: target ${targetW}x${targetH}, upscale ${upscale}`);
-    canvas.style.transform = `scale(${upscale})`;
+  // ── Capped-resolution canvas (mirroring-like perf) ──────────────────
+  // Size #canvas-wrap to the largest box that fits inside 1920x1080 at the
+  // window's aspect ratio, then scale it up to fill the window. Bevy's
+  // fit_canvas_to_parent allocates the canvas backing buffer (× dPR) to the
+  // wrapper, capping the swapchain + UI at ~1080p. Re-runs on every layout
+  // change so resizing/moving the window actually resizes the game.
+  function fitCanvas() {
+    const wrap = document.getElementById('canvas-wrap');
+    if (!wrap) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    if (!w || !h) return;
+    const FIXED_W = 1920, FIXED_H = 1080;
+    const scale = Math.min(FIXED_W / w, FIXED_H / h, 1);
+    wrap.style.width = Math.max(Math.round(w * scale), 1) + 'px';
+    wrap.style.height = Math.max(Math.round(h * scale), 1) + 'px';
+    wrap.style.transform = `scale(${1 / scale})`;
   }
-
-  // Use a ResizeObserver to catch the exact frame the layout changes
-  const resizeObserver = new ResizeObserver(() => updateCanvasScale());
-  resizeObserver.observe(document.body);
-
-  // Catch OS-level window resizes and fullscreen transitions
-  document.addEventListener('fullscreenchange', updateCanvasScale);
-  document.addEventListener('webkitfullscreenchange', updateCanvasScale);
-  screen.orientation?.addEventListener('change', updateCanvasScale); // Catch mobile rotations
-
-  updateCanvasScale(); // Initial run
-
-  window.addEventListener('resize', updateCanvasScale);
-  updateCanvasScale(); // Run immediately on startup
+  new ResizeObserver(fitCanvas).observe(document.body);
+  window.addEventListener('resize', fitCanvas);
+  document.addEventListener('fullscreenchange', fitCanvas);
+  document.addEventListener('webkitfullscreenchange', fitCanvas);
+  screen.orientation?.addEventListener('change', fitCanvas);
+  fitCanvas();
 
   setPlayLabelForState();
-  updateCanvasScale();
 </script>
 </body>
 </html>

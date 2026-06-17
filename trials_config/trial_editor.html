@@ -526,6 +526,7 @@ function defaultLevel(nObjects = 2) {
       shake_amplitude: 0.5,
       shake_duration: 1.0,
       sound_effects_volume: SCENE_DEFAULTS.sound_effects_volume,
+      background_music_volume: SCENE_DEFAULTS.background_music_volume,
       fog_enabled: SCENE_DEFAULTS.fog_enabled,
       fog_thickness_base: SCENE_DEFAULTS.fog_thickness_base,
       firefly_count: SCENE_DEFAULTS.firefly_count,
@@ -606,6 +607,8 @@ function enforceLevel(lv) {
   f.shake_duration = Math.max(0, f.shake_duration);
   if (f.sound_effects_volume == null) f.sound_effects_volume = SCENE_DEFAULTS.sound_effects_volume;
   f.sound_effects_volume = Math.max(0, f.sound_effects_volume);
+  if (f.background_music_volume == null) f.background_music_volume = SCENE_DEFAULTS.background_music_volume;
+  f.background_music_volume = Math.max(0, f.background_music_volume);
   if (f.fog_enabled == null) f.fog_enabled = SCENE_DEFAULTS.fog_enabled;
   f.fog_enabled = !!f.fog_enabled;
   if (f.fog_thickness_base == null) f.fog_thickness_base = SCENE_DEFAULTS.fog_thickness_base;
@@ -1066,6 +1069,9 @@ function renderFixed(fixed, lv) {
       <div class="fixed-group-title">Scene / Audio</div>
       <div class="fixed-row" title="Linear playback volume for one-shot win/hint sound effects. 1.0 = source level; 0 mutes.">
         ${numRow('sfx_volume', 'sound_effects_volume', fixed.sound_effects_volume ?? 1.0, '0.05', '0')}
+      </div>
+      <div class="fixed-row" title="Linear playback volume for the looping background music. 0 mutes.">
+        ${numRow('music_volume', 'background_music_volume', fixed.background_music_volume ?? 0.20, '0.05', '0')}
       </div>
       <div class="fixed-row" title="Distance fog around the pyramid. Off pushes the fog onset past the wall so nothing is fogged.">
         <label>fog_enabled</label>
@@ -1581,6 +1587,7 @@ document.getElementById('levelList').addEventListener('click', e => {
   };
   SCENE_DEFAULTS = {
     sound_effects_volume: ec.SOUND_EFFECTS_VOLUME ?? 1.0,
+    background_music_volume: ec.BACKGROUND_MUSIC_VOLUME ?? 0.20,
     fog_enabled: ec.FOG_ENABLED ?? true,
     fog_thickness_base: ec.FOG_THICKNESS_BASE ?? 25.0,
     firefly_count: ec.FIREFLY_COUNT ?? 200,

@@ -14,7 +14,7 @@ use crate::utils::game_functions::{
 use crate::utils::setup::setup_environment;
 use crate::utils::fog::{setup_fog, update_fog, update_fireflies, FireflyState};
 use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
-use crate::utils::load_assets::{preload_all_textures, check_scene_ready, load_sounds};
+use crate::utils::load_assets::{preload_all_textures, check_scene_ready, load_sounds, update_background_music_volume};
 use crate::utils::warmup::{spawn_warmup_scene, tick_warmup};
 
 /// Plugin for managing all the game systems.config
@@ -64,6 +64,7 @@ impl Plugin for SystemsLogicPlugin {
             // Check texture readiness each frame (gated on warmup completion);
             // runs the black 3-2-1 countdown before flipping `is_scene_ready`.
             .add_systems(Update, check_scene_ready)
+            .add_systems(Update, update_background_music_volume)
             // Commit the previous render frame's sample at the very top of
             // the new frame (in `First`). 
             .add_systems(First, commit_render_sample)

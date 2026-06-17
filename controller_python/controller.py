@@ -178,6 +178,7 @@ FIXED_FIELDS = {
     "camera_rotation_sense",
     "camera_y",
     "sound_effects_volume",
+    "background_music_volume",
     "fog_enabled",
     "fog_thickness_base",
     "firefly_count",
@@ -228,6 +229,7 @@ def _backfill_level_defaults(level):
     fixed.setdefault("shake_amplitude", 0.5)
     fixed.setdefault("shake_duration", 1.0)
     fixed.setdefault("sound_effects_volume", 1.0)
+    fixed.setdefault("background_music_volume", 0.20)
     fixed.setdefault("fog_enabled", True)
     fixed.setdefault("fog_thickness_base", 25.0)
     fixed.setdefault("firefly_count", 10000)

@@ -198,6 +198,7 @@ impl SharedMemoryWrapper {
         shake_amplitude: f32,
         shake_duration: f32,
         sound_effects_volume: f32,
+        background_music_volume: f32,
         fog_enabled: bool,
         fog_thickness_base: f32,
         firefly_count: u32,
@@ -284,6 +285,7 @@ impl SharedMemoryWrapper {
         gs.shake_amplitude.store(shake_amplitude.to_bits(), Ordering::Relaxed);
         gs.shake_duration.store(shake_duration.to_bits(), Ordering::Relaxed);
         gs.sound_effects_volume.store(sound_effects_volume.to_bits(), Ordering::Relaxed);
+        gs.background_music_volume.store(background_music_volume.to_bits(), Ordering::Relaxed);
         gs.fog_enabled.store(fog_enabled, Ordering::Relaxed);
         gs.fog_thickness_base.store(fog_thickness_base.to_bits(), Ordering::Relaxed);
         gs.firefly_count.store(firefly_count, Ordering::Relaxed);
@@ -398,6 +400,7 @@ impl SharedMemoryWrapper {
             dict.set_item("shake_amplitude", f32::from_bits(gs.shake_amplitude.load(Ordering::Relaxed)))?;
             dict.set_item("shake_duration", f32::from_bits(gs.shake_duration.load(Ordering::Relaxed)))?;
             dict.set_item("sound_effects_volume", f32::from_bits(gs.sound_effects_volume.load(Ordering::Relaxed)))?;
+            dict.set_item("background_music_volume", f32::from_bits(gs.background_music_volume.load(Ordering::Relaxed)))?;
             dict.set_item("fog_enabled", gs.fog_enabled.load(Ordering::Relaxed))?;
             dict.set_item("fog_thickness_base", f32::from_bits(gs.fog_thickness_base.load(Ordering::Relaxed)))?;
             dict.set_item("firefly_count", gs.firefly_count.load(Ordering::Relaxed))?;

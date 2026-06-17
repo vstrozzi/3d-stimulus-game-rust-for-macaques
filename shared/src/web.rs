@@ -142,6 +142,7 @@ pub fn editor_constants() -> JsValue {
 
     // Audio + atmosphere per-level defaults (mirrors SharedGameState::new()).
     set("SOUND_EFFECTS_VOLUME", JsValue::from_f64(snd::SOUND_EFFECTS_VOLUME as f64));
+    set("BACKGROUND_MUSIC_VOLUME", JsValue::from_f64(snd::BACKGROUND_MUSIC_VOLUME as f64));
     set("FOG_ENABLED", JsValue::from_bool(fog::FOG_ENABLED));
     set("FOG_THICKNESS_BASE", JsValue::from_f64(fog::FOG_THICKNESS_BASE as f64));
     set("FIREFLY_COUNT", JsValue::from_f64(fog::FIREFLY_COUNT as f64));
@@ -355,6 +356,7 @@ impl WebSharedMemory {
         set("shake_amplitude", off!(gs.shake_amplitude));
         set("shake_duration", off!(gs.shake_duration));
         set("sound_effects_volume", off!(gs.sound_effects_volume));
+        set("background_music_volume", off!(gs.background_music_volume));
         set("fog_enabled", off!(gs.fog_enabled));
         set("fog_thickness_base", off!(gs.fog_thickness_base));
         set("firefly_count", off!(gs.firefly_count));
@@ -465,6 +467,7 @@ impl WebSharedMemory {
         set_u32("shake_amplitude", def.shake_amplitude.load(Relaxed));
         set_u32("shake_duration", def.shake_duration.load(Relaxed));
         set_u32("sound_effects_volume", def.sound_effects_volume.load(Relaxed));
+        set_u32("background_music_volume", def.background_music_volume.load(Relaxed));
         set_bool("fog_enabled", def.fog_enabled.load(Relaxed));
         set_u32("fog_thickness_base", def.fog_thickness_base.load(Relaxed));
         set_u32("firefly_count", def.firefly_count.load(Relaxed));

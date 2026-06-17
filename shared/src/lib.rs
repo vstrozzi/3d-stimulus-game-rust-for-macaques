@@ -181,6 +181,7 @@ macro_rules! shared_game_state {
 
             // Audio + atmosphere (per-level config).
             pub sound_effects_volume: $U32,
+            pub background_music_volume: $U32,
             pub fog_enabled: $B,
             pub fog_thickness_base: $U32,
             pub firefly_count: $U32,
@@ -329,6 +330,7 @@ impl SharedGameState {
             shake_duration: AtomicU32::new(constants::game_constants::SHAKE_DURATION_DEFAULT.to_bits()),
 
             sound_effects_volume: AtomicU32::new(constants::sound_constants::SOUND_EFFECTS_VOLUME.to_bits()),
+            background_music_volume: AtomicU32::new(constants::sound_constants::BACKGROUND_MUSIC_VOLUME.to_bits()),
             fog_enabled: AtomicBool::new(constants::fog_constants::FOG_ENABLED),
             fog_thickness_base: AtomicU32::new(constants::fog_constants::FOG_THICKNESS_BASE.to_bits()),
             firefly_count: AtomicU32::new(constants::fog_constants::FIREFLY_COUNT),
@@ -397,6 +399,7 @@ impl SharedGameState {
         self.shake_amplitude.store(other.shake_amplitude.load(Ordering::Relaxed), Ordering::Relaxed);
         self.shake_duration.store(other.shake_duration.load(Ordering::Relaxed), Ordering::Relaxed);
         self.sound_effects_volume.store(other.sound_effects_volume.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.background_music_volume.store(other.background_music_volume.load(Ordering::Relaxed), Ordering::Relaxed);
         self.fog_enabled.store(other.fog_enabled.load(Ordering::Relaxed), Ordering::Relaxed);
         self.fog_thickness_base.store(other.fog_thickness_base.load(Ordering::Relaxed), Ordering::Relaxed);
         self.firefly_count.store(other.firefly_count.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -507,6 +510,7 @@ impl SharedGameState {
             shake_amplitude: self.shake_amplitude.load(Ordering::Relaxed),
             shake_duration: self.shake_duration.load(Ordering::Relaxed),
             sound_effects_volume: self.sound_effects_volume.load(Ordering::Relaxed),
+            background_music_volume: self.background_music_volume.load(Ordering::Relaxed),
             fog_enabled: self.fog_enabled.load(Ordering::Relaxed),
             fog_thickness_base: self.fog_thickness_base.load(Ordering::Relaxed),
             firefly_count: self.firefly_count.load(Ordering::Relaxed),
@@ -568,6 +572,7 @@ impl SharedGameState {
         self.shake_amplitude.store(state.shake_amplitude, Ordering::Relaxed);
         self.shake_duration.store(state.shake_duration, Ordering::Relaxed);
         self.sound_effects_volume.store(state.sound_effects_volume, Ordering::Relaxed);
+        self.background_music_volume.store(state.background_music_volume, Ordering::Relaxed);
         self.fog_enabled.store(state.fog_enabled, Ordering::Relaxed);
         self.fog_thickness_base.store(state.fog_thickness_base, Ordering::Relaxed);
         self.firefly_count.store(state.firefly_count, Ordering::Relaxed);

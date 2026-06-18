@@ -1060,3 +1060,85 @@ sub-1 ms accuracy when §16 assumptions hold. For per-trial analysis,
 `present_elapsed_secs` deltas yield the real frame interval (1 / measured
 refresh rate; see `timing_health.refresh_rate_hz_measured` in level
 summaries).
+
+---
+
+## 19. Hosted web server + per-trial logging
+
+`deploy_backend/log_server.py` (FastAPI + uvicorn) replaces static web
+hosting. It serves the **`deploy_frontend/`** bundle **behind a cookie gate**
+and receives the per-trial logs the web controller used to bundle into a client
+ZIP. `deploy_frontend/` holds `index.html`, `login.html`,
+`controller_main.min.js`, and symlinks `game_node` / `assets` / `trials_config`
+back into the repo (so the frontend's relative paths and the wasm build dir are
+unchanged). Static realpaths are contained under `REPO_ROOT` so those symlinks
+resolve but nothing outside the project is reachable; `out/server_logs/` is
+explicitly excluded from static serving.
+
+### Auth
+- Two argon2 password hashes in env (`PLAYER_PW_HASH`, `ADMIN_PW_HASH`) +
+  `SECRET_KEY`. `POST /login` verifies (constant-time) and sets a signed,
+  HttpOnly, SameSite=Strict cookie (`itsdangerous`) carrying `{role}`.
+- A single ASGI middleware gates **every** path (only `/login` is public) and
+  stamps COOP/COEP on all responses (so `SharedArrayBuffer` works on
+  `localhost` dev and behind Caddy in prod alike — Caddy only does TLS). This
+  is why guessing `index.html`/`trial_editor.html` fails without a cookie.
+- `role=admin` is additionally required for `/admin/*`. `GET /me` returns the
+  role; `index.html` reads it to pick the player vs admin landing.
+- Login is rate-limited per IP (`LOGIN_MAX`/`LOGIN_WINDOW`).
+
+### Pages (`index.html`, single file, role-rendered)
+- **player**: name → instructions (black bg, fullscreen/main-monitor/20-min/
+  per-trial-save notes) → two-step Play (fullscreen → boot).
+- **admin**: the original landing + a name field (test play); `upload_trial`
+  (validates a `.jsonl`, `POST /admin/trials/save` to the library, selects it);
+  `select_trial` (popup over `/admin/trials/list` with per-row use / ★default /
+  rename / delete → `/admin/trials/{make_default,rename,delete}`); a "Make
+  selected the default" button; and a **data popup** that browses
+  `/admin/list` (navigate), `/admin/file` (view inline) + a "Download this
+  folder (.zip)" button → `/admin/zip`.
+- `login.html` is a standalone password page.
+
+### Trial-config library
+- `trials_config/trials/` holds all saved trials; the active default is
+  `trials_config/trials/trials.jsonl` and its backup is `trials_old_default.jsonl`.
+  `controller.py` (default arg), `controller_main.js` (`TRIALS_PATH`) and
+  `trial_editor.html` (`fetch('./trials/trials.jsonl')`) all read that path.
+- `/admin/trials/save|delete|rename` operate on names validated by `_trial_path`
+  (basename, `.jsonl`, no traversal). `/admin/trials/make_default` renames the
+  current `trials.jsonl` → `trials_old_default.jsonl` and copies the selected
+  file in (the selected one stays in the library).
+
+### Storage
+- `POST /log {relpath, content}` writes
+  `out/server_logs/<server-date>/<relpath>` with the same atomic
+  tmp+`os.replace` as `controller.py`. The top folder is the **server's date**,
+  so a day folder holds every player that played that day. `relpath` is built by
+  the client as `<name>/<name>_<YYYY-MM-DD_HH-MM-SS>/level_NNN/<HHMMSS>/…` — a
+  per-session `<name>_<timestamp>` folder (captured once per play in
+  `_sessionFolderName()`) so repeat plays never collide; inside it the
+  `level_NNN/<HHMMSS>/trials` shape is byte-identical to a native run, so
+  `tools/verify_trial_logs.py out/server_logs/<date>/<name>/` reads it directly.
+  `relpath` is validated against traversal.
+- `GET /admin/zip?path=` recursively compresses the selected folder on the fly
+  (`path=''` → everything); the zip's internal layout matches the previous
+  web-version session ZIP. Nothing is stored zipped.
+
+### Reliability model (`controller_main.js`)
+- `pending: Map<relpath, json>` holds **only unconfirmed** trials/summaries.
+  `saveTrialLog` enqueues the trial + the running summary (same relpath ⇒
+  overwrites the prior unsent summary; mirrors `_flush_level_summary`).
+- `flushPending()` POSTs each item; on HTTP 200 it's **deleted from memory**.
+  A `setInterval(flushPending, 3000)` retries after transient drops.
+- There is **no client ZIP / download** (JSZip, `downloadLogs`, the download
+  popup, the `allTrialLogs`/`levelSummaries` retention, the long-press / Ctrl+D
+  download triggers, and `vendor/jszip.min.js` were all removed). At end of
+  game (last level or 20-min cap) `showEndPopup()` shows `pending.size` and the
+  sender keeps retrying until it reaches 0 ("All data saved"). If the player
+  closes early, the still-unsent trials are lost (by design).
+
+### Deploy
+`deploy_backend/Caddyfile` (HTTPS) + `deploy_backend/monkey-log-server.service`
+(systemd, `Restart=always`, runs `python -m uvicorn deploy_backend.log_server:app`
+from the repo root). Run on a VM with a **persistent disk** under
+`out/server_logs/`; HTTPS is mandatory (SAB / cookies / fullscreen).

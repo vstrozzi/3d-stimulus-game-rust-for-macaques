@@ -1601,9 +1601,9 @@ document.getElementById('levelList').addEventListener('click', e => {
     console.warn(`SHAPE_ICONS (${SHAPE_ICONS.length}) does not match SHAPES (${SHAPES.length}); add a glyph in trial_editor.html.`);
   }
 
-  // 2. Auto-load trials file
+  // 2. Auto-load trials file (now lives under trials/, the new default location)
   try {
-    const resp = await fetch(`./${TRIALS_FILENAME}`);
+    const resp = await fetch(`./trials/${TRIALS_FILENAME}`);
     if (resp.ok) {
       const text = await resp.text();
       levels = text.split('\n')

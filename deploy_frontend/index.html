@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Object Manipulation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  /* Scale the whole DOM UI with screen size, centered on a 1920x1080
+     reference. The root font-size is 16px exactly at 1920x1080 and scales
+     by the smaller of the two viewport ratios (the same letterbox metric
+     the game canvas uses), so all rem/em-based dimensions track screen size
+     uniformly across OS/resolution. */
+  html {
+    font-size: min(calc(100vw / 1920 * 16), calc(100vh / 1080 * 16));
+  }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #000;
+    color: #e0e0f0;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Centered column (player name + instructions steps) ───────────────── */
+  .center-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    max-width: 34rem;
+    width: 90%;
+    text-align: center;
+  }
+  .center-col h1 {
+    font-size: 1.8em;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+  .instructions {
+    font-size: 1.05em;
+    line-height: 1.9;
+    color: #fff;
+  }
+  .start-btn {
+    padding: 0.8rem 2.4rem;
+    font-size: 1.05em;
+    font-family: inherit;
+    font-weight: 700;
+    color: #000;
+    background: #fff;
+    border: 0;
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+  .name-input {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 0.4rem;
+    padding: 0.7rem 0.9rem;
+    color: #fff;
+    font-family: inherit;
+    font-size: 1rem;
+    width: 18rem;
+    -webkit-user-select: text;
+    user-select: text;
+    text-align: center;
+  }
+  .name-input:focus { outline: none; border-color: #777; }
+
+  /* ── Admin landing ────────────────────────────────────────────────── */
+  .landing {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    max-width: 30rem;
+    width: 90%;
+  }
+  .landing h1 {
+    font-size: 2em;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #7c6ff7;
+  }
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+  }
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 1.125rem 1.375rem;
+    background: #1e1e2e;
+    border: 2px solid #33334a;
+    border-radius: 0.75rem;
+    color: #e0e0f0;
+    cursor: pointer;
+    font-size: 0.9375rem;
+    font-family: inherit;
+    text-align: left;
+    transition: border-color 0.15s, background 0.15s;
+    text-decoration: none;
+    width: 100%;
+  }
+  .action-btn:hover {
+    border-color: #7c6ff7;
+    background: #22223a;
+  }
+  .action-icon {
+    font-size: 1.6em;
+    width: 2.5rem;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .action-text .action-title {
+    font-weight: 700;
+    font-size: 1.05em;
+  }
+  .action-text .action-desc {
+    font-size: 0.8em;
+    color: rgba(255,255,255,0.4);
+    margin-top: 3px;
+  }
+  .loaded-info {
+    font-size: 0.8em;
+    color: #55cc88;
+    text-align: center;
+    min-height: 1.2em;
+  }
+  .loaded-info.empty { color: rgba(255,255,255,0.25); }
+  .file-input { display: none; }
+
+  /* ── Admin file browser (popup) ───────────────────────────────────── */
+  #browse-modal {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 130;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.8);
+  }
+  #browse-modal[hidden] { display: none !important; }
+  .browse-card {
+    width: min(42rem, 92vw);
+    max-height: 82vh;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.75rem;
+    background: #0b0b0f;
+  }
+  .browse-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  #browse-path { color: rgba(255,255,255,0.7); font-size: 0.85em; word-break: break-all; }
+  #browse-close { background: none; border: 0; color: #fff; font-size: 1.2em; cursor: pointer; }
+  #browse-zip {
+    align-self: flex-start;
+    padding: 0.45rem 0.95rem;
+    font-size: 0.85em;
+    font-family: inherit;
+    color: #fff;
+    background: #7c6ff7;
+    border: 0;
+    border-radius: 0.4rem;
+    cursor: pointer;
+  }
+  #browse-list, #trials-list { overflow: auto; }
+  #browse-list .row, #trials-list .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.3rem 0;
+    font-size: 0.85em;
+  }
+  #browse-list a, #trials-list a { color: #9fc1ff; cursor: pointer; text-decoration: none; }
+  #browse-list a:hover, #trials-list a:hover { text-decoration: underline; }
+  #trials-list .acts { display: flex; gap: 0.4rem; flex-shrink: 0; }
+  #trials-list .tbtn {
+    background: #22223a; border: 1px solid #33334a; color: #cfcfe6;
+    border-radius: 0.3rem; padding: 0.15rem 0.5rem; font-size: 0.85em;
+    font-family: inherit; cursor: pointer;
+  }
+  #trials-list .tbtn:hover { border-color: #7c6ff7; }
+  #trials-list .is-default { color: #55cc88; font-size: 0.75em; }
+
+  /* ── Game canvas (Bevy renders here) ─────────────────────────────── */
+  #canvas-wrap {
+      position: absolute;
+      top: 0; left: 0;
+      transform-origin: top left;
+    }
+  #game-canvas {
+      background: #000;
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      cursor: none;
+    }
+
+  /* ── START TRIAL overlay ─────────────────────────────────────────── */
+  #start-trial-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 50;
+    background: #000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+  #start-trial-overlay .prompt {
+    font-size: 1.6em;
+    color: #fff;
+    letter-spacing: 1px;
+    text-align: center;
+    line-height: 1.5;
+  }
+
+  /* ── Initial loading overlay ─────────────────────────────────────── */
+  #loading-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .loading-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    width: min(22.5rem, 75vw);
+  }
+  #loading-step {
+    font-size: 0.82em;
+    color: rgba(255,255,255,0.6);
+    text-align: center;
+    min-height: 1.2em;
+  }
+  .loading-bar-track {
+    width: 100%;
+    height: 0.25rem;
+    background: rgba(255,255,255,0.08);
+    border-radius: 0.125rem;
+    overflow: hidden;
+    position: relative;
+  }
+  .loading-bar-fill {
+    height: 100%;
+    background: #5bc0fa;
+    border-radius: 0.125rem;
+    width: 0%;
+    transition: width 0.18s ease;
+  }
+  .loading-bar-fill.indeterminate {
+    width: 35% !important;
+    transition: none;
+    animation: bar-slide 1.3s ease-in-out infinite;
+  }
+  @keyframes bar-slide {
+    0%   { transform: translateX(-200%); }
+    100% { transform: translateX(380%); }
+  }
+  #loading-pct {
+    font-size: 0.7em;
+    color: rgba(255,255,255,0.28);
+    min-height: 1em;
+  }
+
+  /* ── Spinner inside start-trial overlay ──────────────────────────── */
+  .trial-spinner {
+    width: 1.75rem; height: 1.75rem;
+    border: 2px solid rgba(255,255,255,0.12);
+    border-top-color: rgba(255,255,255,0.55);
+    border-radius: 50%;
+    animation: spin 0.75s linear infinite;
+    display: none;
+  }
+  .trial-spinner.visible { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── End-of-session upload status popup ──────────────────────────── */
+  #end-popup {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.85);
+  }
+  #end-popup[hidden] { display: none !important; }
+  .end-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.875rem;
+    min-width: min(24rem, 82vw);
+    padding: 1.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.875rem;
+    background: rgba(8, 8, 8, 0.96);
+    text-align: center;
+  }
+  #end-title {
+    font-size: 1.15em;
+    color: #fff;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  #end-text {
+    font-size: 0.95em;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.78);
+  }
+</style>
+</head>
+<body>
+
+<!-- ─────────────────── PLAYER FLOW ─────────────────── -->
+<div id="player-flow" hidden>
+  <div id="name-step" class="center-col">
+    <h1>Object Manipulation</h1>
+    <input type="text" id="session-name" class="name-input" placeholder="Your name"
+           autocomplete="off" spellcheck="false" maxlength="64">
+    <button class="start-btn" id="name-continue" type="button">Continue</button>
+
+    <!-- Revealed (name locked) once Continue is pressed -->
+    <div class="instructions" id="instructions" hidden>
+      ←&nbsp;&nbsp;→&nbsp;&nbsp;look around&nbsp;&nbsp;·&nbsp;&nbsp;press / tap to interact<br><br>
+      Do not exit fullscreen during the game<br>
+      Play on your main monitor — not an external / attached display<br>
+      Keep the app and browser tab as minimal as possible<br>
+      The session lasts at most 20 minutes (it may end sooner)<br>
+      Your data is saved automatically after every trial<br>
+      Please wait for the textures to finish downloading
+    </div>
+    <button class="start-btn" id="instr-play" type="button" hidden>Play</button>
+  </div>
+</div>
+
+<!-- ─────────────────── ADMIN FLOW ─────────────────── -->
+<div id="admin-flow" hidden>
+  <div class="landing">
+    <h1>Object Manipulation</h1>
+    <input type="text" id="admin-session-name" class="name-input" placeholder="Name (for testing)"
+           autocomplete="off" spellcheck="false" maxlength="64">
+    <div class="loaded-info" id="admin-presence"></div>
+    <div class="actions">
+      <button class="action-btn" id="btn-play" type="button">
+        <span class="action-icon">&#9654;</span>
+        <span class="action-text">
+          <span class="action-title">Play</span>
+          <span class="action-desc" id="btn-play-desc">Fullscreen + start</span>
+        </span>
+      </button>
+
+      <a class="action-btn" id="btn-edit" href="./trials_config/trial_editor.html">
+        <span class="action-icon">&#9998;</span>
+        <span class="action-text">
+          <span class="action-title">Create / Edit Trials</span>
+          <span class="action-desc">Open the trial editor with the current trials.jsonl</span>
+        </span>
+      </a>
+
+      <button class="action-btn" id="btn-load" type="button">
+        <span class="action-icon">&#11014;</span>
+        <span class="action-text">
+          <span class="action-title">upload_trial</span>
+          <span class="action-desc">Upload a .jsonl — saved to the trial library and used when playing</span>
+        </span>
+      </button>
+      <input type="file" class="file-input" id="file-input" accept=".jsonl,.json">
+
+      <button class="action-btn" id="btn-select" type="button">
+        <span class="action-icon">&#128203;</span>
+        <span class="action-text">
+          <span class="action-title">select_trial</span>
+          <span class="action-desc">Pick / rename / delete a saved trial from the library</span>
+        </span>
+      </button>
+
+      <button class="action-btn" id="btn-browse" type="button">
+        <span class="action-icon">&#128193;</span>
+        <span class="action-text">
+          <span class="action-title">Browse / Download Data</span>
+          <span class="action-desc">Open the data folder; download any folder as .zip</span>
+        </span>
+      </button>
+    </div>
+    <div class="loaded-info" id="loaded-info"></div>
+  </div>
+</div>
+
+<!-- ─────────────────── DATA BROWSER POPUP (admin) ─────────────────── -->
+<div id="browse-modal" hidden>
+  <div class="browse-card">
+    <div class="browse-head">
+      <span id="browse-path">/</span>
+      <button id="browse-close" type="button" title="Close">&#10005;</button>
+    </div>
+    <button id="browse-zip" type="button">&#11015; Download this folder (.zip)</button>
+    <div id="browse-list"></div>
+  </div>
+</div>
+
+<!-- ─────────────────── TRIAL LIBRARY POPUP (admin) ─────────────────── -->
+<div id="trials-modal" hidden>
+  <div class="browse-card">
+    <div class="browse-head">
+      <span>Trial library — trials_config/trials/</span>
+      <button id="trials-close" type="button" title="Close">&#10005;</button>
+    </div>
+    <div id="trials-list"></div>
+  </div>
+</div>
+
+<!-- ─────────────────── GAME (hidden until Play pressed) ─────────────────── -->
+<div id="game-root" hidden>
+  <div id="canvas-wrap"><canvas id="game-canvas"></canvas></div>
+
+  <div id="loading-overlay">
+    <div class="loading-box">
+      <div id="loading-step">Initializing...</div>
+      <div class="loading-bar-track">
+        <div id="loading-bar-fill" class="loading-bar-fill indeterminate"></div>
+      </div>
+      <div id="loading-pct"></div>
+    </div>
+  </div>
+
+  <div id="start-trial-overlay">
+    <div class="trial-spinner" id="trial-spinner"></div>
+    <span class="prompt" id="trial-prompt">Press the screen<br>or press space bar</span>
+  </div>
+
+  <div id="end-popup" hidden>
+    <div class="end-card">
+      <div id="end-title">Session complete</div>
+      <div id="end-text">Saving your data…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const playerFlow = document.getElementById('player-flow');
+  const adminFlow = document.getElementById('admin-flow');
+  const gameRoot = document.getElementById('game-root');
+  const sessionNameInput = document.getElementById('session-name');
+
+  sessionNameInput.value = localStorage.getItem('session_name') || '';
+  sessionNameInput.addEventListener('input', () => {
+    localStorage.setItem('session_name', sessionNameInput.value);
+  });
+
+  // Decide which flow to show from the authoritative server role. The cookie
+  // is HttpOnly, so JS can't read it directly — ask /me.
+  fetch('/me').then(r => r.json()).then(({ role }) => {
+    if (role === 'admin') { adminFlow.hidden = false; setupAdmin(); }
+    else { playerFlow.hidden = false; }
+  }).catch(() => { playerFlow.hidden = false; });
+
+  // ── Boot ───────────────────────────────────────────────────────────────
+  let _gameBooted = false;
+  function bootGame() {
+    if (_gameBooted) return;
+    _gameBooted = true;
+    playerFlow.hidden = true;
+    adminFlow.hidden = true;
+    gameRoot.hidden = false;
+    fitCanvas();
+    const c = document.createElement('script');
+    c.type = 'module';
+    c.src = './controller_main.min.js';
+    document.body.appendChild(c);
+  }
+
+  function isFullscreen() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  // Two-step Play: 1st press → fullscreen (label changes), 2nd press → boot.
+  // Fullscreening <html> keeps the surrounding UI clickable; on iOS Safari
+  // (no <html> fullscreen) we fall back to canvas fullscreen + single-step.
+  function makePlay(descEl, readyText) {
+    return function onPlay() {
+      if (isFullscreen() || (descEl && descEl.dataset.ready === '1')) { bootGame(); return; }
+      const root = document.documentElement;
+      const req = root.requestFullscreen ? root.requestFullscreen.bind(root) : null;
+      if (req) {
+        let p;
+        try { p = req({ navigationUI: 'hide' }); } catch (_) { p = null; }
+        if (p && p.catch) p.catch(() => alert('Fullscreen is required. Press Play again.'));
+        if (descEl) { descEl.dataset.ready = '1'; descEl.textContent = readyText; }
+        return;
+      }
+      const canvas = document.getElementById('game-canvas');
+      const wreq = canvas.webkitRequestFullscreen ? canvas.webkitRequestFullscreen.bind(canvas) : null;
+      if (wreq) { try { wreq(); } catch (_) {} bootGame(); }
+    };
+  }
+
+  // Player: Continue locks the name and reveals the instructions + Play.
+  const instrPlay = document.getElementById('instr-play');
+  document.getElementById('name-continue').addEventListener('click', () => {
+    if (!sessionNameInput.value.trim()) { sessionNameInput.focus(); return; }
+    sessionNameInput.readOnly = true;
+    document.getElementById('name-continue').hidden = true;
+    document.getElementById('instructions').hidden = false;
+    instrPlay.hidden = false;
+  });
+  instrPlay.addEventListener('click', makePlay(instrPlay, 'Press again to start'));
+
+  // ── Admin landing ────────────────────────────────────────────────────────
+  function setupAdmin() {
+    const fileInput = document.getElementById('file-input');
+    const loadedInfo = document.getElementById('loaded-info');
+    // Name field, for testing a play session as admin. Shares session_name.
+    const adminName = document.getElementById('admin-session-name');
+    adminName.value = localStorage.getItem('session_name') || '';
+    adminName.addEventListener('input', () => localStorage.setItem('session_name', adminName.value));
+
+    // How many admins are connected right now (heartbeat). Warns about
+    // concurrent edits, which can collide on important settings.
+    const presenceEl = document.getElementById('admin-presence');
+    const clientId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+    async function pollPresence() {
+      try {
+        const { count } = await fetch('/admin/presence?id=' + encodeURIComponent(clientId)).then(r => r.json());
+        presenceEl.textContent = `Admins connected = ${count}` +
+          (count > 1 ? '  ⚠ concurrent edits can collide' : '');
+        presenceEl.style.color = count > 1 ? '#e6a64d' : 'rgba(255,255,255,0.4)';
+      } catch (_) {}
+    }
+    pollPresence();
+    setInterval(pollPresence, 5000);
+    document.getElementById('btn-load').addEventListener('click', () => fileInput.click());
+    document.getElementById('btn-play').addEventListener('click',
+      makePlay(document.getElementById('btn-play-desc'), 'Press again to start'));
+
+    async function adminPost(url, data) {
+      try {
+        const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+        return r.ok;
+      } catch (_) { return false; }
+    }
+
+    // Mark a library trial as the one to play now. (Promote-to-default lives in
+    // the select_trial popup.)
+    function setSelected(name, text) {
+      sessionStorage.setItem('custom_trials_jsonl', text);
+      sessionStorage.setItem('custom_trials_name', name);
+      const nLevels = text.trim().split('\n').filter(l => l.trim()).length;
+      loadedInfo.textContent = `Selected: ${name} (${nLevels} level${nLevels !== 1 ? 's' : ''})`;
+      loadedInfo.className = 'loaded-info';
+    }
+    // Restore any selection from a previous step in this tab.
+    (function () {
+      const stored = sessionStorage.getItem('custom_trials_jsonl');
+      const name = sessionStorage.getItem('custom_trials_name');
+      if (stored && name) setSelected(name, stored);
+      else { loadedInfo.textContent = 'Using default trials'; loadedInfo.className = 'loaded-info empty'; }
+    })();
+
+    // upload_trial: validate, persist to the server library, and select it now.
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async ev => {
+        try {
+          const text = ev.target.result;
+          text.trim().split('\n').filter(l => l.trim()).forEach((l, i) => {
+            try { JSON.parse(l); } catch (err) { throw new Error(`Line ${i + 1}: ${err.message}`); }
+          });
+          const name = file.name.endsWith('.jsonl') ? file.name : file.name + '.jsonl';
+          if (!await adminPost('/admin/trials/save', { name, content: text })) { alert('Upload failed (server).'); return; }
+          setSelected(name, text);
+          if (!trialsModal.hidden) renderTrials();   // reflect the new file in the open library popup
+        } catch (err) { alert('Invalid trials file: ' + err.message); }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    // select_trial popup: pick / make-default / rename / delete library trials.
+    const trialsModal = document.getElementById('trials-modal');
+    document.getElementById('btn-select').addEventListener('click', () => { trialsModal.hidden = false; renderTrials(); });
+    document.getElementById('trials-close').addEventListener('click', () => { trialsModal.hidden = true; });
+    trialsModal.addEventListener('click', (e) => { if (e.target === trialsModal) trialsModal.hidden = true; });
+
+    async function renderTrials() {
+      const el = document.getElementById('trials-list');
+      const data = await fetch('/admin/trials/list').then(r => r.json()).catch(() => null);
+      if (!data) { el.textContent = 'Could not load library.'; return; }
+      el.innerHTML = '';
+      if (!data.trials.length) { el.textContent = 'No saved trials yet — upload one.'; return; }
+      for (const t of data.trials) {
+        const row = document.createElement('div'); row.className = 'row';
+        const left = document.createElement('span');
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = '📄 ' + t.name;
+        left.appendChild(nameSpan);
+        if (t.name === data.default) {
+          const d = document.createElement('span'); d.className = 'is-default'; d.textContent = '  (default)';
+          left.appendChild(d);
+        }
+        const acts = document.createElement('div'); acts.className = 'acts';
+        const useBtn = document.createElement('button'); useBtn.className = 'tbtn'; useBtn.textContent = '✓ use';
+        useBtn.title = 'Use this trial for the next play';
+        useBtn.onclick = async () => {
+          const text = await fetch('/trials_config/trials/' + encodeURIComponent(t.name)).then(r => r.text());
+          setSelected(t.name, text);
+          trialsModal.hidden = true;
+        };
+        const def = document.createElement('button'); def.className = 'tbtn'; def.textContent = '★ default';
+        def.onclick = async () => { if (await adminPost('/admin/trials/make_default', { name: t.name })) renderTrials(); else alert('Failed.'); };
+        const ren = document.createElement('button'); ren.className = 'tbtn'; ren.textContent = '✎';
+        ren.title = 'Rename';
+        ren.onclick = async () => {
+          let nn = prompt('Rename to:', t.name); if (!nn) return;
+          if (!nn.endsWith('.jsonl')) nn += '.jsonl';
+          if (await adminPost('/admin/trials/rename', { old: t.name, new: nn })) renderTrials(); else alert('Rename failed.');
+        };
+        const del = document.createElement('button'); del.className = 'tbtn'; del.textContent = '🗑';
+        del.title = 'Delete';
+        del.onclick = async () => {
+          if (!confirm(`Delete ${t.name}?`)) return;
+          if (await adminPost('/admin/trials/delete', { name: t.name })) renderTrials(); else alert('Delete failed.');
+        };
+        acts.appendChild(useBtn); acts.appendChild(def); acts.appendChild(ren); acts.appendChild(del);
+        row.appendChild(left); row.appendChild(acts);
+        el.appendChild(row);
+      }
+    }
+
+    // Popup data browser.
+    const modal = document.getElementById('browse-modal');
+    document.getElementById('btn-browse').addEventListener('click', () => {
+      modal.hidden = false; renderBrowse('');
+    });
+    document.getElementById('browse-close').addEventListener('click', () => { modal.hidden = true; });
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
+    // Download the folder we're currently viewing, recursively zipped server-side.
+    document.getElementById('browse-zip').addEventListener('click', () => {
+      window.location = '/admin/zip?path=' + encodeURIComponent(browseCurrent);
+    });
+  }
+
+  // Popup file browser: navigate the data folder (folders open in place, files
+  // open in a new tab to view); the Download button zips the current folder.
+  let browseCurrent = '';
+  async function renderBrowse(path) {
+    browseCurrent = path;
+    document.getElementById('browse-path').textContent = '/' + path;
+    const el = document.getElementById('browse-list');
+    const data = await fetch('/admin/list?path=' + encodeURIComponent(path))
+      .then(r => r.json()).catch(() => null);
+    if (!data) { el.textContent = 'No data yet.'; return; }
+    el.innerHTML = '';
+    if (path) {
+      const up = path.split('/').slice(0, -1).join('/');
+      const back = document.createElement('a');
+      back.textContent = '⬆ ..';
+      back.onclick = () => renderBrowse(up);
+      const row = document.createElement('div'); row.className = 'row';
+      row.appendChild(back); el.appendChild(row);
+    }
+    for (const d of data.dirs) {
+      const row = document.createElement('div'); row.className = 'row';
+      const a = document.createElement('a');
+      a.textContent = '📁 ' + d;
+      a.onclick = () => renderBrowse(path ? path + '/' + d : d);
+      row.appendChild(a); el.appendChild(row);
+    }
+    for (const f of data.files) {
+      const row = document.createElement('div'); row.className = 'row';
+      const a = document.createElement('a');
+      a.textContent = '📄 ' + f.name;
+      a.href = '/admin/file?path=' + encodeURIComponent(path ? path + '/' + f.name : f.name);
+      a.target = '_blank';   // view in a new tab
+      const size = document.createElement('span');
+      size.style.color = 'rgba(255,255,255,0.35)';
+      size.textContent = (f.size / 1024).toFixed(1) + ' KB';
+      row.appendChild(a); row.appendChild(size); el.appendChild(row);
+    }
+  }
+
+  // ── Capped-resolution canvas (mirroring-like perf) ──────────────────
+  // Size #canvas-wrap to the largest box that fits inside 1920x1080 at the
+  // window's aspect ratio, then scale it up to fill the window.
+  function fitCanvas() {
+    const wrap = document.getElementById('canvas-wrap');
+    if (!wrap) return;
+    const w = window.innerWidth, h = window.innerHeight;
+    if (!w || !h) return;
+    const FIXED_W = 1920, FIXED_H = 1080;
+    const scale = Math.min(FIXED_W / w, FIXED_H / h, 1);
+    wrap.style.width = Math.max(Math.round(w * scale), 1) + 'px';
+    wrap.style.height = Math.max(Math.round(h * scale), 1) + 'px';
+    wrap.style.transform = `scale(${1 / scale})`;
+  }
+  new ResizeObserver(fitCanvas).observe(document.body);
+  window.addEventListener('resize', fitCanvas);
+  document.addEventListener('fullscreenchange', fitCanvas);
+  document.addEventListener('webkitfullscreenchange', fitCanvas);
+  screen.orientation?.addEventListener('change', fitCanvas);
+  fitCanvas();
+</script>
+</body>
+</html>

@@ -254,7 +254,7 @@ def load_levels(trials_path=None):
         if len(sys.argv) > 1:
             trials_path = sys.argv[1]
         else:
-            trials_path = "trials_config/trials.jsonl"
+            trials_path = "trials_config/trials/trials.jsonl"
     trial_file = (
         trials_path
         if os.path.isabs(trials_path)

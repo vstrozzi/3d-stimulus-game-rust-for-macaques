@@ -1,0 +1,20 @@
+# systemd unit for the logging server. Copy to /etc/systemd/system/, edit the
+# paths + secrets, then: systemctl enable --now monkey-log-server
+# Generate the password hashes once with:
+#   python -c "from passlib.hash import argon2; print(argon2.hash('YOURPASSWORD'))"
+[Unit]
+Description=Monkey 3D game logging server
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/monkey_3d_game
+# out/server_logs/ lives under WorkingDirectory — put it on a PERSISTENT disk.
+Environment=SECRET_KEY=CHANGE_ME_LONG_RANDOM
+Environment=PLAYER_PW_HASH=CHANGE_ME_PLAYER_ARGON2_HASH
+Environment=ADMIN_PW_HASH=CHANGE_ME_ADMIN_ARGON2_HASH
+ExecStart=/usr/bin/python3 -m uvicorn deploy_backend.log_server:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

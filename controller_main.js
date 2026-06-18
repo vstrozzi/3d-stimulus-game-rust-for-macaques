@@ -46,7 +46,7 @@ let MAX_TRIAL_FRAMES = 0;             // derived; per-trial frame-log capacity (
 
 const APP_START_UNIX_NS = Date.now() * 1_000_000;
 
-const TRIALS_PATH = "./trials_config/trials.jsonl";
+const TRIALS_PATH = "./trials_config/trials/trials.jsonl";
 
 // ── FSM States and proceeding outcomes ─────────────────────────────────────
 // Populated from Rust at startup so the labels stay in lockstep with
@@ -123,7 +123,7 @@ let trialRunCounter = 0;
 let levelRunCounter = 0;
 let currentLevelSummary = null;
 let lastSummaryFilename = null;
-const levelSummaries = [];
+let prevSummary = null;   // previous level's summary obj, kept only to patch next_file
 let currentFrame = -1;
 let gameTimeUnresponsive = 0;
 
@@ -133,11 +133,54 @@ let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for t
 let sessionStartMs = null;  // Date.now() when the first trial starts; anchor for MAX_SESSION_DURATION_MS
 let _running = false;
 let _sceneReadyPromptShown = false;
-let _downloadPopupShown = false;
 let _instructionsShown = false;
 
-// All accumulated trial logs (for download)
-let allTrialLogs = [];
+// ── Server logging ──────────────────────────────────────────────────────────
+// One POST per trial/summary. We keep an item in `pending` only until the
+// server confirms it (HTTP 200), then drop it from memory — so a confirmed
+// trial costs nothing, and at end-of-game `pending.size` is what's still
+// unsaved. There is no client-side ZIP: data is delivered to the server only.
+// The server roots each file under its own date folder; `relpath` is the
+// controller.py-style <name>/<date>/level/... path computed below.
+const pending = new Map();     // relpath -> JSON string awaiting confirmation
+let _flushing = false;
+
+function enqueueLog(relpath, json) {
+  pending.set(relpath, json);
+  flushPending();
+}
+
+async function flushPending() {
+  if (_flushing || pending.size === 0) return;
+  _flushing = true;
+  try {
+    for (const relpath of Array.from(pending.keys())) {
+      const content = pending.get(relpath);
+      if (content == null) continue;
+      let ok = false;
+      try {
+        const r = await fetch("/log", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ relpath, content }),
+        });
+        ok = r.ok;
+      } catch (_) { ok = false; }
+      // Delete only if unchanged since read — a newer summary may have replaced
+      // this entry while the request was in flight.
+      if (ok && pending.get(relpath) === content) pending.delete(relpath);
+    }
+  } finally {
+    _flushing = false;
+  }
+  _updateEndPopup();
+}
+
+function _summaryRelpath(s) { return `${s._dir}/${s._filename}`; }
+function _enqueueSummary(s) {
+  const { _filename, _dir, ...clean } = s;
+  enqueueLog(_summaryRelpath(s), JSON.stringify(clean, null, 2));
+}
 
 // Pressed keys tracking (to detect one-shot key presses)
 let pressedKeys = new Set();
@@ -1010,9 +1053,24 @@ function _stampCompact(d) {
          `-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 }
 
-function _dateFolder(d) {
+// Local timestamp "YYYY-MM-DD_HH-MM-SS" for the per-session folder name.
+function _localTimestamp(d) {
   const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+         `_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+}
+
+// One folder per play session: "<name>_<YYYY-MM-DD_HH-MM-SS>_<rand>", captured
+// once on first use so every level run of this session lands under the same
+// folder. The 4-char random tail prevents two same-named players who start in
+// the same second from sharing a folder.
+let _sessionFolder = null;
+function _sessionFolderName() {
+  if (_sessionFolder === null) {
+    const rand = Math.random().toString(36).slice(2, 6);
+    _sessionFolder = `${_participantName()}_${_localTimestamp(new Date())}_${rand}`;
+  }
+  return _sessionFolder;
 }
 
 function _timeFolder(d) {
@@ -1037,7 +1095,8 @@ function _trialFilename(idx, trialIdxInChain, activeChainIdx, trialRunCtr, start
 }
 
 function _levelDirRel(idx, startedAt) {
-  return `${_participantName()}/${_dateFolder(startedAt)}/${_levelName(idx)}/${_timeFolder(startedAt)}`;
+  // <name>/<name>_<session-stamp>/level_NNN/<HHMMSS>  (server prepends the date)
+  return `${_participantName()}/${_sessionFolderName()}/${_levelName(idx)}/${_timeFolder(startedAt)}`;
 }
 
 function _startLevelRunIfNeeded() {
@@ -1063,12 +1122,9 @@ function _startLevelRunIfNeeded() {
     next_file: null,
     _dir: _levelDirRel(currentLevelIndex, started),
     _filename: filename,
-    _startedMs: started.getTime(),
   };
-  if (lastSummaryFilename && levelSummaries.length > 0) {
-    levelSummaries[levelSummaries.length - 1].next_file = filename;
-  }
-  levelSummaries.push(currentLevelSummary);
+  if (prevSummary) { prevSummary.next_file = filename; _enqueueSummary(prevSummary); }
+  _enqueueSummary(currentLevelSummary);
 }
 
 function _computeTimingHealth(summary) {
@@ -1119,25 +1175,36 @@ function _finalizeLevelRun(status) {
   currentLevelSummary.level_completed = status;
   currentLevelSummary.timing_health = _computeTimingHealth(currentLevelSummary);
   for (const t of runs) delete t._frames_for_health;
+  _enqueueSummary(currentLevelSummary);
   lastSummaryFilename = currentLevelSummary._filename;
+  prevSummary = currentLevelSummary;
   currentLevelSummary = null;
   levelRunCounter += 1;
 }
 
-function showDownloadPopup() {
-  if (_downloadPopupShown) return;
-  const popup = document.getElementById("download-popup");
-  if (!popup) return;
-  popup.hidden = false;
-  _downloadPopupShown = true;
-  downloadLogs();
+// End-of-session overlay: shows how much data is still unsaved and keeps the
+// background sender retrying until `pending` drains. No download — delivery is
+// to the server only.
+function showEndPopup() {
+  const popup = document.getElementById("end-popup");
+  if (popup) popup.hidden = false;
+  _updateEndPopup();
+  flushPending();
 }
 
-function hideDownloadPopup() {
-  const popup = document.getElementById("download-popup");
-  if (!popup) return;
-  popup.hidden = true;
-  _downloadPopupShown = false;
+function _updateEndPopup() {
+  const popup = document.getElementById("end-popup");
+  if (!popup || popup.hidden) return;
+  const title = document.getElementById("end-title");
+  const text = document.getElementById("end-text");
+  if (pending.size === 0) {
+    if (title) title.textContent = "All data saved";
+    if (text) text.textContent = "You can close this tab.";
+  } else {
+    if (title) title.textContent = "Saving your data…";
+    if (text) text.textContent =
+      `${pending.size} item(s) not yet uploaded. Keep this tab open and stay connected.`;
+  }
 }
 
 function saveTrialLog(outcome) {
@@ -1198,17 +1265,11 @@ function saveTrialLog(outcome) {
     win_event: winEvent,
     frames: framesCompact,
   };
-  // Serialize the trial log to a JSON string now and retain only that string
-  // for the rest of the level. Collapses the deep per-trial object tree
-  // (frames dict + nested rows) into a single opaque heap entry so V8
-  // MajorGC has almost nothing to walk between trials.
-  // The ZIP builder writes this string verbatim — output bytes are identical.
+  // Serialize the trial log to a JSON string now and hand it to the sender.
+  // Collapses the deep per-trial object tree (frames dict + nested rows) into
+  // a single opaque heap entry so V8 MajorGC has almost nothing to walk.
   const _json = JSON.stringify(log, null, 2);
-  allTrialLogs.push({
-    _filename: filename,
-    _dir: `${currentLevelSummary._dir}/trials`,
-    _json,
-  });
+  enqueueLog(`${currentLevelSummary._dir}/trials/${filename}`, _json);
   // Drop references to the deep intermediate tree so it can be reclaimed
   // before the next trial fills the frameLog scratch.
   log.frames = null;
@@ -1227,6 +1288,10 @@ function saveTrialLog(outcome) {
     file: filename,
     _frames_for_health: framesForHealth,
   });
+  // Re-send the running summary after every trial (mirrors controller.py's
+  // per-trial _flush_level_summary). Same relpath ⇒ overwrites the prior
+  // unsent summary in `pending`, so it never accumulates.
+  _enqueueSummary(currentLevelSummary);
   console.log(`[LOG] Level ${currentLevelIndex} chain ${activeChain} trial ${_trialIdx()} (run ${trialRunCounter}) → ${outcome}, ${nrAttempts} attempts, no_anim=${elapsedNoAnim.toFixed(6)}s anim=${elapsedAnim.toFixed(6)}s`);
 }
 
@@ -1240,70 +1305,6 @@ function sanitizeSessionName(raw) {
     .trim()
     .slice(0, 64);
   return cleaned || null;
-}
-
-/** Local ISO-ish timestamp safe for filenames (YYYY-MM-DD_HH-MM-SS, local TZ). */
-function localTimestamp() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
-         `_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-}
-
-/** Bundle every accumulated trial log into a zip with per-level folders and
- *  per-trial JSON files matching controller.py's on-disk format. After a
- *  successful download, clear the in-memory buffer so the next download only
- *  contains trials run since this point. */
-async function downloadLogs() {
-  if (typeof JSZip === "undefined") {
-    alert("JSZip failed to load — cannot download logs as a zip.");
-    return;
-  }
-  if (allTrialLogs.length === 0 && levelSummaries.length === 0) {
-    alert("No trial logs to download yet.");
-    return;
-  }
-  // Finalize any in-progress level run as "interrupted" so it has a footer.
-  if (currentLevelSummary !== null) _finalizeLevelRun("interrupted");
-
-  const stamp = localTimestamp();
-  const baseName = `${_participantName()}_${stamp}`;
-  const zip = new JSZip();
-
-  for (const trial of allTrialLogs) {
-    const path = `${baseName}/${trial._dir}/${trial._filename}`;
-    // Trial body was already JSON.stringified at trial-end (see saveTrialLog).
-    zip.file(path, trial._json);
-  }
-  for (const summary of levelSummaries) {
-    const path = `${baseName}/${summary._dir}/${summary._filename}`;
-    const { _filename, _dir, _startedMs, ...clean } = summary;
-    zip.file(path, JSON.stringify(clean, null, 2));
-  }
-
-  const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-  const url = URL.createObjectURL(blob);
-  const a = Object.assign(document.createElement("a"), {
-    href: url,
-    download: `${baseName}.zip`,
-  });
-  a.click();
-
-  // Free the per-trial JSON strings, summary objects, and the blob URL so the
-  // browser can reclaim them. JS has no manual GC; nulling references is the
-  // closest equivalent — it lets the next MajorGC drop these arenas.
-  for (let i = 0; i < allTrialLogs.length; i++) {
-    allTrialLogs[i]._json = null;
-    allTrialLogs[i] = null;
-  }
-  allTrialLogs.length = 0;
-  for (let i = 0; i < levelSummaries.length; i++) levelSummaries[i] = null;
-  levelSummaries.length = 0;
-  lastSummaryFilename = null;
-  // Revoke the blob URL after the click — keeps it out of the document URL
-  // table once the download dialog has consumed it.
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  hideDownloadPopup();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1631,9 +1632,9 @@ function handleTrialIndexUpdate() {
     _finalizeLevelRun("completed");
     const wasLastLevel = currentLevelIndex === levels.length - 1;
     if (wasLastLevel) {
-      console.log("[SESSION] All levels finished → showing download popup");
+      console.log("[SESSION] All levels finished → showing end popup");
       _running = false;
-      showDownloadPopup();
+      showEndPopup();
       return;
     }
     currentLevelIndex = (currentLevelIndex + 1) % levels.length;
@@ -1761,12 +1762,12 @@ function controllerLoop() {
 
   writeNoCommands();
 
-  // Session-duration cap: finalize the current level run, auto-download, stop.
+  // Session-duration cap: finalize the current level run and stop.
   if (sessionStartMs !== null && Date.now() - sessionStartMs >= MAX_SESSION_DURATION_MS) {
-    console.log(`[SESSION] Reached ${MAX_SESSION_DURATION_MIN}-minute cap → finalizing + download`);
+    console.log(`[SESSION] Reached ${MAX_SESSION_DURATION_MIN}-minute cap → finalizing`);
     _finalizeLevelRun("timeout");
     _running = false;
-    showDownloadPopup();
+    showEndPopup();
     return;
   }
 
@@ -1961,32 +1962,8 @@ function setupInput() {
   });
 
   // ── TOUCH ──────────────────────────────────────────────────────────────
-  // 5-second longpress on the screen opens the download popup. Cancelled by
-  // movement >30px, multi-touch, or release.
-  let _longPressTimer = null;
-  let _longPressStartX = 0;
-  let _longPressStartY = 0;
-  function _clearLongPress() {
-    if (_longPressTimer !== null) {
-      clearTimeout(_longPressTimer);
-      _longPressTimer = null;
-    }
-  }
-
   window.addEventListener("touchstart", (e) => {
-    if (e.target.closest("#download-popup")) return;
     e.preventDefault();
-    if (e.touches.length === 1) {
-      _longPressStartX = e.touches[0].clientX;
-      _longPressStartY = e.touches[0].clientY;
-      _clearLongPress();
-      _longPressTimer = setTimeout(() => {
-        _longPressTimer = null;
-        showDownloadPopup();
-      }, 5000);
-    } else {
-      _clearLongPress();
-    }
     if (fsmState === FSM.WAITING_FOR_START) {
       tryEnterFullscreenThenStart();
       return;
@@ -2013,13 +1990,6 @@ function setupInput() {
 
   window.addEventListener("touchmove", (e) => {
     e.preventDefault();
-    if (_longPressTimer !== null && e.touches.length >= 1) {
-      const t = e.touches[0];
-      if (Math.abs(t.clientX - _longPressStartX) > 30 ||
-          Math.abs(t.clientY - _longPressStartY) > 30) {
-        _clearLongPress();
-      }
-    }
     if (fsmState !== FSM.PLAYING) return;
     const now = performance.now();
 
@@ -2043,9 +2013,7 @@ function setupInput() {
   }, { passive: false });
 
   window.addEventListener("touchend", (e) => {
-    if (e.target.closest("#download-popup")) return;
     e.preventDefault();
-    _clearLongPress();
     const now = performance.now();
     if (e.touches.length === 0) {
       // Tap detection (suppress after pinch, suppress in tap grace period)
@@ -2083,7 +2051,6 @@ function setupInput() {
   }, { passive: false });
 
   window.addEventListener("touchcancel", () => {
-    _clearLongPress();
     swipe.active = false; swipe.energy = 0; swipe.velocity = 0; swipe.samples = [];
     pinch.active = false; pinch.energy = 0; pinch.velocity = 0; pinch.samples = [];
     pinch.wasPinching = false;
@@ -2093,14 +2060,6 @@ function setupInput() {
   // Use capture phase so we intercept keys BEFORE Bevy's canvas handler
   // can call preventDefault() and swallow them.
   window.addEventListener("keydown", (e) => {
-    // Ctrl+D / Cmd+D opens the download popup from any state
-    if (e.code === "KeyD" && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      e.stopPropagation();
-      showDownloadPopup();
-      return;
-    }
-
     // 'q' exits from any state
     if (e.code === "KeyQ") {
       _running = false;
@@ -2396,24 +2355,13 @@ async function start() {
   // Setup input handlers
   setupInput();
 
-  // Setup download popup button (shown only after the last level finishes)
-  const dlBtn = document.getElementById("download-logs-btn");
-  if (dlBtn) {
-    dlBtn.addEventListener("click", downloadLogs);
-  }
+  // Background retry: re-attempt any unconfirmed trial/summary every few
+  // seconds so a transient network drop self-heals without blocking the game.
+  setInterval(flushPending, 3000);
 
-  // Tab-close guard: trigger the browser's native "Leave site?" prompt when
-  // unsaved logs exist, and reveal the download popup so the user can press
-  // it if they choose to stay. The native prompt is the only API that can
-  // intercept a tab close.
+  // Tab-close guard: warn while data is still unconfirmed on the server.
   window.addEventListener("beforeunload", (e) => {
-    const hasLogs = allTrialLogs.length > 0 || levelSummaries.length > 0 || currentLevelSummary !== null;
-    if (!hasLogs) return;
-    const popup = document.getElementById("download-popup");
-    if (popup) {
-      popup.hidden = false;
-      _downloadPopupShown = true;
-    }
+    if (pending.size === 0) return;
     e.preventDefault();
     e.returnValue = "";
   });

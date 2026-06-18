@@ -11,7 +11,9 @@
 # Cron:     15 3 * * * /srv/monkey_3d_game/deploy_backend/backup.sh >> /var/log/monkey-backup.log 2>&1
 set -euo pipefail
 
-DATA_DIR="${DATA_DIR:-/srv/monkey_3d_game/out/server_logs}"
+# Docker bind-mount path (see docker-compose.yml). For a non-docker host install
+# point DATA_DIR at /srv/monkey_3d_game/out/server_logs instead.
+DATA_DIR="${DATA_DIR:-/srv/monkey_3d_game/data/server_logs}"
 ENV_FILE="${ENV_FILE:-/etc/monkey-backup.env}"
 
 # Load RESTIC_REPOSITORY / RESTIC_PASSWORD / R2 keys.

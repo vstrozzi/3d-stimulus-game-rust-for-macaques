@@ -1,3 +1,5 @@
 /target
 /controller_native/target
 /out
+/data
+.env

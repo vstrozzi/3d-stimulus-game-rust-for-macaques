@@ -1,0 +1,38 @@
+# Local:  docker compose up --build           → http://localhost:8000
+# Server: docker compose --profile tls up -d --build   (Caddy adds HTTPS)
+#
+# Data lives on the host under ./data (bind mounts) so it persists across
+# rebuilds and is easy to back up. Secrets come from .env (gitignored).
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data/server_logs:/app/out/server_logs      # trial logs (persistent)
+      - ./data/trials:/app/trials_config/trials       # trial library (persistent)
+    ports:
+      - "127.0.0.1:8000:8000"   # host-local; Caddy reaches it via the compose network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/login')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:                         # HTTPS reverse proxy — only with: --profile tls
+    image: caddy:2
+    profiles: ["tls"]
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy_backend/Caddyfile.docker:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:

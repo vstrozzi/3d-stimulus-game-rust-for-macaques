@@ -1,0 +1,6 @@
+.git/
+**/target/
+out/
+data/
+**/__pycache__/
+*.pyc

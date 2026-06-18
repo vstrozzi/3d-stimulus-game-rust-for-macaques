@@ -1,0 +1,6 @@
+# Caddy config for the docker-compose `tls` profile. Reaches the app over the
+# compose network by service name. Replace the domain; Caddy auto-provisions
+# the Let's Encrypt cert. COOP/COEP are set by the app, so Caddy only does TLS.
+your.domain.com {
+    reverse_proxy app:8000
+}

@@ -101,7 +101,29 @@ the server confirms it (HTTP 200), then drops it. If trials remain unsent at
 the end of a game, the player is shown how many are pending and the sender
 keeps retrying until they upload.
 
-### Run locally (no TLS — `http://localhost` is already a secure context)
+### Docker (recommended — identical local & server)
+Test locally (a dev `.env` with player=`player` / admin=`admin` is created by
+the maintainer; otherwise `cp .env.example .env` and fill it):
+```bash
+docker compose up --build        # → http://localhost:8000
+```
+Deploy on a VM (Ubuntu, Docker installed; ports 22/80/443 open; DNS A-record → IP):
+```bash
+git clone <repo> /srv/monkey_3d_game && cd /srv/monkey_3d_game
+cp .env.example .env             # then fill the 3 values, chmod 600 .env
+#   docker compose run --rm app python -c "import secrets;print(secrets.token_hex(32))"
+#   docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOURPASS'))"
+nano deploy_backend/Caddyfile.docker     # set your domain
+docker compose --profile tls up -d --build
+docker compose logs -f app
+```
+Data persists on the host under `./data/` (`server_logs/` + `trials/` bind
+mounts); `restart: unless-stopped` + `systemctl enable docker` auto-recovers on
+crash/reboot. Back up `./data/server_logs` with `deploy_backend/backup.sh`
+(restic; cron). The whole repo can be cloned to the server — `.dockerignore`
+keeps `target/`, `out/`, `.git` out of the image.
+
+### Run locally without Docker (no TLS — `http://localhost` is a secure context)
 Run from the repo root (so `deploy_backend` imports and the symlinks resolve):
 ```bash
 pip install -r deploy_backend/requirements-server.txt

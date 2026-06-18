@@ -2,3 +2,4 @@ fastapi
 uvicorn
 passlib[argon2]
 itsdangerous
+python-multipart

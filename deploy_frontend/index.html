@@ -11,9 +11,11 @@
      reference. The root font-size is 16px exactly at 1920x1080 and scales
      by the smaller of the two viewport ratios (the same letterbox metric
      the game canvas uses), so all rem/em-based dimensions track screen size
-     uniformly across OS/resolution. */
+     uniformly across OS/resolution. A 14px floor keeps the menus/overlays
+     readable on phones and tablets, where the raw ratio would shrink the
+     base font to a few pixels. */
   html {
-    font-size: min(calc(100vw / 1920 * 16), calc(100vh / 1080 * 16));
+    font-size: max(14px, min(calc(100vw / 1920 * 16), calc(100vh / 1080 * 16)));
   }
   body {
     font-family: 'Segoe UI', system-ui, sans-serif;

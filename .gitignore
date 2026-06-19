@@ -3,3 +3,10 @@
 /out
 /data
 .env
+__pycache__/
+*.pyc
+# WASM build junk (only game_node.js + game_node_bg.wasm.gz are force-added):
+game_node/pkg/debug-analysis/
+game_node/pkg/game_node_bg.wasm
+game_node/pkg/*.d.ts
+game_node/pkg/package.json

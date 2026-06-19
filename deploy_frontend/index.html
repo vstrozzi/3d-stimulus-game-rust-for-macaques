@@ -52,6 +52,14 @@
     line-height: 1.9;
     color: #fff;
   }
+  .instructions ul {
+    text-align: left;
+    display: inline-block;
+    margin: 0.6rem auto 0;
+    padding-left: 1.2em;
+    line-height: 1.8;
+  }
+  .instructions li { margin: 0.15rem 0; }
   .start-btn {
     padding: 0.8rem 2.4rem;
     font-size: 1.05em;
@@ -145,7 +153,7 @@
   .file-input { display: none; }
 
   /* ── Admin file browser (popup) ───────────────────────────────────── */
-  #browse-modal {
+  #browse-modal, #trials-modal {
     display: flex;
     position: fixed;
     inset: 0;
@@ -154,7 +162,12 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.8);
   }
-  #browse-modal[hidden] { display: none !important; }
+  #browse-modal[hidden], #trials-modal[hidden] { display: none !important; }
+  #pw-modal {
+    display: flex; position: fixed; inset: 0; z-index: 140;
+    align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.85);
+  }
+  #pw-modal[hidden] { display: none !important; }
   .browse-card {
     width: min(42rem, 92vw);
     max-height: 82vh;
@@ -196,6 +209,11 @@
   }
   #browse-list a, #trials-list a { color: #9fc1ff; cursor: pointer; text-decoration: none; }
   #browse-list a:hover, #trials-list a:hover { text-decoration: underline; }
+  #browse-list .del {
+    background: none; border: 0; color: #c66; cursor: pointer;
+    font-size: 0.95em; flex-shrink: 0;
+  }
+  #browse-list .del:hover { color: #f88; }
   #trials-list .acts { display: flex; gap: 0.4rem; flex-shrink: 0; }
   #trials-list .tbtn {
     background: #22223a; border: 1px solid #33334a; color: #cfcfe6;
@@ -357,13 +375,15 @@
 
     <!-- Revealed (name locked) once Continue is pressed -->
     <div class="instructions" id="instructions" hidden>
-      ←&nbsp;&nbsp;→&nbsp;&nbsp;look around&nbsp;&nbsp;·&nbsp;&nbsp;press / tap to interact<br><br>
-      Do not exit fullscreen during the game<br>
-      Play on your main monitor — not an external / attached display<br>
-      Keep the app and browser tab as minimal as possible<br>
-      The session lasts at most 20 minutes (it may end sooner)<br>
-      Your data is saved automatically after every trial<br>
-      Please wait for the textures to finish downloading
+      ←&nbsp;&nbsp;→&nbsp;&nbsp;look around&nbsp;&nbsp;·&nbsp;&nbsp;press / tap to interact
+      <ul>
+        <li>Do not exit fullscreen during the game</li>
+        <li>Play on your main monitor — not an external / attached display</li>
+        <li>Keep the app and browser tab as minimal as possible</li>
+        <li>The session lasts at most 20 minutes (it may end sooner)</li>
+        <li>Your data is saved automatically after every trial</li>
+        <li>Please wait for the textures to finish downloading</li>
+      </ul>
     </div>
     <button class="start-btn" id="instr-play" type="button" hidden>Play</button>
   </div>
@@ -396,7 +416,7 @@
       <button class="action-btn" id="btn-load" type="button">
         <span class="action-icon">&#11014;</span>
         <span class="action-text">
-          <span class="action-title">upload_trial</span>
+          <span class="action-title">Upload Trial</span>
           <span class="action-desc">Upload a .jsonl — saved to the trial library and used when playing</span>
         </span>
       </button>
@@ -405,7 +425,7 @@
       <button class="action-btn" id="btn-select" type="button">
         <span class="action-icon">&#128203;</span>
         <span class="action-text">
-          <span class="action-title">select_trial</span>
+          <span class="action-title">Select Trial</span>
           <span class="action-desc">Pick / rename / delete a saved trial from the library</span>
         </span>
       </button>
@@ -442,6 +462,18 @@
       <button id="trials-close" type="button" title="Close">&#10005;</button>
     </div>
     <div id="trials-list"></div>
+  </div>
+</div>
+
+<!-- ─────────────────── PASSWORD PROMPT (admin, masked) ─────────────────── -->
+<div id="pw-modal" hidden>
+  <div class="end-card">
+    <div id="pw-msg">Re-enter the admin password:</div>
+    <input type="password" id="pw-input" class="name-input" autocomplete="off">
+    <div style="display:flex; gap:0.6rem;">
+      <button class="start-btn" id="pw-ok" type="button">Confirm</button>
+      <button class="start-btn" id="pw-cancel" type="button" style="background:#333;color:#fff;">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -565,15 +597,34 @@
     pollPresence();
     setInterval(pollPresence, 5000);
     document.getElementById('btn-load').addEventListener('click', () => fileInput.click());
-    document.getElementById('btn-play').addEventListener('click',
-      makePlay(document.getElementById('btn-play-desc'), 'Press again to start'));
 
-    async function adminPost(url, data) {
-      try {
-        const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
-        return r.ok;
-      } catch (_) { return false; }
-    }
+    // Admin Play: 1st press → fullscreen; 2nd press → the SAME instructions page
+    // players see, with the name prefilled + locked. Then the page's Play boots.
+    const btnPlayDesc = document.getElementById('btn-play-desc');
+    document.getElementById('btn-play').addEventListener('click', () => {
+      const goInstructions = () => {
+        const nm = (adminName.value || '').trim();
+        if (!nm) { adminName.focus(); return; }
+        sessionNameInput.value = nm;
+        adminFlow.hidden = true;
+        playerFlow.hidden = false;
+        sessionNameInput.readOnly = true;
+        document.getElementById('name-continue').hidden = true;
+        document.getElementById('instructions').hidden = false;
+        instrPlay.hidden = false;
+      };
+      if (isFullscreen() || btnPlayDesc.dataset.ready === '1') { goInstructions(); return; }
+      const root = document.documentElement;
+      const req = root.requestFullscreen ? root.requestFullscreen.bind(root) : null;
+      if (req) {
+        let p; try { p = req({ navigationUI: 'hide' }); } catch (_) { p = null; }
+        if (p && p.catch) p.catch(() => alert('Fullscreen is required. Press Play again.'));
+        btnPlayDesc.dataset.ready = '1';
+        btnPlayDesc.textContent = 'Press again to continue';
+        return;
+      }
+      goInstructions();
+    });
 
     // Mark a library trial as the one to play now. (Promote-to-default lives in
     // the select_trial popup.)
@@ -631,7 +682,7 @@
         const nameSpan = document.createElement('span');
         nameSpan.textContent = '📄 ' + t.name;
         left.appendChild(nameSpan);
-        if (t.name === data.default) {
+        if (t.is_default) {
           const d = document.createElement('span'); d.className = 'is-default'; d.textContent = '  (default)';
           left.appendChild(d);
         }
@@ -644,7 +695,11 @@
           trialsModal.hidden = true;
         };
         const def = document.createElement('button'); def.className = 'tbtn'; def.textContent = '★ default';
-        def.onclick = async () => { if (await adminPost('/admin/trials/make_default', { name: t.name })) renderTrials(); else alert('Failed.'); };
+        def.title = 'Make this the default trials (played by everyone)';
+        def.onclick = async () => {
+          if (await adminPost('/admin/trials/make_default', { name: t.name })) { alert(`"${t.name}" is now the default.`); renderTrials(); }
+          else alert('Could not set default.');
+        };
         const ren = document.createElement('button'); ren.className = 'tbtn'; ren.textContent = '✎';
         ren.title = 'Rename';
         ren.onclick = async () => {
@@ -652,13 +707,17 @@
           if (!nn.endsWith('.jsonl')) nn += '.jsonl';
           if (await adminPost('/admin/trials/rename', { old: t.name, new: nn })) renderTrials(); else alert('Rename failed.');
         };
-        const del = document.createElement('button'); del.className = 'tbtn'; del.textContent = '🗑';
-        del.title = 'Delete';
-        del.onclick = async () => {
-          if (!confirm(`Delete ${t.name}?`)) return;
-          if (await adminPost('/admin/trials/delete', { name: t.name })) renderTrials(); else alert('Delete failed.');
-        };
-        acts.appendChild(useBtn); acts.appendChild(def); acts.appendChild(ren); acts.appendChild(del);
+        acts.appendChild(useBtn); acts.appendChild(def); acts.appendChild(ren);
+        // The default trials.jsonl cannot be deleted — no trash button for it.
+        if (t.name !== data.default) {
+          const del = document.createElement('button'); del.className = 'tbtn'; del.textContent = '🗑';
+          del.title = 'Delete';
+          del.onclick = async () => {
+            if (!confirm(`Delete ${t.name}?`)) return;
+            if (await adminPost('/admin/trials/delete', { name: t.name })) renderTrials(); else alert('Delete failed.');
+          };
+          acts.appendChild(del);
+        }
         row.appendChild(left); row.appendChild(acts);
         el.appendChild(row);
       }
@@ -675,6 +734,44 @@
     document.getElementById('browse-zip').addEventListener('click', () => {
       window.location = '/admin/zip?path=' + encodeURIComponent(browseCurrent);
     });
+  }
+
+  // Masked admin-password prompt (a modal with a type=password field) instead
+  // of window.prompt(), which shows the typed text. Resolves to the value, or
+  // null if cancelled.
+  function askPassword(msg) {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('pw-modal');
+      const input = document.getElementById('pw-input');
+      const okBtn = document.getElementById('pw-ok');
+      const cancelBtn = document.getElementById('pw-cancel');
+      document.getElementById('pw-msg').textContent = msg;
+      input.value = '';
+      modal.hidden = false;
+      input.focus();
+      const done = (val) => {
+        modal.hidden = true;
+        okBtn.removeEventListener('click', onOk);
+        cancelBtn.removeEventListener('click', onCancel);
+        input.removeEventListener('keydown', onKey);
+        resolve(val);
+      };
+      const onOk = () => done(input.value);
+      const onCancel = () => done(null);
+      const onKey = (e) => { if (e.key === 'Enter') onOk(); else if (e.key === 'Escape') onCancel(); };
+      okBtn.addEventListener('click', onOk);
+      cancelBtn.addEventListener('click', onCancel);
+      input.addEventListener('keydown', onKey);
+    });
+  }
+
+  // POST JSON to an admin endpoint; returns true on HTTP 200. Top-level so both
+  // setupAdmin and renderBrowse can use it.
+  async function adminPost(url, data) {
+    try {
+      const r = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+      return r.ok;
+    } catch (_) { return false; }
   }
 
   // Popup file browser: navigate the data folder (folders open in place, files
@@ -701,7 +798,17 @@
       const a = document.createElement('a');
       a.textContent = '📁 ' + d;
       a.onclick = () => renderBrowse(path ? path + '/' + d : d);
-      row.appendChild(a); el.appendChild(row);
+      const trash = document.createElement('button');
+      trash.className = 'del'; trash.textContent = '🗑'; trash.title = 'Delete this folder (recursive)';
+      trash.onclick = async () => {
+        const full = path ? path + '/' + d : d;
+        if (!confirm(`Delete folder "${d}" and everything in it? (not reversible)`)) return;
+        const pw = await askPassword('Re-enter the admin password to confirm deletion:');
+        if (!pw) return;
+        const ok = await adminPost('/admin/rmdir', { password: pw, path: full });
+        if (ok) renderBrowse(path); else alert('Deletion failed — wrong password?');
+      };
+      row.appendChild(a); row.appendChild(trash); el.appendChild(row);
     }
     for (const f of data.files) {
       const row = document.createElement('div'); row.className = 'row';

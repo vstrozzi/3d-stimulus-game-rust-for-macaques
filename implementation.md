@@ -45,10 +45,15 @@ monkey_3d_game/
 │   ├── controller.py           native controller (FSM driving the experiment)
 │   ├── monitor.py              live SHM monitor (prints g_dt / r_dt / gaps)
 │   └── monkey_shared.so        built from `shared` with --features python
-├── controller_main.js          web controller (mirrors controller.py)
-├── index.html                  landing page (session-name input)
-├── game.html                   game page (loads WASM + vendored JSZip)
-├── vendor/jszip.min.js         vendored ZIP lib (CDN with SRI failed)
+├── controller_main.js          web controller source (mirrors controller.py);
+│                               minified into deploy_frontend/ by terser
+├── deploy_frontend/            served web bundle (see §19)
+│   ├── index.html              landing page (role-rendered; loads WASM)
+│   ├── login.html              password page
+│   ├── controller_main.min.js  minified build output of controller_main.js
+│   ├── game_node -> ../game_node      symlink (WASM build dir is game_node/pkg)
+│   ├── assets -> ../game_node/assets  symlink
+│   └── trials_config -> ../trials_config  symlink
 ├── trials_config/
 │   └── trial_editor.html       browser-based trial JSON editor
 ├── tools/
@@ -80,9 +85,14 @@ python controller_python/monitor.py --hz 60      # live SHM dashboard
 
 ### WASM build
 ```
-wasm-pack build game_node --target web --release --out-dir ../out
+wasm-pack build game_node --target web --release --out-dir pkg
+gzip -9 -k -f game_node/pkg/game_node_bg.wasm
+npx terser controller_main.js -c drop_console=true,drop_debugger=true -m \
+  -o deploy_frontend/controller_main.min.js
 ```
-Serve the repo root over HTTP with COOP/COEP headers (see §6). The page
+Output lands in `game_node/pkg`, reached through the `deploy_frontend/game_node`
+symlink. Serve `deploy_frontend/` over HTTP with COOP/COEP headers (see §6,
+§19). The page
 needs `Cross-Origin-Opener-Policy: same-origin` and
 `Cross-Origin-Embedder-Policy: require-corp` for `SharedArrayBuffer`.
 
@@ -951,7 +961,7 @@ JSONL files still validate.
 cargo build --release -p shared --features python
 cp target/release/libshared.so controller_python/monkey_shared.so
 cargo build --release -p game_node
-wasm-pack build game_node --target web --release --out-dir ../out   # web only
+wasm-pack build game_node --target web --release --out-dir pkg      # web only
 ```
 
 ---

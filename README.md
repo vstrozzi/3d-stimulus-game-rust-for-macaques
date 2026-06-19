@@ -6,6 +6,41 @@ This architecture allows for extremely low-latency, lock-free communication betw
 
 ## Architecture
 
+```
+      Controller                 Shared Memory (lock-free)              Game (Bevy)
+  ┌─────────────────┐        ┌──────────────────────────────┐      ┌─────────────────┐
+  │ controller.py   │  write │ commands      (ctrl → game)   │ read │ game_node       │
+  │   or            │───────▶│ control state (ctrl → game)   │─────▶│  reads cmds,    │
+  │ controller_     │        │                               │      │  steps world,  │
+  │   main.js (FSM) │◀───────│ game state + 8-slot ring buf  │◀─────│  writes state  │
+  └─────────────────┘  read  │   (game → ctrl, per frame)    │ write└─────────────────┘
+                             └──────────────────────────────┘
+   Native: 2 OS processes, region = mmap'd file in /tmp
+   Web:    1 thread,       region = SharedArrayBuffer (controller + WASM game share it)
+```
+
+The two sides never call each other. They only read/write atomics in one shared
+region: the controller pushes **commands + next-trial config**; the game pushes a
+**state snapshot every frame** (plus an 8-slot ring buffer so the controller can
+drain frames it polled past). No locks, no IPC syscalls on the hot path — just
+atomic loads/stores. `repr(C)` layout means the Rust game and the Python/JS
+controller agree on byte offsets. See `implementation.md §3` for the field table.
+
+**Single vsync clock domain.** Every game system (commands, logic, animation,
+state writes) runs *once per rendered frame*, locked to the display refresh via
+`PresentMode::Fifo` — no separate `FixedUpdate`. Benefits:
+
+* **One timeline.** Logic and rendering can't drift apart, so no judder from a
+  fixed step landing between two frames; the transform you simulate is the one
+  you display.
+* **Back-pressure = free timestamp.** Under Fifo the main loop blocks on
+  `present()` until the next vsync, so sampling the clock at the top of the next
+  frame yields a near-exact flip time — a software `Screen('Flip')`, sub-ms after
+  photodiode calibration (the constant display latency `T_offset`).
+* **Refresh-rate independent.** The loop ticks at 60/120/144 Hz / VRR; anything
+  wall-clock-stable scales by `Δt`. The measured rate is logged per session as a
+  sanity check. See `implementation.md §8`.
+
 * **Shared Library (`shared`)**: Defines the atomic data structures (`SharedCommands`, `SharedGameState`) and handles platform-specific shared memory creation (mmap on Native, SharedArrayBuffer on Web).
 * **Game Node (`game_node`)**: The Bevy application. It reads commands from shared memory and writes the game state to shared memory every frame.
 * **Controllers**:
@@ -47,10 +82,11 @@ python controller_python/controller.py
 
 #### Web Controller
 1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`) #add --dev for no optimizations
-2. Gzip the wasm (decompressed in JS via `DecompressionStream`; GitHub Pages doesn't gzip `.wasm`):
-   `gzip -9 -k -f game_node/pkg/game_node_bg.wasm`
+2. Gzip the wasm (decompressed in JS via `DecompressionStream`).
+   `gzip -9 -f game_node/pkg/game_node_bg.wasm`
 3. npx terser controller_main.js -c drop_console=true,drop_debugger=true -m -o deploy_frontend/controller_main.min.js # min version served by the frontend
-3. Launch (replace in game.html the right controller file)
+4. Serve `deploy_frontend/` (see "Hosted web server" below).
+5. To reclaim disk space after a build: rm -rf game_node/pkg/debug-analysis game_node/pkg/game_node_bg.wasm
 
 ## How to create levels
 
@@ -74,54 +110,107 @@ python game_node/src/scripts/equalize_audio.py game_node/assets/sounds
 python tools/verify_trial_logs.py out/trial_logs/
 
 
-## Hosted web server (per-trial logging)
+## Hosted web server
 
-Instead of static hosting, `deploy_backend/log_server.py` serves the
-`deploy_frontend/` bundle behind a password gate and receives one POST per
-trial, writing it to `out/server_logs/` in the exact same folder format
-`controller.py` produces. (`deploy_frontend/` holds `index.html`, `login.html`,
-`controller_main.min.js`, and symlinks `game_node`, `assets`, `trials_config`
-back into the repo so nothing is duplicated and the build paths stay intact.)
+The web build is served by a small Python server (`deploy_backend/log_server.py`)
+that also receives one POST per trial and writes it to disk. The stack:
 
-Two passwords map to two roles:
-* **player** → name → instructions → play; trials are uploaded after each trial.
-* **admin** → editor + a name field (for test play) + `upload_trial` (saves a
-  `.jsonl` to the library) + `select_trial` (a popup to pick / rename / delete a
-  saved trial, or "★ default" it) + a "Make selected the default" button + a
-  popup that browses the server data folder (view a file, or download the
-  current folder as a server-zipped `.zip`).
+```
+  Browser ──HTTPS──▶ Caddy ──HTTP──▶ uvicorn ──▶ FastAPI app (log_server.py)
+                     (TLS, cert)     (ASGI       (auth gate, static files,
+                                      server)     /log + /admin endpoints)
+                                                        │
+                                                        ▼
+                                                  out/server_logs/  (per-trial JSON)
+```
 
-The trial library lives in `trials_config/trials/`; the active default is
-`trials_config/trials/trials.jsonl` (read by `controller.py`, the web
-controller, and the editor). "Make it default" backs up the current
-`trials.jsonl` → `trials_old_default.jsonl` and copies the selected one in.
+* **FastAPI** — the app: defines the routes (login, static bundle, `/log`, `/admin/*`).
+* **uvicorn** — the ASGI server that actually runs the FastAPI app and speaks HTTP.
+  (FastAPI is just a library; uvicorn is the process listening on a port.)
+* **Caddy** — reverse proxy in front, only to terminate **HTTPS** (auto Let's Encrypt
+  cert). HTTPS is mandatory because `SharedArrayBuffer` needs a secure context.
+* **passlib[argon2]** — hashes the two passwords (player / admin); only hashes are stored.
+* **itsdangerous** — signs the auth cookie so it can't be forged (needs `SECRET_KEY`).
 
-There is no client-side ZIP: the browser keeps each trial in memory only until
-the server confirms it (HTTP 200), then drops it. If trials remain unsent at
-the end of a game, the player is shown how many are pending and the sender
-keeps retrying until they upload.
+Auth is a single cookie gate: log in once → signed `{role}` cookie → every path is
+checked. `player` plays + uploads logs; `admin` also browses/downloads the data.
 
-### Docker (recommended — identical local & server)
-Test locally (a dev `.env` with player=`player` / admin=`admin` is created by
-the maintainer; otherwise `cp .env.example .env` and fill it):
+### Docker (recommended)
+
+#### Test locally
+A dev `.env` (player=`player`, admin=`admin`) is provided; otherwise
+`cp .env.example .env` and fill it. `http://localhost` is a secure context, so
+no TLS is needed locally:
 ```bash
 docker compose up --build        # → http://localhost:8000
 ```
-Deploy on a VM (Ubuntu, Docker installed; ports 22/80/443 open; DNS A-record → IP):
+
+#### Deploy on an Ubuntu VM
+Prereqs: a **domain** with an A-record → the VM's IP (HTTPS is mandatory —
+`SharedArrayBuffer` needs a secure context, so a bare `http://<IP>` won't work),
+and ports **22/80/443** open.
+
 ```bash
-git clone <repo> /srv/monkey_3d_game && cd /srv/monkey_3d_game
-cp .env.example .env             # then fill the 3 values, chmod 600 .env
-#   docker compose run --rm app python -c "import secrets;print(secrets.token_hex(32))"
-#   docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOURPASS'))"
-nano deploy_backend/Caddyfile.docker     # set your domain
+# 1. install Docker (+ compose plugin) and make it start on boot
+curl -fsSL https://get.docker.com | sh
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER && exit        # log back in so 'docker' needs no sudo
+
+# 2. get the code
+ssh user@<VM-IP>
+sudo mkdir -p /srv/3d-stimulus-game-rust-for-macaques && sudo chown $USER /srv/3d-stimulus-game-rust-for-macaques
+git clone <repo-url> /srv/3d-stimulus-game-rust-for-macaques
+cd /srv/3d-stimulus-game-rust-for-macaques
+
+# 3. secrets → .env  (gitignored, chmod 600)
+cp .env.example .env
+#   IMPORTANT: in .env each argon2 hash must have every '$' DOUBLED ('$$') —
+#   docker compose eats a single '$'. These generators pre-escape it:
+docker compose run --rm app python -c "import secrets;print(secrets.token_hex(32))"                                   # → SECRET_KEY (no '$', paste as-is)
+docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOUR_PLAYER_PW').replace('\$','\$\$'))"   # → PLAYER_PW_HASH
+docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOUR_ADMIN_PW').replace('\$','\$\$'))"    # → ADMIN_PW_HASH
+nano .env && chmod 600 .env
+
+# 4. domain for HTTPS
+vim deploy_backend/Caddyfile.docker         # replace your.domain.com
+
+# 5. run (detached + HTTPS)
 docker compose --profile tls up -d --build
-docker compose logs -f app
+docker compose logs -f app                   # Ctrl-C stops only the log view, not the server
 ```
+
+#### Always-up / crash recovery
+`restart: unless-stopped` (in `docker-compose.yml`) + `systemctl enable docker`
+mean: app crash → auto-restart; VM reboot / power loss → containers come back
+exactly as they were. A *startup* bug crash-loops — check `docker compose logs app`.
+
+#### Detaching from SSH
+Always start with `-d` (above). Then `exit` freely — containers run under the
+Docker daemon, not your SSH session. (If you ever started attached without `-d`,
+`Ctrl-C` then re-run with `-d`.)
+
+#### Updating
+```bash
+cd /srv/3d-stimulus-game-rust-for-macaques && git pull && docker compose --profile tls up -d --build
+```
+`--build` is required for code changes (frontend + server are baked into the
+image). `./data/` is untouched by pulls.
+
+#### Data & backup
 Data persists on the host under `./data/` (`server_logs/` + `trials/` bind
-mounts); `restart: unless-stopped` + `systemctl enable docker` auto-recovers on
-crash/reboot. Back up `./data/server_logs` with `deploy_backend/backup.sh`
-(restic; cron). The whole repo can be cloned to the server — `.dockerignore`
-keeps `target/`, `out/`, `.git` out of the image.
+mounts), owned by **root** (the container writes as root — use `sudo` to read it).
+Set up **one rolling copy every 24 h** in **root's** crontab (root, so it can
+read the root-owned data):
+```bash
+sudo mkdir -p /srv/backup
+sudo crontab -e
+# add:
+0 3 * * * rsync -a --delete /srv/3d-stimulus-game-rust-for-macaques/data/server_logs/ /srv/backup/server_logs/ >> /var/log/monkey-backup.log 2>&1
+```
+Test it immediately: `sudo rsync -av --delete /srv/3d-stimulus-game-rust-for-macaques/data/server_logs/ /srv/backup/server_logs/`.
+`--delete` keeps exactly one mirror (no history). It's on the same disk, so for
+real safety point the destination at a second volume / another host / R2.
+Read the data with `python tools/verify_trial_logs.py data/server_logs/<date>/<name>/`.
 
 ### Run locally without Docker (no TLS — `http://localhost` is a secure context)
 Run from the repo root (so `deploy_backend` imports and the symlinks resolve):
@@ -134,15 +223,4 @@ python -m uvicorn deploy_backend.log_server:app --port 8000
 # open http://localhost:8000  → log in with PLAYERPW (play) or ADMINPW (browse data)
 ```
 The passwords are whatever plaintext you hash above; only the hashes are stored
-(in these env vars / the systemd unit), never the plaintext.
-
-### Deploy (HTTPS required for SharedArrayBuffer)
-Run on a VM with a **persistent disk** (where `out/server_logs/` lives).
-`deploy_backend/monkey-log-server.service` runs uvicorn under systemd;
-`deploy_backend/Caddyfile` puts Caddy in front for automatic HTTPS. Back up
-`out/server_logs/` (e.g. nightly `rsync`). Read the data with
-`python tools/verify_trial_logs.py out/server_logs/<date>/<name>/`. On disk the
-layout is
-`out/server_logs/<date>/<name>/<name>_<YYYY-MM-DD_HH-MM-SS>/level_NNN/<HHMMSS>/trials/…`
-(date first, so a day folder holds every player of that day; each play session
-gets its own `<name>_<timestamp>` folder, so repeat plays never collide).
+(in these env vars), never the plaintext.

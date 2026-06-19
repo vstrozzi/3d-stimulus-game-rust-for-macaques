@@ -210,6 +210,23 @@ def admin_file(path: str):
     return FileResponse(full, media_type="text/plain; charset=utf-8")
 
 
+@app.post("/admin/rmdir")
+async def admin_rmdir(request: Request):
+    """Delete a single data subfolder and everything in it. Password-gated;
+    refuses to delete the LOG_ROOT itself. Irreversible."""
+    body = await request.json()
+    if not _check_admin_password(body.get("password", "")):
+        raise HTTPException(403, "wrong password")
+    rel = body.get("path", "")
+    if not rel:
+        raise HTTPException(400, "bad path")
+    target = _safe_under(LOG_ROOT, rel)
+    if target == LOG_ROOT or not os.path.isdir(target):
+        raise HTTPException(400, "bad path")
+    shutil.rmtree(target)
+    return {"ok": True}
+
+
 @app.get("/admin/zip")
 def admin_zip(path: str = ""):
     """Recursively compress the selected folder on the fly (path='' → the whole
@@ -264,10 +281,17 @@ def _trial_path(name):
 @app.get("/admin/trials/list")
 def trials_list():
     os.makedirs(TRIALS_DIR, exist_ok=True)
-    items = [
-        {"name": n, "size": os.path.getsize(os.path.join(TRIALS_DIR, n))}
-        for n in sorted(os.listdir(TRIALS_DIR)) if n.endswith(".jsonl")
-    ]
+    default_path = os.path.join(TRIALS_DIR, "trials.jsonl")
+    default_bytes = open(default_path, "rb").read() if os.path.isfile(default_path) else None
+    items = []
+    for n in sorted(os.listdir(TRIALS_DIR)):
+        if not n.endswith(".jsonl"):
+            continue
+        fp = os.path.join(TRIALS_DIR, n)
+        # "default" = same content as the active trials.jsonl, so the promoted
+        # trial (not just the trials.jsonl entry) is shown as the default.
+        is_default = default_bytes is not None and open(fp, "rb").read() == default_bytes
+        items.append({"name": n, "size": os.path.getsize(fp), "is_default": is_default})
     return {"trials": items, "default": "trials.jsonl"}
 
 
@@ -284,6 +308,8 @@ async def trials_save(request: Request):
 @app.post("/admin/trials/delete")
 async def trials_delete(request: Request):
     p = _trial_path((await request.json()).get("name", ""))
+    if os.path.realpath(p) == os.path.join(TRIALS_DIR, "trials.jsonl"):
+        raise HTTPException(400, "cannot delete the default trials.jsonl")
     if os.path.exists(p):
         os.remove(p)
     return {"ok": True}
@@ -315,6 +341,13 @@ async def trials_make_default(request: Request):
         os.replace(default, os.path.join(TRIALS_DIR, "trials_old_default.jsonl"))
     shutil.copyfile(src, default)
     return {"ok": True}
+
+
+def _check_admin_password(pw):
+    try:
+        return bool(pw) and argon2.verify(pw, ADMIN_PW_HASH)
+    except Exception:
+        return False
 
 
 # ── Static bundle (deploy_frontend/, gated by the middleware above) ─────────

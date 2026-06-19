@@ -1,6 +1,0 @@
-# HTTPS reverse proxy for the logging server. Caddy gets a Let's Encrypt cert
-# automatically. COOP/COEP (needed for SharedArrayBuffer) are set by FastAPI,
-# so Caddy only terminates TLS and proxies. Replace the domain.
-your.domain.com {
-    reverse_proxy 127.0.0.1:8000
-}

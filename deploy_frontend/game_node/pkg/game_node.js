@@ -1,0 +1,1 @@
+../../../game_node/pkg/game_node.js

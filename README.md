@@ -81,10 +81,11 @@ python controller_python/controller.py
 ```
 
 #### Web Controller
+
 1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`) #add --dev for no optimizations
 2. Gzip the wasm (decompressed in JS via `DecompressionStream`).
    `gzip -9 -f game_node/pkg/game_node_bg.wasm`
-3. npx terser controller_main.js -c drop_console=true,drop_debugger=true -m -o deploy_frontend/controller_main.min.js # min version served by the frontend
+3. npx terser controller_ma in.js -c drop_console=true,drop_debugger=true -m -o deploy_frontend/controller_main.min.js # min version served by the frontend
 4. Serve `deploy_frontend/` (see "Hosted web server" below).
 5. To reclaim disk space after a build: rm -rf game_node/pkg/debug-analysis game_node/pkg/game_node_bg.wasm
 

@@ -350,6 +350,12 @@
     background: rgba(8, 8, 8, 0.96);
     text-align: center;
   }
+  .end-thanks {
+    font-size: 1.4em;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: 0.04em;
+  }
   #end-title {
     font-size: 1.15em;
     color: #fff;
@@ -360,6 +366,35 @@
     font-size: 0.95em;
     line-height: 1.5;
     color: rgba(255, 255, 255, 0.78);
+  }
+
+  /* ── Rotate-to-landscape overlay (shown while the game is in portrait) ── */
+  #rotate-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 250;
+    background: #000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.25rem;
+    text-align: center;
+    padding: 2rem;
+  }
+  #rotate-overlay .rotate-icon {
+    font-size: 3.5em;
+    animation: rotate-hint 1.8s ease-in-out infinite;
+  }
+  #rotate-overlay .rotate-msg {
+    font-size: 1.3em;
+    color: #fff;
+    line-height: 1.5;
+    letter-spacing: 1px;
+  }
+  @keyframes rotate-hint {
+    0%, 40%   { transform: rotate(0deg); }
+    60%, 100% { transform: rotate(90deg); }
   }
 </style>
 </head>
@@ -498,9 +533,15 @@
 
   <div id="end-popup" hidden>
     <div class="end-card">
+      <div class="end-thanks">Thank you for playing!</div>
       <div id="end-title">Session complete</div>
       <div id="end-text">Saving your data…</div>
     </div>
+  </div>
+
+  <div id="rotate-overlay">
+    <div class="rotate-icon">📱</div>
+    <div class="rotate-msg">Please rotate your device<br>to landscape</div>
   </div>
 </div>
 
@@ -522,6 +563,27 @@
     else { playerFlow.hidden = false; }
   }).catch(() => { playerFlow.hidden = false; });
 
+  // Best-effort lock to landscape. Only works in fullscreen on Android
+  // Chrome/Firefox; iOS Safari has no Orientation Lock API, so it rejects/throws
+  // and the #rotate-overlay below is the fallback. Must run inside the Play
+  // gesture while already fullscreen, hence the call from bootGame().
+  function lockLandscape() {
+    try {
+      const o = screen.orientation;
+      const p = o && o.lock && o.lock('landscape');
+      if (p && p.catch) p.catch(() => {});
+    } catch (_) {}
+  }
+
+  // Show the rotate prompt whenever the game is up and the device is portrait.
+  // Covers browsers that can't lock and the case of rotating back mid-game.
+  function updateRotateOverlay() {
+    const ov = document.getElementById('rotate-overlay');
+    if (!ov) return;
+    const portrait = window.innerHeight > window.innerWidth;
+    ov.style.display = (!gameRoot.hidden && portrait) ? 'flex' : 'none';
+  }
+
   // ── Boot ───────────────────────────────────────────────────────────────
   let _gameBooted = false;
   function bootGame() {
@@ -530,6 +592,8 @@
     playerFlow.hidden = true;
     adminFlow.hidden = true;
     gameRoot.hidden = false;
+    lockLandscape();
+    updateRotateOverlay();
     fitCanvas();
     const c = document.createElement('script');
     c.type = 'module';
@@ -837,11 +901,13 @@
     wrap.style.height = Math.max(Math.round(h * scale), 1) + 'px';
     wrap.style.transform = `scale(${1 / scale})`;
   }
-  new ResizeObserver(fitCanvas).observe(document.body);
-  window.addEventListener('resize', fitCanvas);
-  document.addEventListener('fullscreenchange', fitCanvas);
-  document.addEventListener('webkitfullscreenchange', fitCanvas);
-  screen.orientation?.addEventListener('change', fitCanvas);
+  function onViewportChange() { fitCanvas(); updateRotateOverlay(); }
+  new ResizeObserver(onViewportChange).observe(document.body);
+  window.addEventListener('resize', onViewportChange);
+  window.addEventListener('orientationchange', onViewportChange);
+  document.addEventListener('fullscreenchange', onViewportChange);
+  document.addEventListener('webkitfullscreenchange', onViewportChange);
+  screen.orientation?.addEventListener('change', onViewportChange);
   fitCanvas();
 </script>
 </body>

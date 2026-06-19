@@ -619,7 +619,24 @@ function enforceLevel(lv) {
   f.firefly_size = Math.max(0, f.firefly_size);
   if (f.firefly_expand_secs == null) f.firefly_expand_secs = SCENE_DEFAULTS.firefly_expand_secs;
   f.firefly_expand_secs = Math.max(0, f.firefly_expand_secs);
+  // Pyramid / animation / lighting — backfill so files saved before these were
+  // editable (or hand-written without them) load with sensible defaults instead
+  // of rendering `undefined` inputs and exporting them back as missing.
+  if (f.base_radius == null) f.base_radius = PYRAMID_DEFAULTS.base_radius;
+  if (f.height == null) f.height = PYRAMID_DEFAULTS.height;
+  if (f.cosine_alignment_threshold == null) f.cosine_alignment_threshold = GAME_DEFAULTS.cosine_alignment_to_win;
+  if (f.door_anim_fade_out == null) f.door_anim_fade_out = PYRAMID_DEFAULTS.door_anim_fade_out;
+  if (f.door_anim_stay_open == null) f.door_anim_stay_open = PYRAMID_DEFAULTS.door_anim_stay_open;
+  if (f.door_anim_fade_in == null) f.door_anim_fade_in = PYRAMID_DEFAULTS.door_anim_fade_in;
+  if (f.main_spotlight_intensity == null) f.main_spotlight_intensity = LIGHTING_DEFAULTS.spotlight_intensity;
+  if (f.ambient_brightness == null) f.ambient_brightness = LIGHTING_DEFAULTS.ambient_intensity;
+  if (f.max_spotlight_intensity == null) f.max_spotlight_intensity = LIGHTING_DEFAULTS.max_spotlight_intensity;
   for (const t of (lv.trials || [])) {
+    if (t.nr_attempts_to_win == null) t.nr_attempts_to_win = 3;
+    if (t.nr_attempts_suggestion == null) t.nr_attempts_suggestion = 3;
+    if (t.nr_attempts_to_retroceed == null) t.nr_attempts_to_retroceed = 10;
+    if (t.elapsed_time_to_win == null) t.elapsed_time_to_win = 4.0;
+    if (t.elapsed_time_to_retroceed == null) t.elapsed_time_to_retroceed = 10.0;
     if (t.show_all == null) t.show_all = false;
   }
   f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));

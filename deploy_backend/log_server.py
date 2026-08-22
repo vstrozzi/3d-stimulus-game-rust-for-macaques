@@ -351,13 +351,25 @@ def _check_admin_password(pw):
 
 
 # ── Static bundle (deploy_frontend/, gated by the middleware above) ─────────
+def _static_file(request: Request, full: str, media_type=None):
+    """Serve a bundle file so the browser always revalidates before reusing it.
+    And use up-to-date version
+    """
+    st = os.stat(full)
+    etag = f'"{st.st_mtime_ns:x}-{st.st_size:x}"'
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=headers)
+    return FileResponse(full, media_type=media_type, headers=headers)
+
+
 @app.get("/")
-def index():
-    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
+def index(request: Request):
+    return _static_file(request, os.path.join(FRONTEND_DIR, "index.html"))
 
 
 @app.get("/{path:path}")
-def static_files(path: str):
+def static_files(request: Request, path: str):
     full = _safe_under(FRONTEND_DIR, path, contain=REPO_ROOT)
     # The logs are reachable only through the admin-gated /admin/* routes —
     # never as plain static, or any player could read other players' data.
@@ -368,4 +380,4 @@ def static_files(path: str):
     # .gz is served raw (octet-stream, no Content-Encoding) — the client
     # decompresses it itself via DecompressionStream.
     media = "application/octet-stream" if full.endswith(".gz") else None
-    return FileResponse(full, media_type=media)
+    return _static_file(request, full, media_type=media)

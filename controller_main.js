@@ -48,6 +48,41 @@ const APP_START_UNIX_NS = Date.now() * 1_000_000;
 
 const TRIALS_PATH = "./trials_config/trials/trials.jsonl";
 
+// ── Player-facing text ─────────────────────────────────────────────────────
+// English is the default; the landing page's EN/DE switch stores the choice in
+// sessionStorage before booting the game. Read once — the switch is gone by
+// the time the game runs.
+const LANG = (() => {
+  try { return sessionStorage.getItem("lang") === "de" ? "de" : "en"; } catch (_) { return "en"; }
+})();
+const TEXT_EN = {
+  loading: "Downloading textures…",
+  instructions:
+    "Left arrow: rotate the object to the left<br>" +
+    "Right arrow: rotate the object to the right<br>" +
+    "Press spacebar: interact and select a view<br><br>" +
+    "Press the screen or press space bar to start",
+  press: "Press the screen<br>or press space bar",
+  savedTitle: "All data saved",
+  savedText: "You can close this tab.",
+  savingTitle: "Saving your data…",
+  savingText: n => `${n} item(s) not yet uploaded. Keep this tab open and stay connected.`,
+};
+const TEXT_DE = {
+  loading: "Texturen werden geladen…",
+  instructions:
+    "Pfeiltaste links: Objekt nach links drehen<br>" +
+    "Pfeiltaste rechts: Objekt nach rechts drehen<br>" +
+    "Leertaste: interagieren und eine Ansicht auswählen<br><br>" +
+    "Bildschirm berühren oder Leertaste drücken, um zu starten",
+  press: "Bildschirm berühren<br>oder Leertaste drücken",
+  savedTitle: "Alle Daten gespeichert",
+  savedText: "Sie können diesen Tab schließen.",
+  savingTitle: "Ihre Daten werden gespeichert…",
+  savingText: n => `${n} Element(e) noch nicht hochgeladen. Lassen Sie diesen Tab geöffnet und bleiben Sie verbunden.`,
+};
+const TEXT = LANG === "de" ? TEXT_DE : TEXT_EN;
+
 // ── FSM States and proceeding outcomes ─────────────────────────────────────
 // Populated from Rust at startup so the labels stay in lockstep with
 // controller.py's ControllerState / TrialProceeding enums.
@@ -1198,12 +1233,11 @@ function _updateEndPopup() {
   const title = document.getElementById("end-title");
   const text = document.getElementById("end-text");
   if (pending.size === 0) {
-    if (title) title.textContent = "All data saved";
-    if (text) text.textContent = "You can close this tab.";
+    if (title) title.textContent = TEXT.savedTitle;
+    if (text) text.textContent = TEXT.savedText;
   } else {
-    if (title) title.textContent = "Saving your data…";
-    if (text) text.textContent =
-      `${pending.size} item(s) not yet uploaded. Keep this tab open and stay connected.`;
+    if (title) title.textContent = TEXT.savingTitle;
+    if (text) text.textContent = TEXT.savingText(pending.size);
   }
 }
 
@@ -1422,7 +1456,7 @@ function handleInit(state) {
 
   // Show start overlay with loading text until is_scene_ready comes back true
   showStartOverlay(true);
-  setOverlayPrompt("Downloading textures…", true);
+  setOverlayPrompt(TEXT.loading, true);
   _sceneReadyPromptShown = false;
   console.log("[FSM] → WAITING_FOR_START");
 }
@@ -1440,15 +1474,9 @@ function handleWaitingForStart(state) {
     // after pressing Play, then revert to the bare prompt for subsequent trials.
     if (!_instructionsShown && currentLevelIndex === 0) {
       _instructionsShown = true;
-      setOverlayPrompt(
-        "Left arrow: rotate the object to the left<br>" +
-        "Right arrow: rotate the object to the right<br>" +
-        "Press spacebar: interact and select a view<br><br>" +
-        "Press the screen or press space bar to start",
-        false
-      );
+      setOverlayPrompt(TEXT.instructions, false);
     } else {
-      setOverlayPrompt("Press the screen<br>or press space bar", false);
+      setOverlayPrompt(TEXT.press, false);
     }
   }
 

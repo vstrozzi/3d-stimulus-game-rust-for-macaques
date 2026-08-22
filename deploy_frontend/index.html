@@ -86,6 +86,19 @@
   }
   .name-input:focus { outline: none; border-color: #777; }
 
+  /* Small EN/DE switch, centered above the title on the player pages. */
+  .lang-btn {
+    align-self: center;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.8em;
+    font-family: inherit;
+    color: #bbb;
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 0.35rem;
+    cursor: pointer;
+  }
+
   /* ── Admin landing ────────────────────────────────────────────────── */
   .landing {
     display: flex;
@@ -403,24 +416,26 @@
 <!-- ─────────────────── PLAYER FLOW ─────────────────── -->
 <div id="player-flow" hidden>
   <div id="name-step" class="center-col">
+    <button class="lang-btn" id="lang-toggle" type="button">Deutsch</button>
     <h1>Object Manipulation</h1>
     <input type="text" id="session-name" class="name-input" placeholder="Your name"
+           data-i18n-placeholder="name_ph"
            autocomplete="off" spellcheck="false" maxlength="64">
-    <button class="start-btn" id="name-continue" type="button">Continue</button>
+    <button class="start-btn" id="name-continue" type="button" data-i18n="continue">Continue</button>
 
     <!-- Revealed (name locked) once Continue is pressed -->
     <div class="instructions" id="instructions" hidden>
-      ←&nbsp;&nbsp;→&nbsp;&nbsp;look around&nbsp;&nbsp;·&nbsp;&nbsp;press / tap to interact
+      <span data-i18n="hint">←&nbsp;&nbsp;→&nbsp;&nbsp;look around&nbsp;&nbsp;·&nbsp;&nbsp;press / tap to interact</span>
       <ul>
-        <li>Do not exit fullscreen during the game</li>
-        <li>Play on your main monitor — not an external / attached display</li>
-        <li>Keep the app and browser tab as minimal as possible</li>
-        <li>The session lasts at most 20 minutes (it may end sooner)</li>
-        <li>Your data is saved automatically after every trial</li>
-        <li>Please wait for the textures to finish downloading</li>
+        <li data-i18n="li1">Do not exit fullscreen during the game</li>
+        <li data-i18n="li2">Play on your main monitor — not an external / attached display</li>
+        <li data-i18n="li3">Keep the app and browser tab as minimal as possible</li>
+        <li data-i18n="li4">The session lasts at most 20 minutes (it may end sooner)</li>
+        <li data-i18n="li5">Your data is saved automatically after every trial</li>
+        <li data-i18n="li6">Please wait for the textures to finish downloading</li>
       </ul>
     </div>
-    <button class="start-btn" id="instr-play" type="button" hidden>Play</button>
+    <button class="start-btn" id="instr-play" type="button" data-i18n="play" hidden>Play</button>
   </div>
 </div>
 
@@ -635,7 +650,54 @@
     document.getElementById('instructions').hidden = false;
     instrPlay.hidden = false;
   });
-  instrPlay.addEventListener('click', makePlay(instrPlay, 'Press again to start'));
+  const onInstrPlay = makePlay(instrPlay, 'Press again to start');
+  instrPlay.addEventListener('click', () => {
+    onInstrPlay();
+    // makePlay wrote the English "press again" label; re-apply the active language.
+    if (instrPlay.dataset.ready === '1') applyLang();
+  });
+
+  // ── Language switch (player pages only) ──────────────────────────────────
+  // English is the markup, so it is the default and needs no table: the
+  // English strings are captured from the DOM on load and restored on toggle.
+  const I18N_DE = {
+    name_ph: 'Ihr Name',
+    continue: 'Weiter',
+    hint: '\u2190\u00a0\u00a0\u2192\u00a0\u00a0umsehen\u00a0\u00a0\u00b7\u00a0\u00a0dr\u00fccken / tippen zum Interagieren',
+    li1: 'Verlassen Sie w\u00e4hrend des Spiels nicht den Vollbildmodus',
+    li2: 'Spielen Sie auf Ihrem Hauptbildschirm \u2014 nicht auf einem externen Monitor',
+    li3: 'Halten Sie andere Apps und Browser-Tabs geschlossen',
+    li4: 'Die Sitzung dauert h\u00f6chstens 20 Minuten (sie kann fr\u00fcher enden)',
+    li5: 'Ihre Daten werden nach jedem Durchgang automatisch gespeichert',
+    li6: 'Bitte warten Sie, bis die Texturen vollst\u00e4ndig geladen sind',
+    play: 'Spielen',
+    play_again: 'Erneut dr\u00fccken zum Starten',
+  };
+  const I18N_EN = { play_again: 'Press again to start' };
+  const i18nNodes = document.querySelectorAll('[data-i18n]');
+  const i18nPlaceholders = document.querySelectorAll('[data-i18n-placeholder]');
+  i18nNodes.forEach(el => { I18N_EN[el.dataset.i18n] = el.textContent; });
+  i18nPlaceholders.forEach(el => { I18N_EN[el.dataset.i18nPlaceholder] = el.placeholder; });
+
+  let lang = 'en';
+  const langToggle = document.getElementById('lang-toggle');
+  function applyLang() {
+    const t = lang === 'de' ? I18N_DE : I18N_EN;
+    i18nNodes.forEach(el => { el.textContent = t[el.dataset.i18n]; });
+    i18nPlaceholders.forEach(el => { el.placeholder = t[el.dataset.i18nPlaceholder]; });
+    if (instrPlay.dataset.ready === '1') instrPlay.textContent = t.play_again;
+    langToggle.textContent = lang === 'de' ? 'English' : 'Deutsch';
+    document.documentElement.lang = lang;
+    // Hand the choice to the game: controller_main.js reads it for its own
+    // in-game prompts. Written on every call (including the initial one) so a
+    // stale value from an earlier play in this tab can never leak in.
+    try { sessionStorage.setItem('lang', lang); } catch (_) {}
+  }
+  langToggle.addEventListener('click', () => {
+    lang = lang === 'de' ? 'en' : 'de';
+    applyLang();
+  });
+  applyLang();
 
   // ── Admin landing ────────────────────────────────────────────────────────
   function setupAdmin() {

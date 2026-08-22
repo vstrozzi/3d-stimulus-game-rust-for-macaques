@@ -1478,6 +1478,7 @@ function handleInit(state) {
 }
 
 function handleWaitingForStart(state) {
+  setOverlayOpaque(!state.is_blank);
   // Block start until the game confirms all trial textures are on the GPU
   if (!state.is_scene_ready) {
     return;
@@ -1944,6 +1945,18 @@ function setKeyUI(key, active) {
 function showStartOverlay(show) {
   const el = document.getElementById("start-trial-overlay");
   if (el) el.style.display = show ? "flex" : "none";
+  // DOM flips to back screen 1 frame before `toggle_blank`,
+  //  Needed: the gap leaks a frame of the previous trial's object.
+  if (show) setOverlayOpaque(true);
+}
+
+// Cover the one-frame gap. Once the game reports `is_blank`, it stops
+let _overlayOpaque = true;
+function setOverlayOpaque(opaque) {
+  if (opaque === _overlayOpaque) return;
+  _overlayOpaque = opaque;
+  const el = document.getElementById("start-trial-overlay");
+  if (el) el.style.background = opaque ? "#000" : "transparent";
 }
 
 function setOverlayPrompt(html, isLoading = false) {

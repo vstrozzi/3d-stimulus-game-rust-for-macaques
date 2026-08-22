@@ -400,6 +400,7 @@ class MonkeyGameController:
         # Current level state
         self.current_level_index = 0
         self.chain_idxs = []
+        self.chain_last_beaten = []
         self.active_chain = 0
         self.chain_bag = []
         self._rng = random.Random()
@@ -407,6 +408,7 @@ class MonkeyGameController:
         if self.levels:
             start = self.levels[0]["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.levels[0]["objects"])
+            self.chain_last_beaten = [False] * len(self.levels[0]["objects"])
             self._reseed_rng_for_level()
             self.active_chain = self._level_start_object(self.levels[0])
             self._refill_chain_bag(exclude=self.active_chain)
@@ -509,7 +511,29 @@ class MonkeyGameController:
         return self.chain_idxs[self.active_chain]
 
     def _set_trial_idx(self, val):
-        self.chain_idxs[self.active_chain] = val
+        """Store position `val` as (idx, done). `idx` never leaves [0, n-1] so
+        `_trial_idx()` always names a trial that exists — beating the last
+        trial sets the `chain_last_beaten` flag instead of parking idx at n."""
+        n = len(self.level["trials"])
+        self.chain_last_beaten[self.active_chain] = val >= n
+        self.chain_idxs[self.active_chain] = min(val, n - 1)
+
+    def _chain_pos(self, i):
+        """Position of chain `i` for progress/completion arithmetic:
+        its trial index, +1 once its last trial has been beaten."""
+        return self.chain_idxs[i] + (1 if self.chain_last_beaten[i] else 0)
+
+    def _next_pos(self, delta):
+        """Position the active chain moves to for a step of `delta`
+        (+1 advance, 0 stay, -1 retroceed). Retroceed steps back from the trial
+        actually played, so a chain that has beaten its last trial drops to the
+        trial *before* it instead of replaying that same last trial. Used both
+        for the real update and for the value pre-pushed to the progress bar,
+        so the two can never disagree."""
+        n = len(self.level["trials"])
+        if delta < 0:
+            return max(0, self._trial_idx() - 1)
+        return min(self._chain_pos(self.active_chain) + delta, n)
 
     def _level_start_trial(self):
         return self.level["fixed"].get("start_trial", 0)
@@ -527,7 +551,7 @@ class MonkeyGameController:
 
     def _level_complete(self):
         n = len(self.level["trials"])
-        return all(idx >= n for idx in self.chain_idxs)
+        return all(self._chain_pos(i) >= n for i in range(len(self.chain_idxs)))
 
     def _reseed_rng_for_level(self):
         """Reseed `self._rng` from the active level's `random_seed` (saved in
@@ -551,7 +575,7 @@ class MonkeyGameController:
         remove_done = bool(self.level["fixed"].get("remove_completed_chains", False))
         indices = [
             i for i in range(len(self.level["objects"]))
-            if (not remove_done) or self.chain_idxs[i] < n
+            if (not remove_done) or self._chain_pos(i) < n
         ]
         if exclude is not None:
             indices = [i for i in indices if i != exclude]
@@ -596,7 +620,7 @@ class MonkeyGameController:
         total = len(self.level["trials"]) * len(self.level["objects"])
         if total <= 0:
             return 0.0
-        done = sum(max(0, idx) for idx in self.chain_idxs)
+        done = sum(max(0, self._chain_pos(i)) for i in range(len(self.chain_idxs)))
         return max(0.0, min(1.0, done / total))
 
     # The chain index only advances at TRIAL_COMPLETE, which happens *after*
@@ -607,9 +631,11 @@ class MonkeyGameController:
     def _projected_progress(self, delta):
         n = len(self.level["trials"])
         total = n * len(self.level["objects"])
+        positions = [self._chain_pos(i) for i in range(len(self.chain_idxs))]
+        new_active = self._next_pos(delta)
         projected = [
-            max(0, min(v + delta, n)) if i == self.active_chain else v
-            for i, v in enumerate(self.chain_idxs)
+            new_active if i == self.active_chain else v
+            for i, v in enumerate(positions)
         ]
         done = sum(max(0, v) for v in projected)
         level_done = all(v >= n for v in projected)
@@ -939,10 +965,20 @@ class MonkeyGameController:
                 "render_frame_number":  r["state_read"].get("render_frame_number"),
             })
 
+        # True when this run advanced out of the chain's last trial, i.e. the
+        # chain is finished. Recorded per run so a later RETROCEED cannot erase
+        # the fact — the trial index alone can no longer say it, now that it
+        # stays inside [0, n-1].
+        chain_completed = (
+            self.trial_proceeding == TrialProceeding.ADVANCE
+            and self._trial_idx() == len(self.level["trials"]) - 1
+        )
+
         log = {
             "level_index": self.current_level_index,
             "active_chain": self.active_chain,
             "trial_index_in_chain": self._trial_idx(),
+            "trial_chain_completed": chain_completed,
             "trial_run_counter": self.trial_run_counter,
             "trial_config": {k: v for k, v in self.flat_trial.items() if k != "start_orient"},
             "start_orient": self.trial_start_orient,
@@ -966,6 +1002,7 @@ class MonkeyGameController:
 
         summary_row = {
             "trial_index_in_chain": self._trial_idx(),
+            "trial_chain_completed": chain_completed,
             "active_chain": self.active_chain,
             "trial_run_counter": self.trial_run_counter,
             "outcome": outcome,
@@ -1344,20 +1381,16 @@ class MonkeyGameController:
 
     def _handle_trial_index_update(self):
         """Advance/stay/retroceed within the active chain, then maybe switch chain."""
-        n = len(self.level["trials"])
-        idx = self._trial_idx()
-
-        if self.trial_proceeding == TrialProceeding.ADVANCE:
-            new_idx = min(idx + 1, n)
-        elif self.trial_proceeding == TrialProceeding.RETROCEED:
-            new_idx = max(0, idx - 1)
-        else:  # STAY
-            new_idx = idx
+        delta = {
+            TrialProceeding.ADVANCE: 1,
+            TrialProceeding.STAY: 0,
+            TrialProceeding.RETROCEED: -1,
+        }[self.trial_proceeding]
 
         # Update trial counter
         self.trial_run_counter += 1
 
-        self._set_trial_idx(new_idx)
+        self._set_trial_idx(self._next_pos(delta))
         self.pending_progress = None   # the real values now match the pre-pushed ones
 
         # Advance to next level if all chains exhausted
@@ -1367,6 +1400,7 @@ class MonkeyGameController:
             self.correct_streak = 0   # every level starts with no particles
             start = self.level["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.level["objects"])
+            self.chain_last_beaten = [False] * len(self.level["objects"])
             self._reseed_rng_for_level()
             self.active_chain = self._level_start_object()
             self._refill_chain_bag(exclude=self.active_chain)

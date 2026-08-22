@@ -117,6 +117,7 @@ let levels = [];
 let paradigmName = "trials.jsonl";
 let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
+let chainLastBeaten = [];      // per chain: its last trial has been beaten
 let activeChain = 0;
 let chainBag = [];       // shuffled queue of upcoming chain picks
 let correctStreak = 0;   // consecutive-correct counter; drives the particle density
@@ -815,9 +816,32 @@ function flatTrial() {
 function _trialIdx() {
   return chainIdxs[activeChain];
 }
+/** Store position `val` as (idx, done). `idx` never leaves [0, n-1] so
+ *  `_trialIdx()` always names a trial that exists — beating the last trial
+ *  sets the `chainLastBeaten` flag instead of parking idx at n. */
 function _setTrialIdx(val) {
-  chainIdxs[activeChain] = val;
+  const n = currentLevel().trials.length;
+  chainLastBeaten[activeChain] = val >= n;
+  chainIdxs[activeChain] = Math.min(val, n - 1);
   _invalidateFlatTrial();
+}
+
+/** Position of chain `i` for progress/completion arithmetic: its trial index,
+ *  +1 once its last trial has been beaten. */
+function _chainPos(i) {
+  return chainIdxs[i] + (chainLastBeaten[i] ? 1 : 0);
+}
+
+/** Position the active chain moves to for a step of `delta` (+1 advance,
+ *  0 stay, -1 retroceed). Retroceed steps back from the trial actually played,
+ *  so a chain that has beaten its last trial drops to the trial *before* it
+ *  instead of replaying that same last trial. Used both for the real update
+ *  and for the value pre-pushed to the progress bar, so the two can never
+ *  disagree. */
+function _nextPos(delta) {
+  const n = currentLevel().trials.length;
+  if (delta < 0) return Math.max(0, _trialIdx() - 1);
+  return Math.min(_chainPos(activeChain) + delta, n);
 }
 
 function _levelStartTrial() {
@@ -826,7 +850,7 @@ function _levelStartTrial() {
 
 function _levelComplete() {
   const n = currentLevel().trials.length;
-  return chainIdxs.every(idx => idx >= n);
+  return chainIdxs.every((_, i) => _chainPos(i) >= n);
 }
 
 // Mulberry32: small deterministic PRNG so a level's draws are reproducible
@@ -858,7 +882,7 @@ function _refillChainBag(exclude) {
   const removeDone = !!level.fixed.remove_completed_chains;
   const indices = [];
   for (let i = 0; i < level.objects.length; i++) {
-    if (!removeDone || chainIdxs[i] < n) {
+    if (!removeDone || _chainPos(i) < n) {
       if (i !== exclude) indices.push(i);
     }
   }
@@ -896,7 +920,7 @@ function _levelProgressFrac() {
   const level = currentLevel();
   const total = level.trials.length * level.objects.length;
   if (total <= 0) return 0;
-  const done = chainIdxs.reduce((sum, v) => sum + Math.max(0, v), 0);
+  const done = chainIdxs.reduce((sum, _, i) => sum + Math.max(0, _chainPos(i)), 0);
   return Math.max(0, Math.min(1, done / total));
 }
 // The chain index only advances at TRIAL_COMPLETE, which happens *after* the
@@ -909,8 +933,8 @@ function _projectedProgress(delta) {
   const level = currentLevel();
   const n = level.trials.length;
   const total = n * level.objects.length;
-  const projected = chainIdxs.map((v, i) =>
-    i === activeChain ? Math.max(0, Math.min(v + delta, n)) : v);
+  const newActive = _nextPos(delta);
+  const projected = chainIdxs.map((_, i) => (i === activeChain ? newActive : _chainPos(i)));
   const done = projected.reduce((sum, v) => sum + Math.max(0, v), 0);
   const levelDone = projected.every(v => v >= n);
   return {
@@ -1369,10 +1393,17 @@ function saveTrialLog(outcome) {
     };
   }
 
+  // True when this run advanced out of the chain's last trial, i.e. the chain
+  // is finished. Recorded per run so a later RETROCEED cannot erase the fact —
+  // the trial index alone can no longer say it, now that it stays in [0, n-1].
+  const chainCompleted = trialProceeding === PROCEEDING.ADVANCE
+    && _trialIdx() === currentLevel().trials.length - 1;
+
   const log = {
     level_index: currentLevelIndex,
     active_chain: activeChain,
     trial_index_in_chain: _trialIdx(),
+    trial_chain_completed: chainCompleted,
     trial_run_counter: trialRunCounter,
     trial_config: (() => { const { start_orient: _drop, ...rest } = flatTrial(); return rest; })(),
     start_orient: trialStartOrient,
@@ -1398,6 +1429,7 @@ function saveTrialLog(outcome) {
 
   currentLevelSummary.trials_runs.push({
     trial_index_in_chain: _trialIdx(),
+    trial_chain_completed: chainCompleted,
     active_chain: activeChain,
     trial_run_counter: trialRunCounter,
     outcome,
@@ -1743,18 +1775,13 @@ function handleWaitingAnimationEnd(state) {
 }
 
 function handleTrialIndexUpdate() {
-  const level = currentLevel();
-  const n = level.trials.length;
-  const idx = _trialIdx();
-
-  let newIdx;
-  if (trialProceeding === PROCEEDING.ADVANCE) newIdx = Math.min(idx + 1, n);
-  else if (trialProceeding === PROCEEDING.RETROCEED) newIdx = Math.max(0, idx - 1);
-  else newIdx = idx; // STAY
+  const delta = trialProceeding === PROCEEDING.ADVANCE ? 1
+              : trialProceeding === PROCEEDING.RETROCEED ? -1
+              : 0;  // STAY
 
   trialRunCounter += 1;
 
-  _setTrialIdx(newIdx);
+  _setTrialIdx(_nextPos(delta));
   _pendingProgress = null;   // the real values now match what was pre-pushed
 
   if (_levelComplete()) {
@@ -1771,6 +1798,7 @@ function handleTrialIndexUpdate() {
     const newLevel = currentLevel();
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);
+    chainLastBeaten = new Array(newLevel.objects.length).fill(false);
     _reseedRngForLevel();
     activeChain = _levelStartObject(newLevel);
     _refillChainBag(activeChain);
@@ -2444,6 +2472,7 @@ async function start() {
   if (levels.length > 0) {
     const startIdx = levels[0].fixed.start_trial ?? 0;
     chainIdxs = new Array(levels[0].objects.length).fill(startIdx);
+    chainLastBeaten = new Array(levels[0].objects.length).fill(false);
     _reseedRngForLevel();
     activeChain = _levelStartObject(levels[0]);
     _refillChainBag(activeChain);

@@ -413,9 +413,8 @@ class MonkeyGameController:
             self.active_chain = self._level_start_object(self.levels[0])
             self._refill_chain_bag(exclude=self.active_chain)
 
-        # Consecutive-correct counter, reset at every new level: it drives the
-        # ambient particle density in the game (steps + extremes are constants
-        # in constants.rs).
+        # Session-wide correct/wrong balance. It drives ambient particle
+        # density and intentionally persists across level transitions.
         self.correct_streak = 0
 
         # Progress values pushed ahead of the real chain-index update so the
@@ -1397,7 +1396,6 @@ class MonkeyGameController:
         if self._level_complete():
             self._finalize_level_run("completed")
             self.current_level_index = (self.current_level_index + 1) % self.total_levels
-            self.correct_streak = 0   # every level starts with no particles
             start = self.level["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.level["objects"])
             self.chain_last_beaten = [False] * len(self.level["objects"])

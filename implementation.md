@@ -141,7 +141,7 @@ stored as `f32::to_bits()` and re-read with `f32::from_bits()`.
 | `target_door` | controller | Index of the door to align to. |
 | Door / pyramid / texture indices | controller | See `shared/src/lib.rs:153+`. |
 | `session_time_left` | controller | f32 bits, `1.0` = full session left, `<0` hides the clock. Live-synced. |
-| `correct_streak` | controller | Consecutive correct answers in the level (0 at level start). Drives the ambient particle density. Live-synced. |
+| `correct_streak` | controller | Session-wide correct/wrong balance (correct +1, wrong −1, floor 0). Persists across levels and drives ambient particle density. Live-synced. |
 | `platform_texture`, `background_texture` | controller | `Texture` enum index for the ground plane / curved wall. Per-level. |
 | `platform_color_mask`, `background_color_mask` | controller | `[f32; 4]` = `[r, g, b, a]`; `a` is mask strength, `0` = the bare texture. Per-level. |
 
@@ -1009,7 +1009,7 @@ stripped by the editor). `fixed.score_bar_max` kept its name but is now a
 
 ### SHM additions (`game_structure_control`)
 - `session_time_left: u32` (f32 bits) — fraction of the session left.
-- `correct_streak: u32` — consecutive correct answers in the level.
+- `correct_streak: u32` — session-wide correct/wrong balance; persists across levels.
 - `platform_texture`, `background_texture: u32`; `platform_color_mask`,
   `background_color_mask: [u32; 4]` (f32 bits).
 - `sync_live_state_from_shm` gained `progress_bar_size`,
@@ -1115,7 +1115,9 @@ to the trial *before* it and needs two consecutive wins to complete again
 - `#start-trial-overlay` now follows `state.is_blank` instead of being opaque
   for the whole break, so game-drawn UI (the clock) is visible on the web
   during breaks.
-- `correct_streak` resets to 0 at every level transition.
+- `correct_streak` persists across level transitions. Correct answers increase
+  it by one and wrong answers decrease it by one (floored at zero), so only a
+  wrong answer reduces the ambient-particle density.
 - **Fixed**: `setSceneConfig` must stamp the backdrop fields. `controllerLoop`
   writes the whole state every frame from a scratch object the reader never
   fills for write-only fields, so leaving them out pushed `0` (=`Bark001_1K`,

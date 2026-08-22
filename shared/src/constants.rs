@@ -283,11 +283,10 @@ pub mod fog_constants {
 }
 
 /// Ambient "magic" motes drifting in a ring in front of the curved back wall.
-/// Their number tracks the player's consecutive-correct streak, which the
-/// controller pushes as `correct_streak`: no correct answer in a row means no
-/// motes at all, and the ring then thickens step by step up to
-/// `AMBIENT_COUNT_MAX`. The streak — and so the ring — restarts at 0 on every
-/// new level.
+/// Their number tracks the player's session-wide correct/wrong balance, which
+/// the controller pushes as `correct_streak`: correct answers add one, wrong
+/// answers remove one, and level transitions leave it unchanged. The ring
+/// thickens step by step up to `AMBIENT_COUNT_MAX`.
 pub mod ambient_particle_constants {
     use bevy_color::Color;
 

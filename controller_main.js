@@ -120,7 +120,7 @@ let chainIdxs = [];      // one entry per object (chain)
 let chainLastBeaten = [];      // per chain: its last trial has been beaten
 let activeChain = 0;
 let chainBag = [];       // shuffled queue of upcoming chain picks
-let correctStreak = 0;   // consecutive-correct counter; drives the particle density
+let correctStreak = 0;   // session-wide correct/wrong balance; drives particle density
 let levelRandomSeed = 0; // resolved seed used by _rand() for the active level
 let _rngState = 0;
 
@@ -1695,8 +1695,8 @@ function handlePlaying(state) {
       _pendingProgress = _projectedProgress(correct ? (inWinBudget ? 1 : 0) : -1);
     }
 
-    // Consecutive-correct counter: drives the ambient particle density in the
-    // game (steps + extremes are constants in constants.rs).
+    // Session-wide particle counter: correct answers add one and wrong answers
+    // remove one. It intentionally persists across level transitions.
     if (correct) {
       correctStreak = correctStreak + 1;
     } else {
@@ -1806,7 +1806,6 @@ function handleTrialIndexUpdate() {
       return;
     }
     currentLevelIndex = (currentLevelIndex + 1) % levels.length;
-    correctStreak = 0;   // every level starts with no particles
     const newLevel = currentLevel();
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);

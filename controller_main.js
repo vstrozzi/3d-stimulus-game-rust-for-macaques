@@ -20,7 +20,15 @@ import init, {
   WebSharedMemory,
   wasm_main,
   controller_constants,
-} from "./game_node/pkg/game_node.js";
+// The `?v=` on this import and on the wasm URL below is a one-shot cache
+// buster for browsers that loaded the site before the server started
+// sending `Cache-Control: no-cache`: they still hold the old glue/wasm
+// under a self-invented freshness lifetime and will never revalidate, so
+// a new URL is the only way to reach them. Both must move together — new
+// glue against a cached old wasm fails the same way
+// ("__wasm_bindgen_func_elem_* is not a function"). Needs no bumping on
+// later rebuilds; the server's ETag handles those.
+} from "./game_node/pkg/game_node.js?v=20260822";
 
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -109,7 +117,7 @@ let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
 let activeChain = 0;
 let chainBag = [];       // shuffled queue of upcoming chain picks
-let scoreBarValue = 0;
+let correctStreak = 0;   // consecutive-correct counter; will drive particle density
 let levelRandomSeed = 0; // resolved seed used by _rand() for the active level
 let _rngState = 0;
 
@@ -854,14 +862,54 @@ function _drawNextChain() {
   _invalidateFlatTrial();
 }
 
-function _progressBarCur() {
-  return chainIdxs.reduce((sum, v) => sum + Math.max(0, v), 0);
+// ── Level chain (top-of-screen circles) ────────────────────────────────────
+// One circle per level; the first `_levelChainDone()` of them are filled.
+// Levels are played in order and the session ends on the last one, so the
+// number completed is simply the current index.
+function _levelChainDone() {
+  return currentLevelIndex;
 }
-function _progressBarSize() {
+function _levelChainSize() {
+  return levels.length;
+}
+
+// ── Left bar: mean trial position across chains, 0 -> 1 over the level ─────
+// Reaches exactly 1 when every chain is terminal, i.e. when the level is
+// complete. Sent as value/max over a fixed integer scale because the SHM
+// fields are u32.
+const LEVEL_PROGRESS_SCALE = 1000;
+function _levelProgressFrac() {
   const level = currentLevel();
-  if (level.fixed.show_progress_bar === false) return 0;
-  const remaining = Math.max(0, level.trials.length);
-  return remaining * level.objects.length;
+  const total = level.trials.length * level.objects.length;
+  if (total <= 0) return 0;
+  const done = chainIdxs.reduce((sum, v) => sum + Math.max(0, v), 0);
+  return Math.max(0, Math.min(1, done / total));
+}
+// The chain index only advances at TRIAL_COMPLETE, which happens *after* the
+// door animation has finished — too late for the game to animate the change
+// during it. So on the attempt that ends the trial we push the progress the
+// trial is about to land on, and keep pushing it until the real update
+// catches up (at which point both agree and this is cleared).
+let _pendingProgress = null;   // { value, chainDone } | null
+function _projectedProgress(delta) {
+  const level = currentLevel();
+  const n = level.trials.length;
+  const total = n * level.objects.length;
+  const projected = chainIdxs.map((v, i) =>
+    i === activeChain ? Math.max(0, Math.min(v + delta, n)) : v);
+  const done = projected.reduce((sum, v) => sum + Math.max(0, v), 0);
+  const levelDone = projected.every(v => v >= n);
+  return {
+    value: total > 0
+      ? Math.round(Math.max(0, Math.min(1, done / total)) * LEVEL_PROGRESS_SCALE)
+      : 0,
+    chainDone: currentLevelIndex + (levelDone ? 1 : 0),
+  };
+}
+
+/** `fixed.score_bar_max === 0` keeps its old meaning: hide the bar. */
+function _levelProgressMax() {
+  return (currentLevel().fixed.score_bar_max ?? 10) === 0 ? 0 : LEVEL_PROGRESS_SCALE;
 }
 
 function _levelStartObject(level) {
@@ -1407,12 +1455,10 @@ function handleInit(state) {
   trialState.camera_z = floatToU32Bits(camR);
 
   // Progress bar
-  trialState.progress_bar_cur_size = _progressBarCur();
-  trialState.progress_bar_size = _progressBarSize();
-  const sbMax = Math.max(1, Math.round(level.fixed.score_bar_max ?? 10));
-  scoreBarValue = Math.max(0, Math.min(scoreBarValue, sbMax));
-  trialState.score_bar_value = scoreBarValue;
-  trialState.score_bar_max = sbMax;
+  trialState.progress_bar_cur_size = _levelChainDone();
+  trialState.progress_bar_size = _levelChainSize();
+  trialState.score_bar_value = Math.round(_levelProgressFrac() * LEVEL_PROGRESS_SCALE);
+  trialState.score_bar_max = _levelProgressMax();
   trialState.session_time_left = floatToU32Bits(_sessionTimeLeftFrac());
   trialState.shake_amplitude = floatToU32Bits(level.fixed.shake_amplitude ?? 0.5);
   trialState.shake_duration = floatToU32Bits(level.fixed.shake_duration ?? 1.0);
@@ -1566,12 +1612,23 @@ function handlePlaying(state) {
     const stopRenderForAnim = !state.is_rendering_stopped;
     const showAll = !!trial.show_all;
 
-    const sbMaxCheck = Math.max(0, Math.round(currentLevel().fixed.score_bar_max ?? 10));
     const correct = cosineAlignment > cosineThreshold;
+
+    // Is this the attempt that ends the trial? A correct alignment always is
+    // (the game sets win_elapsed_secs); a wrong one is when it exhausts the
+    // retroceed budget — the same condition branch 1 below tests. `inWinBudget`
+    // is evaluated on paused game time, so it reads the same now as it will
+    // after the animation.
+    if (correct || nrAttempts === retroceedThreshold) {
+      _pendingProgress = _projectedProgress(correct ? (inWinBudget ? 1 : 0) : -1);
+    }
+
+    // Consecutive-correct counter. Nothing reads it yet: it is the input for
+    // the particle density (capped, constant in constants.rs) once that lands.
     if (correct) {
-      scoreBarValue = Math.min(sbMaxCheck, scoreBarValue + 1);
+      correctStreak = correctStreak + 1;
     } else {
-      scoreBarValue = Math.max(0, scoreBarValue - 1);
+      correctStreak = Math.max(0, correctStreak - 1);
     }
     const shake = !correct;
 
@@ -1672,6 +1729,7 @@ function handleTrialIndexUpdate() {
   trialRunCounter += 1;
 
   _setTrialIdx(newIdx);
+  _pendingProgress = null;   // the real values now match what was pre-pushed
 
   if (_levelComplete()) {
     _finalizeLevelRun("completed");
@@ -1795,12 +1853,12 @@ function controllerLoop() {
 
 
   // Set progress bar on state (mirrors Python lines 413-414)
-  state.progress_bar_cur_size = _progressBarCur();
-  state.progress_bar_size = _progressBarSize();
-  const sbMaxLoop = Math.max(0, Math.round(currentLevel().fixed.score_bar_max ?? 10));
-  scoreBarValue = Math.max(0, Math.min(scoreBarValue, sbMaxLoop));
-  state.score_bar_value = scoreBarValue;
-  state.score_bar_max = sbMaxLoop;
+  state.progress_bar_cur_size = _pendingProgress ? _pendingProgress.chainDone : _levelChainDone();
+  state.progress_bar_size = _levelChainSize();
+  state.score_bar_value = _pendingProgress
+    ? _pendingProgress.value
+    : Math.round(_levelProgressFrac() * LEVEL_PROGRESS_SCALE);
+  state.score_bar_max = _levelProgressMax();
   state.session_time_left = floatToU32Bits(_sessionTimeLeftFrac());
   state.shake_amplitude = floatToU32Bits(currentLevel().fixed.shake_amplitude ?? 0.5);
   state.shake_duration = floatToU32Bits(currentLevel().fixed.shake_duration ?? 1.0);
@@ -2220,7 +2278,6 @@ function backfillLevelDefaults(level) {
   if (level.fixed.start_object == null) level.fixed.start_object = -1;
   if (level.fixed.remove_completed_chains == null) level.fixed.remove_completed_chains = false;
   if (level.fixed.random_seed == null) level.fixed.random_seed = -1;
-  if (level.fixed.show_progress_bar == null) level.fixed.show_progress_bar = true;
   if (level.fixed.score_bar_max == null) level.fixed.score_bar_max = 10;
   if (level.fixed.shake_amplitude == null) level.fixed.shake_amplitude = 0.5;
   if (level.fixed.shake_duration == null) level.fixed.shake_duration = 1.0;
@@ -2287,7 +2344,7 @@ async function start() {
   setLoadingStep("Downloading game (WASM)...");
   setLoadingProgress(0);
 
-  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz", import.meta.url);
+  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz?v=20260822", import.meta.url);
   let wasmBuffer;
   try {
     const gzBuffer = await fetchWithProgress(wasmUrl, (loaded, total) => {
@@ -2356,8 +2413,7 @@ async function start() {
     _reseedRngForLevel();
     activeChain = _levelStartObject(levels[0]);
     _refillChainBag(activeChain);
-    const sbMax0 = levels[0].fixed.score_bar_max ?? 10;
-    scoreBarValue = Math.floor(sbMax0 / 2);
+    correctStreak = 0;
   }
 
   if (levels.length === 0) {

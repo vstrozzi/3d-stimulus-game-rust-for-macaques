@@ -110,6 +110,10 @@ MAX_SESSION_DURATION_S = MAX_SESSION_DURATION_MIN * 60
 # Per-trial frame-log buffer sized to cover the whole session at up to 120 Hz.
 MAX_TRIAL_FRAMES = MAX_SESSION_DURATION_S * 120
 
+# Integer scale for the left progress bar (SHM carries u32, the mean is
+# fractional). Mirrors LEVEL_PROGRESS_SCALE in controller_main.js.
+LEVEL_PROGRESS_SCALE = 1000
+
 # Frozen iteration order for hot loops — matches LOGGED_STATE_FIELDS as a list.
 _LOGGED_STATE_FIELDS_LIST = list(monkey_shared.LOGGED_STATE_FIELDS)
 
@@ -224,7 +228,6 @@ def _backfill_level_defaults(level):
     fixed.setdefault("start_object", -1)
     fixed.setdefault("remove_completed_chains", False)
     fixed.setdefault("random_seed", -1)
-    fixed.setdefault("show_progress_bar", True)
     fixed.setdefault("score_bar_max", 10)
     fixed.setdefault("shake_amplitude", 0.5)
     fixed.setdefault("shake_duration", 1.0)
@@ -390,11 +393,15 @@ class MonkeyGameController:
             self.active_chain = self._level_start_object(self.levels[0])
             self._refill_chain_bag(exclude=self.active_chain)
 
-        # Session-wide score bar. Starts at half the first level's capacity
-        # and persists across all levels — increment on correct, decrement
-        # on wrong, clamped to [0, max].
-        first_max = self.levels[0]["fixed"].get("score_bar_max", 10) if self.levels else 10
-        self.score_bar_value = first_max // 2
+        # Consecutive-correct counter, session-wide. Nothing reads it yet: it
+        # is the input for the particle density (capped, constant in
+        # constants.rs) once that lands.
+        self.correct_streak = 0
+
+        # Progress values pushed ahead of the real chain-index update so the
+        # game can animate them during the door animation. None = use the real
+        # values. See _projected_progress.
+        self.pending_progress = None
 
         # Frame tracking
         self.current_frame = -1
@@ -553,16 +560,49 @@ class MonkeyGameController:
                 state[key] = value
         return state
 
-    # Count only progress from the loaded start_trial so resumed levels
-    # reflect the visible chain segment rather than the absolute trial index.
-    def _progress_bar_cur(self):
-        return sum(max(0, idx) for idx in self.chain_idxs)
+    # ── Level chain (top-of-screen circles) ────────────────────────────────
+    # One circle per level; the first `_level_chain_done()` of them are filled.
+    # Levels are played in order and the session ends on the last one, so the
+    # number completed is simply the current index.
+    def _level_chain_done(self):
+        return self.current_level_index
 
-    def _progress_bar_size(self):
-        if not self.level["fixed"].get("show_progress_bar", True):
-            return 0
-        remaining = max(0, len(self.level["trials"]))
-        return remaining * len(self.level["objects"])
+    def _level_chain_size(self):
+        return len(self.levels)
+
+    # ── Left bar: mean trial position across chains, 0 -> 1 over the level ──
+    # Reaches exactly 1 when every chain is terminal, i.e. when the level is
+    # complete. Sent as value/max over a fixed integer scale because the SHM
+    # fields are u32.
+    def _level_progress_frac(self):
+        total = len(self.level["trials"]) * len(self.level["objects"])
+        if total <= 0:
+            return 0.0
+        done = sum(max(0, idx) for idx in self.chain_idxs)
+        return max(0.0, min(1.0, done / total))
+
+    # The chain index only advances at TRIAL_COMPLETE, which happens *after*
+    # the door animation has finished — too late for the game to animate the
+    # change during it. So on the attempt that ends the trial we push the
+    # progress the trial is about to land on, and keep pushing it until the
+    # real update catches up (at which point both agree and it is cleared).
+    def _projected_progress(self, delta):
+        n = len(self.level["trials"])
+        total = n * len(self.level["objects"])
+        projected = [
+            max(0, min(v + delta, n)) if i == self.active_chain else v
+            for i, v in enumerate(self.chain_idxs)
+        ]
+        done = sum(max(0, v) for v in projected)
+        level_done = all(v >= n for v in projected)
+        return {
+            "value": round(max(0.0, min(1.0, done / total)) * LEVEL_PROGRESS_SCALE) if total > 0 else 0,
+            "chain_done": self.current_level_index + (1 if level_done else 0),
+        }
+
+    # `fixed.score_bar_max == 0` keeps its old meaning: hide the bar.
+    def _level_progress_max(self):
+        return 0 if int(self.level["fixed"].get("score_bar_max", 10)) == 0 else LEVEL_PROGRESS_SCALE
 
     # Fraction of the session still left (1 -> 0), for the game's round clock.
     # Full until the game's countdown ends and `session_start_time` is anchored.
@@ -963,12 +1003,13 @@ class MonkeyGameController:
             
             self.current_frame = self.current_state.get("frame_number", 0)
 
-            self.current_state["progress_bar_cur_size"] = self._progress_bar_cur()
-            self.current_state["progress_bar_size"] = self._progress_bar_size()
-            sb_max = int(self.level["fixed"].get("score_bar_max", 10))
-            self.score_bar_value = max(0, min(self.score_bar_value, sb_max))
-            self.current_state["score_bar_value"] = self.score_bar_value
-            self.current_state["score_bar_max"] = sb_max
+            pending = self.pending_progress
+            self.current_state["progress_bar_cur_size"] = (
+                pending["chain_done"] if pending else self._level_chain_done())
+            self.current_state["progress_bar_size"] = self._level_chain_size()
+            self.current_state["score_bar_value"] = (
+                pending["value"] if pending else round(self._level_progress_frac() * LEVEL_PROGRESS_SCALE))
+            self.current_state["score_bar_max"] = self._level_progress_max()
             self.current_state["session_time_left"] = self._session_time_left()
             self.current_state["shake_amplitude"] = float(self.level["fixed"].get("shake_amplitude", 0.5))
             self.current_state["shake_duration"] = float(self.level["fixed"].get("shake_duration", 1.0))
@@ -1038,12 +1079,10 @@ class MonkeyGameController:
         # here and recorded into the trial log so analyses can recover it.
         trial_state["start_orient"] = self._rng.choice(START_ORIENTS)
         self.trial_start_orient = float(trial_state["start_orient"])
-        trial_state["progress_bar_cur_size"] = self._progress_bar_cur()
-        trial_state["progress_bar_size"] = self._progress_bar_size()
-        sb_max = int(self.level["fixed"].get("score_bar_max", 10))
-        self.score_bar_value = max(0, min(self.score_bar_value, sb_max))
-        trial_state["score_bar_value"] = self.score_bar_value
-        trial_state["score_bar_max"] = sb_max
+        trial_state["progress_bar_cur_size"] = self._level_chain_done()
+        trial_state["progress_bar_size"] = self._level_chain_size()
+        trial_state["score_bar_value"] = round(self._level_progress_frac() * LEVEL_PROGRESS_SCALE)
+        trial_state["score_bar_max"] = self._level_progress_max()
         trial_state["session_time_left"] = self._session_time_left()
 
         # Position camera using fixed camera_y and camera_radius
@@ -1164,12 +1203,21 @@ class MonkeyGameController:
 
             show_all = bool(flat.get("show_all", False))
 
-            sb_max = int(self.level["fixed"].get("score_bar_max", 10))
-            if cosine_current > cosine_threshold:
-                self.score_bar_value = min(sb_max, self.score_bar_value + 1)
+            correct = cosine_current > cosine_threshold
+
+            # Is this the attempt that ends the trial? A correct alignment
+            # always is (the game sets win_elapsed_secs); a wrong one is when
+            # it exhausts the retroceed budget. `in_win_budget` is evaluated on
+            # paused game time, so it reads the same now as after the animation.
+            if correct or self.nr_attempts == retroceeds_threshold:
+                self.pending_progress = self._projected_progress(
+                    (1 if in_win_budget else 0) if correct else -1)
+
+            if correct:
+                self.correct_streak += 1
                 shake = False
             else:
-                self.score_bar_value = max(0, self.score_bar_value - 1)
+                self.correct_streak = max(0, self.correct_streak - 1)
                 shake = True
 
             # Since animating stop rendering
@@ -1292,6 +1340,7 @@ class MonkeyGameController:
         self.trial_run_counter += 1
 
         self._set_trial_idx(new_idx)
+        self.pending_progress = None   # the real values now match the pre-pushed ones
 
         # Advance to next level if all chains exhausted
         if self._level_complete():

@@ -166,6 +166,11 @@ pub fn sync_live_state_from_shm(
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
     let gs = &shm.game_structure_control;
+    // Level chain: the controller pushes the new count when it issues the
+    // terminal door animation, so this has to land within the same trial —
+    // the seq-gated snapshot copy only refreshes at trial reset.
+    local_game_struct.0.progress_bar_size = gs.progress_bar_size.load(Ordering::Relaxed);
+    local_game_struct.0.progress_bar_cur_size = gs.progress_bar_cur_size.load(Ordering::Relaxed);
     local_game_struct.0.score_bar_value = gs.score_bar_value.load(Ordering::Relaxed);
     local_game_struct.0.score_bar_max = gs.score_bar_max.load(Ordering::Relaxed);
     local_game_struct.0.session_time_left = gs.session_time_left.load(Ordering::Relaxed);

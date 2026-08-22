@@ -2,75 +2,82 @@ use bevy::prelude::*;
 use shared::constants::game_constants::{
     UI_REFERENCE_HEIGHT,
     PROGRESS_BAR_DOTS_SIZE, PROGRESS_BAR_MAX_SIZE, PROGRESS_BAR_WRAP_AROUND_SIZE,
-    SESSION_CLOCK_RADIUS_PX,
+    SESSION_CLOCK_RADIUS_PX, TRIAL_BAR_PULSE_HZ,
 };
 use crate::utils::objects::{
     ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot, ScoreBarRoot,
-    LeftScoreBarRoot, LeftScoreBarFill, GameStateLocal, SessionClock, BlankScreen,
+    LeftScoreBarRoot, LeftScoreBarFill, LeftScoreBarDelta, GameStateLocal, SessionClock,
+    BlankScreen,
 };
 use std::f32::consts::TAU;
 use shared::constants::pyramid_constants::{LIGHT_RED, LIGHT_GREEN};
 
-const LEFT_SCORE_BAR_WIDTH_PX: f32 = 24.0;
-const LEFT_SCORE_BAR_HEIGHT_PERCENT: f32 = 60.0;
-const LEFT_SCORE_BAR_LEFT_PX: f32 = 16.0;
+// Trial-progress bar: mean trial position across chains, filling left to right
+// along the bottom of the screen. The components and systems keep their
+// historical `LeftScoreBar*` names.
+const TRIAL_BAR_HEIGHT_PX: f32 = 24.0;
+const TRIAL_BAR_WIDTH_PERCENT: f32 = 60.0;
+const TRIAL_BAR_BOTTOM_PX: f32 = 16.0;
 
-const TRIAL_BAR_LEFT_PX: f32 = LEFT_SCORE_BAR_LEFT_PX + LEFT_SCORE_BAR_WIDTH_PX + 10.0;
-const TRIAL_BAR_HEIGHT_PERCENT: f32 = LEFT_SCORE_BAR_HEIGHT_PERCENT;
-const TRIAL_BAR_COL_WIDTH_PX: f32 = PROGRESS_BAR_DOTS_SIZE + 8.0;
+// Level chain: one circle per level, filled left to right as levels complete.
+const LEVEL_CHAIN_TOP_PX: f32 = 16.0;
+const LEVEL_CHAIN_WIDTH_PERCENT: f32 = 40.0;
+const LEVEL_CHAIN_ROW_HEIGHT_PX: f32 = PROGRESS_BAR_DOTS_SIZE + 8.0;
 
-/// Spawns the persistent trial-progress dot pool at startup.
+/// Spawns the persistent level-chain dot pool at startup.
 ///
-/// Vertical layout: dots stack top→bottom in a column; when there are more
-/// trials than `PROGRESS_BAR_WRAP_AROUND_SIZE`, extra dots wrap into another
-/// column to the right. Total vertical span is constant (matches the score
-/// bar) regardless of trial count. `update_score_bar` toggles `Node.display`
-/// so only entities with index < `progress_bar_size` are laid out.
+/// Horizontal layout centered at the top: one circle per level, connected by
+/// short bars, filling left to right as levels are completed. With more levels
+/// than `PROGRESS_BAR_WRAP_AROUND_SIZE` the extra circles wrap onto a second
+/// row underneath. `update_score_bar` toggles `Node.display` so only entities
+/// with index < `progress_bar_size` are laid out, and colors those below
+/// `progress_bar_cur_size` as filled — the controller now feeds it level
+/// counts instead of trial counts.
 pub fn spawn_score_bar_pool(mut commands: Commands) {
-    let num_cols = PROGRESS_BAR_MAX_SIZE.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
+    let num_rows = PROGRESS_BAR_MAX_SIZE.div_ceil(PROGRESS_BAR_WRAP_AROUND_SIZE);
 
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Px(TRIAL_BAR_LEFT_PX),
-                top: Val::Percent((100.0 - TRIAL_BAR_HEIGHT_PERCENT) / 2.0),
-                height: Val::Percent(TRIAL_BAR_HEIGHT_PERCENT),
-                flex_direction: FlexDirection::Row,
+                top: Val::Px(LEVEL_CHAIN_TOP_PX),
+                left: Val::Percent((100.0 - LEVEL_CHAIN_WIDTH_PERCENT) / 2.0),
+                width: Val::Percent(LEVEL_CHAIN_WIDTH_PERCENT),
+                flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Stretch,
                 ..default()
             },
             ScoreBarRoot,
         ))
         .with_children(|parent| {
-            for col in 0..num_cols {
-                let col_start = col * PROGRESS_BAR_WRAP_AROUND_SIZE;
-                let col_end =
-                    (col_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(PROGRESS_BAR_MAX_SIZE);
+            for row in 0..num_rows {
+                let row_start = row * PROGRESS_BAR_WRAP_AROUND_SIZE;
+                let row_end =
+                    (row_start + PROGRESS_BAR_WRAP_AROUND_SIZE).min(PROGRESS_BAR_MAX_SIZE);
 
                 parent
                     .spawn((
                         Node {
-                            width: Val::Px(TRIAL_BAR_COL_WIDTH_PX),
-                            height: Val::Percent(100.0),
+                            width: Val::Percent(100.0),
+                            height: Val::Px(LEVEL_CHAIN_ROW_HEIGHT_PX),
                             padding: UiRect::all(Val::Px(2.0)),
-                            flex_direction: FlexDirection::ColumnReverse,
+                            flex_direction: FlexDirection::Row,
                             align_items: AlignItems::Center,
                             justify_content: JustifyContent::SpaceEvenly,
-                            margin: UiRect::right(Val::Px(2.0)),
+                            margin: UiRect::bottom(Val::Px(2.0)),
                             display: Display::None,
                             ..default()
                         },
                         BackgroundColor(Color::srgba(0.1, 0.1, 0.1, 0.0)),
-                        ScoreBarUI { row_start: col_start },
+                        ScoreBarUI { row_start },
                     ))
-                    .with_children(|col_parent| {
-                        for i in col_start..col_end {
-                            if i > col_start {
-                                col_parent.spawn((
+                    .with_children(|row_parent| {
+                        for i in row_start..row_end {
+                            if i > row_start {
+                                row_parent.spawn((
                                     Node {
-                                        width: Val::Px(1.0),
-                                        height: Val::Px(0.0),
+                                        width: Val::Px(0.0),
+                                        height: Val::Px(1.0),
                                         flex_grow: 1.0,
                                         display: Display::None,
                                         ..default()
@@ -78,7 +85,7 @@ pub fn spawn_score_bar_pool(mut commands: Commands) {
                                     ScoreBarChain { index: i - 1 },
                                 ));
                             }
-                            col_parent.spawn((
+                            row_parent.spawn((
                                 Node {
                                     width: Val::Px(PROGRESS_BAR_DOTS_SIZE),
                                     height: Val::Px(PROGRESS_BAR_DOTS_SIZE),
@@ -104,12 +111,12 @@ pub fn spawn_left_score_bar(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: Val::Px(LEFT_SCORE_BAR_LEFT_PX),
-                top: Val::Percent((100.0 - LEFT_SCORE_BAR_HEIGHT_PERCENT) / 2.0),
-                width: Val::Px(LEFT_SCORE_BAR_WIDTH_PX),
-                height: Val::Percent(LEFT_SCORE_BAR_HEIGHT_PERCENT),
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::FlexEnd,
+                bottom: Val::Px(TRIAL_BAR_BOTTOM_PX),
+                left: Val::Percent((100.0 - TRIAL_BAR_WIDTH_PERCENT) / 2.0),
+                width: Val::Percent(TRIAL_BAR_WIDTH_PERCENT),
+                height: Val::Px(TRIAL_BAR_HEIGHT_PX),
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::FlexStart,
                 border: UiRect::all(Val::Px(2.0)),
                 display: Display::None,
                 ..default()
@@ -121,20 +128,59 @@ pub fn spawn_left_score_bar(mut commands: Commands) {
         .with_children(|parent| {
             parent.spawn((
                 Node {
-                    width: Val::Percent(100.0),
-                    height: Val::Percent(50.0),
+                    width: Val::Percent(50.0),
+                    height: Val::Percent(100.0),
                     ..default()
                 },
                 BackgroundColor(LIGHT_RED.with_alpha(LEFT_SCORE_BAR_ALPHA)),
                 LeftScoreBarFill,
             ));
+            // Out of flow, on top of the fill: the step being gained or lost.
+            parent.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(0.0),
+                    bottom: Val::Px(0.0),
+                    left: Val::Percent(0.0),
+                    width: Val::Percent(0.0),
+                    display: Display::None,
+                    ..default()
+                },
+                BackgroundColor(LIGHT_GREEN.with_alpha(LEFT_SCORE_BAR_ALPHA)),
+                LeftScoreBarDelta,
+            ));
         });
 }
 
+/// The bar's fill colour at fill fraction `frac`: red at empty, lerping to
+/// green as it fills. Used for the fill itself and for the blinking step, so
+/// the two always agree.
+fn bar_fill_color(frac: f32, alpha: f32) -> Color {
+    let r = LIGHT_RED.to_linear();
+    let g = LIGHT_GREEN.to_linear();
+    Color::LinearRgba(LinearRgba::new(
+        r.red + (g.red - r.red) * frac,
+        r.green + (g.green - r.green) * frac,
+        r.blue + (g.blue - r.blue) * frac,
+        alpha,
+    ))
+}
+
 pub fn update_left_score_bar(
+    time: Res<Time>,
     local_game_struct: Res<GameStateLocal>,
-    mut root_query: Query<&mut Node, (With<LeftScoreBarRoot>, Without<LeftScoreBarFill>)>,
-    mut fill_query: Query<(&mut Node, &mut BackgroundColor), With<LeftScoreBarFill>>,
+    // Value that finished animating; the controller pushes the new one when it
+    // issues the terminal door animation, so the gap is the step in transition.
+    mut settled: Local<u32>,
+    mut root_query: Query<
+        &mut Node,
+        (With<LeftScoreBarRoot>, Without<LeftScoreBarFill>, Without<LeftScoreBarDelta>),
+    >,
+    mut fill_query: Query<
+        (&mut Node, &mut BackgroundColor),
+        (With<LeftScoreBarFill>, Without<LeftScoreBarDelta>),
+    >,
+    mut delta_query: Query<(&mut Node, &mut BackgroundColor), With<LeftScoreBarDelta>>,
 ) {
     let gs = &local_game_struct.0;
     let max = gs.score_bar_max;
@@ -148,22 +194,56 @@ pub fn update_left_score_bar(
         return;
     }
 
-    let value = gs.score_bar_value.min(max);
+    // The bar only moves when the door animation ends; until then it holds the
+    // old value and the delta overlay blinks over the step being won or lost.
+    let target = gs.score_bar_value.min(max);
+    if !gs.is_animating {
+        *settled = target;
+    }
+    let value = (*settled).min(max);
     let t = value as f32 / max as f32;
-    let r = LIGHT_RED.to_linear();
-    let g = LIGHT_GREEN.to_linear();
-    let lerped = LinearRgba::new(
-        r.red   + (g.red   - r.red)   * t,
-        r.green + (g.green - r.green) * t,
-        r.blue  + (g.blue  - r.blue)  * t,
-        LEFT_SCORE_BAR_ALPHA,
-    );
-    let target_color = Color::LinearRgba(lerped);
-    let target_height = Val::Percent(t * 100.0);
+
+    let in_transition = gs.is_animating && target != value;
+    let pulse = if in_transition {
+        (time.elapsed_secs() * TRIAL_BAR_PULSE_HZ * TAU).sin() * 0.5 + 0.5
+    } else {
+        0.0
+    };
+    let lo = value.min(target) as f32 / max as f32;
+    let hi = value.max(target) as f32 / max as f32;
+    // Gaining a step: fade between empty and the colour the bar will have once
+    // it settles. Losing one: swing between that colour and red. Alpha stays at
+    // the bar's own transparency in both cases (except the fade-from-empty).
+    let delta_color = if target > value {
+        bar_fill_color(hi, LEFT_SCORE_BAR_ALPHA * pulse)
+    } else {
+        let from = bar_fill_color(hi, LEFT_SCORE_BAR_ALPHA).to_linear();
+        let to = LIGHT_RED.to_linear();
+        Color::LinearRgba(LinearRgba::new(
+            from.red + (to.red - from.red) * pulse,
+            from.green + (to.green - from.green) * pulse,
+            from.blue + (to.blue - from.blue) * pulse,
+            LEFT_SCORE_BAR_ALPHA,
+        ))
+    };
+    for (mut node, mut bg) in delta_query.iter_mut() {
+        let desired = if in_transition { Display::Flex } else { Display::None };
+        if node.display != desired {
+            node.display = desired;
+        }
+        if !in_transition {
+            continue;
+        }
+        node.left = Val::Percent(lo * 100.0);
+        node.width = Val::Percent((hi - lo) * 100.0);
+        *bg = BackgroundColor(delta_color);
+    }
+    let target_color = bar_fill_color(t, LEFT_SCORE_BAR_ALPHA);
+    let target_width = Val::Percent(t * 100.0);
 
     for (mut node, mut bg) in fill_query.iter_mut() {
-        if node.height != target_height {
-            node.height = target_height;
+        if node.width != target_width {
+            node.width = target_width;
         }
         if bg.0 != target_color {
             *bg = BackgroundColor(target_color);
@@ -177,7 +257,8 @@ pub fn update_left_score_bar(
 // The time already spent is a dark wedge that grows clockwise from noon; what
 // is left stays pale. Drawn as a conic gradient with two hard stops, so there
 // is no mesh and no shader: only the two stop angles move each frame.
-const SESSION_CLOCK_MARGIN_PX: f32 = 16.0;
+// Directly under the level chain, both centered at the top.
+const SESSION_CLOCK_TOP_PX: f32 = LEVEL_CHAIN_TOP_PX + LEVEL_CHAIN_ROW_HEIGHT_PX + 12.0;
 const SESSION_CLOCK_LEFT: Color = Color::srgba(1.0, 1.0, 1.0, 0.30);
 const SESSION_CLOCK_SPENT: Color = Color::srgba(0.0, 0.0, 0.0, 0.45);
 
@@ -203,7 +284,7 @@ pub fn spawn_session_clock(mut commands: Commands) {
             // `UiScale`, so it stays centered at every resolution.
             left: Val::Percent(50.0),
             margin: UiRect::left(Val::Px(-SESSION_CLOCK_RADIUS_PX)),
-            top: Val::Px(SESSION_CLOCK_MARGIN_PX),
+            top: Val::Px(SESSION_CLOCK_TOP_PX),
             width: Val::Px(SESSION_CLOCK_RADIUS_PX * 2.0),
             height: Val::Px(SESSION_CLOCK_RADIUS_PX * 2.0),
             border_radius: BorderRadius::MAX,

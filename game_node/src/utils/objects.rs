@@ -118,6 +118,11 @@ pub struct LeftScoreBarRoot;
 #[derive(Component)]
 pub struct LeftScoreBarFill;
 
+/// Overlay on the left bar covering the step just gained or lost. Blinks for
+/// the duration of the door animation, then disappears as the fill takes over.
+#[derive(Component)]
+pub struct LeftScoreBarDelta;
+
 /// Round session clock (top-right): a disc whose spent wedge sweeps
 /// clockwise from noon as the session runs down.
 #[derive(Component)]

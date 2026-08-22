@@ -521,7 +521,6 @@ function defaultLevel(nObjects = 2) {
       random_seed: -1,
       // If false, the controller writes progress_bar_size = 0 every frame,
       // which hides the dots column game-side without changing chain logic.
-      show_progress_bar: true,
       score_bar_max: 10,
       shake_amplitude: 0.5,
       shake_duration: 1.0,
@@ -590,6 +589,10 @@ function enforceLevel(lv) {
   if (f.camera_speed_rotate == null) f.camera_speed_rotate = CAMERA_DEFAULTS.speed_rotate;
   if (f.camera_rotation_sense == null) f.camera_rotation_sense = CAMERA_DEFAULTS.rotation_sense;
   delete f.pr_switching_chain;
+  // Retired with the trial-dot column: the left bar now shows level
+  // position and the top chain shows levels. Stripped on import so
+  // re-saving an old file drops it.
+  delete f.show_progress_bar;
   if (f.start_object == null) f.start_object = -1;
   if (f.start_object >= 0) f.start_object = Math.min(f.start_object, lv.objects.length - 1);
   if (f.remove_completed_chains == null) f.remove_completed_chains = false;
@@ -597,8 +600,6 @@ function enforceLevel(lv) {
   if (f.random_seed == null) f.random_seed = -1;
   f.random_seed = Math.trunc(f.random_seed);
   if (!Number.isFinite(f.random_seed)) f.random_seed = -1;
-  if (f.show_progress_bar == null) f.show_progress_bar = true;
-  f.show_progress_bar = !!f.show_progress_bar;
   if (f.score_bar_max == null) f.score_bar_max = 10;
   f.score_bar_max = Math.max(0, Math.round(f.score_bar_max));
   if (f.shake_amplitude == null) f.shake_amplitude = 0.5;
@@ -1049,13 +1050,9 @@ function renderFixed(fixed, lv) {
         <label>random_seed</label>
         <input type="number" class="fixed-in" data-ff="random_seed" value="${fixed.random_seed ?? -1}" step="1">
       </div>
-      <div class="fixed-row" title="Capacity of the left-side score bar. 0 hides the bar. Persists across levels; starts at max/2 at session start.">
+      <div class="fixed-row" title="Left-side bar showing the mean trial position across objects in this level (full = level complete). 0 hides the bar; any other value shows it.">
         <label>score_bar_max</label>
         <input type="number" class="fixed-in" data-ff="score_bar_max" value="${fixed.score_bar_max ?? 10}" step="1" min="0">
-      </div>
-      <div class="fixed-row" title="Show the trial-progress dots column (one dot per planned trial). Off = controller writes progress_bar_size=0 so the game hides every dot.">
-        <label>show_progress_bar</label>
-        <input type="checkbox" class="fixed-chk" data-ff="show_progress_bar"${(fixed.show_progress_bar ?? true) ? ' checked' : ''}>
       </div>
       <div class="fixed-row">
         <label>start_orient</label>

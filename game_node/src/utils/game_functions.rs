@@ -4,7 +4,7 @@ use bevy::audio::Volume;
 
 use crate::utils::objects::{BaseDoor, DoorWinEntities, HoleEmissive, HoleLight, ScoreBarDot, ScoreBarChain, ScoreBarUI, GameStateLocal};
 use crate::utils::load_assets::SoundSet;
-use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE};
+use shared::constants::game_constants::{PROGRESS_BAR_WRAP_AROUND_SIZE, PROGRESS_PULSE_HZ, PROGRESS_PULSE_SCALE};
 use shared::constants::pyramid_constants::LIGHT_GREEN;
 use shared::constants::lighting_constants::{FAINT_ALIGNED_INTENSITY_FACTOR,FAINT_ALIGNED_SPOTLIGHT_FACTOR, FAINT_ALIGNED_SPOTLIGHT_RANGE,HOLE_SPOTLIGHT_RANGE
 };
@@ -167,8 +167,13 @@ pub fn handle_door_animation(
 
 // Update the score bar based on the current level state.
 pub fn update_score_bar(
+    time: Res<Time>,
     local_game_struct: Res<GameStateLocal>,
-    mut dot_query: Query<(&ScoreBarDot, &mut BackgroundColor, &mut Node), (Without<ScoreBarChain>, Without<ScoreBarUI>)>,
+    // Last count that finished animating. The controller pushes the new count
+    // when it issues the terminal door animation, so the gap between this and
+    // `progress_bar_cur_size` is exactly the circle in transition.
+    mut settled: Local<u32>,
+    mut dot_query: Query<(&ScoreBarDot, &mut BackgroundColor, &mut Node, &mut UiTransform), (Without<ScoreBarChain>, Without<ScoreBarUI>)>,
     mut chain_query: Query<(&ScoreBarChain, &mut BackgroundColor, &mut Node), (Without<ScoreBarDot>, Without<ScoreBarUI>)>,
     mut row_query: Query<(&ScoreBarUI, &mut Node), (Without<ScoreBarDot>, Without<ScoreBarChain>)>,
 ) {
@@ -190,21 +195,49 @@ pub fn update_score_bar(
         }
     }
 
+    // The transition settles the moment the door animation ends.
+    if !gs_game.is_animating {
+        *settled = progress_bar_cur_size;
+    }
+    let settled_cur = *settled;
+    let pulse = if gs_game.is_animating && progress_bar_cur_size != settled_cur {
+        (time.elapsed_secs() * PROGRESS_PULSE_HZ * std::f32::consts::TAU).sin() * 0.5 + 0.5
+    } else {
+        0.0
+    };
+    let (trans_lo, trans_hi) = (
+        settled_cur.min(progress_bar_cur_size),
+        settled_cur.max(progress_bar_cur_size),
+    );
+
     // Dots: visible iff index < progress_bar_size; color depends on cur_size.
-    for (dot, mut bg, mut node) in dot_query.iter_mut() {
+    // The circle(s) between the settled and the incoming count blink and swell
+    // for the duration of the door animation, then snap to their real size.
+    for (dot, mut bg, mut node, mut ui_transform) in dot_query.iter_mut() {
         let visible = dot.index < progress_bar_size;
         let desired = if visible { Display::Flex } else { Display::None };
         if node.display != desired {
             node.display = desired;
         }
         if visible {
-            let color = if dot.index < progress_bar_cur_size {
+            let in_transition = pulse > 0.0 && dot.index >= trans_lo && dot.index < trans_hi;
+            let color = if in_transition {
+                filled_color.with_alpha(0.15 + 0.85 * pulse)
+            } else if dot.index < settled_cur {
                 filled_color
             } else {
                 unfilled_dot_color
             };
+            let scale = if in_transition {
+                1.0 + PROGRESS_PULSE_SCALE * pulse
+            } else {
+                1.0
+            };
             if bg.0 != color {
                 *bg = BackgroundColor(color);
+            }
+            if ui_transform.scale.x != scale {
+                ui_transform.scale = Vec2::splat(scale);
             }
         }
     }
@@ -220,7 +253,7 @@ pub fn update_score_bar(
             node.display = desired;
         }
         if visible {
-            let color = if dot_after < progress_bar_cur_size {
+            let color = if dot_after < settled_cur {
                 filled_chain_color
             } else {
                 unfilled_chain_color

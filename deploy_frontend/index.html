@@ -616,7 +616,9 @@
     fitCanvas();
     const c = document.createElement('script');
     c.type = 'module';
-    c.src = './controller_main.min.js';
+    // ?v= must match the cache buster in controller_main.js — see the
+    // comment on its game_node.js import.
+    c.src = './controller_main.min.js?v=20260822';
     document.body.appendChild(c);
   }
 

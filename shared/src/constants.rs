@@ -38,6 +38,16 @@ pub mod game_constants {
 
     /// Radius of the round session clock in the top-right corner.
     pub const SESSION_CLOCK_RADIUS_PX: f32 = 40.0;
+
+    /// Blink rate and peak overshoot of the level circle that is being filled
+    /// in (or cleared) while the door animation plays.
+    pub const PROGRESS_PULSE_HZ: f32 = 3.0;
+    pub const PROGRESS_PULSE_SCALE: f32 = 0.45;
+
+    /// Blink rate of the step being gained or lost on the trial-progress bar.
+    /// Plays at the same time as the level circle above, so keep it in step
+    /// with `PROGRESS_PULSE_HZ`.
+    pub const TRIAL_BAR_PULSE_HZ: f32 = 2.0;
 }
 
 /// Audio toggles and levels. Both effects and the background loop are on by

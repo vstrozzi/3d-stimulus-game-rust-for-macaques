@@ -1,6 +1,0 @@
-# sounds to reward and discourage
-# load data on a backend (host it somewhere)	
-
-# have more objects per trial:
-	- add the possibility to add a features to be random i.e. that it is shuffled at load time and loaded randmly. It is  a flag in the trial and handled by the controller
-	- add the possibility to shuffle it live when rotating and a face is not visible

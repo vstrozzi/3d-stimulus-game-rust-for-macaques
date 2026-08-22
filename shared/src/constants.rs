@@ -98,6 +98,14 @@ pub mod camera_3d_constants {
 
     pub const CAMERA_3D_INITIAL_RADIUS: f32 = 15.0; 
 
+    /// Movement speeds are authored as amounts per frame at this reference
+    /// rate. Runtime input scales them by real elapsed time.
+    pub const CAMERA_MOVEMENT_REFERENCE_HZ: f32 = 60.0;
+
+    /// Do not apply more than this many reference frames of movement in one
+    /// update. This compensates small stalls without jumping after a long one.
+    pub const CAMERA_MOVEMENT_MAX_CATCHUP_FRAMES: f32 = 2.0;
+
     pub const CAMERA_3D_SPEED_ROTATE: f32 = 0.05;
     pub const CAMERA_3D_SPEED_ZOOM: f32 = 0.0;  // Set on 0 means no zoom
 

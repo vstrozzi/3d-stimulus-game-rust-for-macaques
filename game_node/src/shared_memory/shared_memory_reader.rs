@@ -3,8 +3,12 @@
 
 use crate::utils::objects::{GameStateLocal, PersistentCamera};
 use bevy::prelude::*;
+use bevy::time::Real;
 use core::sync::atomic::Ordering;
-use shared::constants::camera_3d_constants::CAMERA_3D_SPEED_ZOOM;
+use shared::constants::camera_3d_constants::{
+    CAMERA_3D_SPEED_ZOOM, CAMERA_MOVEMENT_MAX_CATCHUP_FRAMES,
+    CAMERA_MOVEMENT_REFERENCE_HZ,
+};
 #[cfg(not(target_arch = "wasm32"))]
 use shared::create_shared_memory;
 use shared::SharedMemoryHandle;
@@ -69,6 +73,7 @@ pub fn read_shared_memory_commands(
     mut pending_commands: ResMut<PendingCommands>,
     mut last_seq: ResMut<LastCommandSeq>,
     mut camera_query: Query<&mut Transform, With<PersistentCamera>>,
+    time_real: Res<Time<Real>>,
 ) {
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
@@ -83,7 +88,11 @@ pub fn read_shared_memory_commands(
         .game_structure_control
         .camera_rotation_sense
         .load(Ordering::Relaxed) as i32 as f32;
-    let signed_speed = speed_rotate * rotation_sense;
+    // Preserve the authored speed at 60 Hz while compensating for small late
+    // frames. Cap catch-up so a long browser pause cannot cause a large jump.
+    let movement_scale = (time_real.delta_secs() * CAMERA_MOVEMENT_REFERENCE_HZ)
+        .clamp(0.0, CAMERA_MOVEMENT_MAX_CATCHUP_FRAMES);
+    let signed_speed = speed_rotate * rotation_sense * movement_scale;
 
     if shm.commands.rotate_left.load(Ordering::Relaxed) {
         pending_commands.rotation -= signed_speed;
@@ -92,10 +101,10 @@ pub fn read_shared_memory_commands(
         pending_commands.rotation += signed_speed;
     }
     if shm.commands.zoom_in.load(Ordering::Relaxed) {
-        pending_commands.zoom -= CAMERA_3D_SPEED_ZOOM;
+        pending_commands.zoom -= CAMERA_3D_SPEED_ZOOM * movement_scale;
     }
     if shm.commands.zoom_out.load(Ordering::Relaxed) {
-        pending_commands.zoom += CAMERA_3D_SPEED_ZOOM;
+        pending_commands.zoom += CAMERA_3D_SPEED_ZOOM * movement_scale;
     }
 
     if let Ok(mut cam_transform) = camera_query.single_mut() {

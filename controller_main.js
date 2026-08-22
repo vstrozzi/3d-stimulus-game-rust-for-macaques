@@ -771,6 +771,10 @@ function setSceneConfig(state, level) {
   state.firefly_count = Math.max(0, Math.round(f.firefly_count ?? 10000));
   state.firefly_size = floatToU32Bits(f.firefly_size ?? 0.013);
   state.firefly_expand_secs = floatToU32Bits(f.firefly_expand_secs ?? 1.5);
+  state.platform_texture = Math.max(0, Math.round(f.platform_texture ?? DEFAULT_PLATFORM_TEXTURE));
+  state.background_texture = Math.max(0, Math.round(f.background_texture ?? DEFAULT_BACKGROUND_TEXTURE));
+  state.platform_color_mask = (f.platform_color_mask ?? [0, 0, 0, 0]).map(floatToU32Bits);
+  state.background_color_mask = (f.background_color_mask ?? [0, 0, 0, 0]).map(floatToU32Bits);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2419,8 +2423,8 @@ async function start() {
   LOGGED_STATE_FIELDS = new Set(cc.LOGGED_STATE_FIELDS);
   LOGGED_STATE_FIELDS_LIST = cc.LOGGED_STATE_FIELDS.slice();
   MAX_SESSION_DURATION_MIN = cc.MAX_SESSION_DURATION_MIN | 0;
-  DEFAULT_PLATFORM_TEXTURE = cc.PLATFORM_TEXTURE | 0;
-  DEFAULT_BACKGROUND_TEXTURE = cc.BACKGROUND_TEXTURE | 0;
+  DEFAULT_PLATFORM_TEXTURE = cc.PLATFORM_TEXTURE ?? 7;
+  DEFAULT_BACKGROUND_TEXTURE = cc.BACKGROUND_TEXTURE ?? 10;
   MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_MIN * 60 * 1000;
   MAX_TRIAL_FRAMES = MAX_SESSION_DURATION_MIN * 60 * 120;
   _initFrameLogScratch();

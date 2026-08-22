@@ -574,6 +574,12 @@ function writeCommands(cmds) {
   resetTriggers();
 }
 
+function writeU32Array(view, base, offBase, arr, length) {
+  for (let i = 0; i < length; i++) {
+    view.setUint32(base + offBase + i * 4, arr[i], true);
+  }
+}
+
 /* Write all-false commands (Python's write_no_commands).*/
 function writeNoCommands() {
   _views();
@@ -646,17 +652,16 @@ function writeGameStateControl(state) {
   v.setUint32(base + o.start_orient, state.start_orient, true);
   v.setUint32(base + o.target_door, state.target_door, true);
 
-  const writeU32Array = (offBase, arr, n) => { for (let i = 0; i < n; i++) v.setUint32(base + offBase + i * 4, arr[i], true); };
-  if (state.colors) writeU32Array(o.colors, state.colors, N_COLOR_FLOATS);
-  if (state.decorations_count) writeU32Array(o.decorations_count, state.decorations_count, N_FACES);
-  if (state.decorations_size) writeU32Array(o.decorations_size, state.decorations_size, N_FACES);
-  if (state.decorations_shape) writeU32Array(o.decorations_shape, state.decorations_shape, N_FACES);
-  if (state.textures) writeU32Array(o.textures, state.textures, N_FACES);
-  if (state.decorations_texture) writeU32Array(o.decorations_texture, state.decorations_texture, N_FACES);
-  if (state.decorations_thickness) writeU32Array(o.decorations_thickness, state.decorations_thickness, N_FACES);
-  if (state.decorations_color) writeU32Array(o.decorations_color, state.decorations_color, N_COLOR_FLOATS);
-  if (state.platform_color_mask) writeU32Array(o.platform_color_mask, state.platform_color_mask, 4);
-  if (state.background_color_mask) writeU32Array(o.background_color_mask, state.background_color_mask, 4);
+  if (state.colors) writeU32Array(v, base, o.colors, state.colors, N_COLOR_FLOATS);
+  if (state.decorations_count) writeU32Array(v, base, o.decorations_count, state.decorations_count, N_FACES);
+  if (state.decorations_size) writeU32Array(v, base, o.decorations_size, state.decorations_size, N_FACES);
+  if (state.decorations_shape) writeU32Array(v, base, o.decorations_shape, state.decorations_shape, N_FACES);
+  if (state.textures) writeU32Array(v, base, o.textures, state.textures, N_FACES);
+  if (state.decorations_texture) writeU32Array(v, base, o.decorations_texture, state.decorations_texture, N_FACES);
+  if (state.decorations_thickness) writeU32Array(v, base, o.decorations_thickness, state.decorations_thickness, N_FACES);
+  if (state.decorations_color) writeU32Array(v, base, o.decorations_color, state.decorations_color, N_COLOR_FLOATS);
+  if (state.platform_color_mask) writeU32Array(v, base, o.platform_color_mask, state.platform_color_mask, 4);
+  if (state.background_color_mask) writeU32Array(v, base, o.background_color_mask, state.background_color_mask, 4);
   if (state.decorations_seeds) {
     for (let i = 0; i < N_FACES; i++) {
       const off = base + o.decorations_seeds + i * 8;
@@ -774,8 +779,18 @@ function setSceneConfig(state, level) {
   state.firefly_expand_secs = floatToU32Bits(f.firefly_expand_secs ?? 1.5);
   state.platform_texture = Math.max(0, Math.round(f.platform_texture ?? DEFAULT_PLATFORM_TEXTURE));
   state.background_texture = Math.max(0, Math.round(f.background_texture ?? DEFAULT_BACKGROUND_TEXTURE));
-  state.platform_color_mask = (f.platform_color_mask ?? [0, 0, 0, 0]).map(floatToU32Bits);
-  state.background_color_mask = (f.background_color_mask ?? [0, 0, 0, 0]).map(floatToU32Bits);
+  // These arrays already exist on every state scratch. Mutate them instead of
+  // allocating two replacement arrays on every controller frame.
+  const platformSource = f.platform_color_mask;
+  const backgroundSource = f.background_color_mask;
+  const platformMask = state.platform_color_mask
+    ?? (state.platform_color_mask = [0, 0, 0, 0]);
+  const backgroundMask = state.background_color_mask
+    ?? (state.background_color_mask = [0, 0, 0, 0]);
+  for (let i = 0; i < 4; i++) {
+    platformMask[i] = floatToU32Bits(platformSource?.[i] ?? 0);
+    backgroundMask[i] = floatToU32Bits(backgroundSource?.[i] ?? 0);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1468,7 +1483,6 @@ function checkHasFinished(state) {
   const trial = flatTrial();
   const nrAttemptsToRetroceed = trial.nr_attempts_to_retroceed ?? 0;
   const elapsedTimeToRetroceed = trial.elapsed_time_to_retroceed ?? 0;
-  console.log(`[CHECK] win_elapsed_secs=${state.win_elapsed_secs} attempts=${state.attempts} elapsed_secs=${state.elapsed_secs} | thresholds: win_time=${trial.elapsed_time_to_win} nr_attempts_to_win=${trial.nr_attempts_to_win} nr_attempts_to_retroceed=${nrAttemptsToRetroceed} elapsed_time_to_retroceed=${elapsedTimeToRetroceed}`);
   return (
     state.win_elapsed_secs !== 0.0 ||
     nrAttempts > nrAttemptsToRetroceed ||
@@ -1735,12 +1749,11 @@ function handlePlaying(state) {
   // ── Normal playing: relay combined keyboard + touch inputs ──
   processTouchInput();
 
-  const cmds = makeCmd({
-    rotate_left: inputs.rotate_left || swipe.rotateLeft,
-    rotate_right: inputs.rotate_right || swipe.rotateRight,
-    zoom_in: inputs.zoom_in || pinch.zoomIn,
-    zoom_out: inputs.zoom_out || pinch.zoomOut,
-  });
+  const cmds = makeCmd();
+  cmds.rotate_left = inputs.rotate_left || swipe.rotateLeft;
+  cmds.rotate_right = inputs.rotate_right || swipe.rotateRight;
+  cmds.zoom_in = inputs.zoom_in || pinch.zoomIn;
+  cmds.zoom_out = inputs.zoom_out || pinch.zoomOut;
   writeCommands(cmds);
   logFrame(state, cmds);
 }
@@ -1770,7 +1783,6 @@ function handleWaitingAnimationEnd(state) {
   }
   // Still animating – send no commands
   const cmds = makeCmd();
-  console.log("[FSM] Waiting for animation to end (still animating)...");
   logFrame(state, cmds);
 }
 
@@ -2048,11 +2060,16 @@ function processTouchInput() {
 // UI HELPERS
 // ═══════════════════════════════════════════════════════════════════════════
 
+const _keyUiActive = { left: null, right: null, up: null, down: null };
+const _keyUiElements = { left: null, right: null, up: null, down: null };
 function setKeyUI(key, active) {
-  const el = document.getElementById(`key-${key}`);
+  active = !!active;
+  if (_keyUiActive[key] === active) return;
+  _keyUiActive[key] = active;
+  const el = _keyUiElements[key] ?? document.getElementById(`key-${key}`);
   if (el) {
-    if (active) el.classList.add("active");
-    else el.classList.remove("active");
+    _keyUiElements[key] = el;
+    el.classList.toggle("active", active);
   }
 }
 

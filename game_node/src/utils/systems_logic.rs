@@ -1,7 +1,6 @@
 //! Game logic wrapped up using the various plugins.
 
 use bevy::prelude::*;
-use bevy::window::PrimaryWindow;
 use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local, sync_live_state_from_shm};
 use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local, stage_render_sample, commit_render_sample};
 use crate::utils::camera::{spawn_persistent_camera, handle_camera_shake, setup_fixed_resolution, on_window_resized};
@@ -20,14 +19,6 @@ use crate::utils::warmup::{spawn_warmup_scene, tick_warmup};
 /// Plugin for managing all the game systems.config
 pub struct SystemsLogicPlugin;
 
-fn force_redraw_every_frame(mut windows: Query<&mut Window, With<PrimaryWindow>>) {
-    // Touching the Window component flips its Changed<> flag, which causes
-    // bevy_winit to request a redraw on the next about_to_wait.
-    if let Ok(mut window) = windows.single_mut() {
-        window.set_changed();
-    }
-
-}
 impl Plugin for SystemsLogicPlugin {
     /// Builds the plugin by adding the systems to the app.
     fn build(&self, app: &mut App) {
@@ -74,7 +65,6 @@ impl Plugin for SystemsLogicPlugin {
             // photodiode). The matching `present_elapsed_secs` is filled in
             // at the next frame's `First`.
             .add_systems(Update, stage_render_sample)
-            .add_systems(Update, force_redraw_every_frame)
             // Command driven
             .add_systems(
                 Update,
@@ -111,4 +101,3 @@ impl Plugin for SystemsLogicPlugin {
         app.add_systems(Update, crate::utils::camera::setup_fixed_fullscreen);
     }
 }
-

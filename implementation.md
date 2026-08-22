@@ -140,6 +140,10 @@ stored as `f32::to_bits()` and re-read with `f32::from_bits()`.
 | `camera_rotation_sense` | controller | `i32 ∈ {-1, +1}`; multiplies rotation speed. |
 | `target_door` | controller | Index of the door to align to. |
 | Door / pyramid / texture indices | controller | See `shared/src/lib.rs:153+`. |
+| `session_time_left` | controller | f32 bits, `1.0` = full session left, `<0` hides the clock. Live-synced. |
+| `correct_streak` | controller | Consecutive correct answers in the level (0 at level start). Drives the ambient particle density. Live-synced. |
+| `platform_texture`, `background_texture` | controller | `Texture` enum index for the ground plane / curved wall. Per-level. |
+| `platform_color_mask`, `background_color_mask` | controller | `[f32; 4]` = `[r, g, b, a]`; `a` is mask strength, `0` = the bare texture. Per-level. |
 
 `READ_ONLY_FIELDS` (`shared/src/lib.rs`) lists fields the controller must
 not write — render-side timestamps, photodiode state.
@@ -169,13 +173,17 @@ Startup:        init_shared_memory_system
                 setup_environment
                 preload_all_textures
                 spawn_warmup_scene
-                spawn_score_bar_pool         (trial-progress dots, left-side vertical)
-                spawn_left_score_bar         (score bar — see §14d)
+                spawn_score_bar_pool         (level chain, top-center — see §14e)
+                spawn_left_score_bar         (trial bar, bottom — see §14e)
+                spawn_session_clock          (round clock, blank screen only)
+                setup_ambient_motes          (ambient particle pool)
 
 PreUpdate:      read_shared_memory_commands       (chained)
                 read_shared_memory_game_state_local  (seq-gated, snapshot copy)
                 sync_live_state_from_shm           (every-frame copy of
-                                                    score_bar_*, shake_*)
+                                                    progress_bar_*, score_bar_*,
+                                                    session_time_left,
+                                                    correct_streak, shake_*)
 
 First:          commit_render_sample         (writes prev frame's staged
                                               sample to SHM, stamped with
@@ -186,7 +194,6 @@ Update:         update_ui_scale
                 tick_warmup
                 check_scene_ready
                 stage_render_sample
-                force_redraw_every_frame
                 handle_reset_command         (chained)
                 handle_check_alignment
                 handle_blank_screen
@@ -198,8 +205,11 @@ Update:         update_ui_scale
                 handle_door_animation
                 update_winning_face_glow     (lights winning pyramid face during win)
                 handle_camera_shake          (after handle_zoom — uses base position)
-                update_score_bar             (trial-progress dots)
-                update_left_score_bar        (color-interp left bar)
+                update_score_bar             (level chain dots + connectors)
+                update_left_score_bar        (color-interp trial bar)
+                update_session_clock         (conic sweep; blank screen only)
+                update_fog, update_fireflies (win-time swarm)
+                update_ambient_motes         (streak-driven ambient swarm)
 
 PostUpdate:     clear_pending_commands       (chained)
                 increment_timing             (paused if stop_rendering)
@@ -210,8 +220,8 @@ PostUpdate:     clear_pending_commands       (chained)
 > **Single vsync schedule.** Every system above runs at the display
 > refresh rate (one tick per rendered frame). There is no `FixedUpdate`
 > in this app — see §8 for the consolidated clock model and §14c for
-> the migration log. `force_redraw_every_frame` + `WinitSettings::continuous()`
-> keep the `Update` schedule firing each vsync even without input.
+> the migration log. `WinitSettings::continuous()` keeps the `Update`
+> schedule firing each vsync even without input.
 
 ### Why staging matters (the `Screen('Flip')` analogue)
 
@@ -337,6 +347,12 @@ Browser editor for trial JSONs. Notes:
   `-1`) and a degrees input. `applyRotation` propagates the value to
   any face that shares a constraint group.
 - `camera_rotation_sense` is a fixed-group `<select>` with `+1`/`-1`.
+- A **Background** section sits between Objects and Trials: texture dropdown +
+  colour-mask picker (its alpha input is the mask strength) for the platform
+  and the background. `enforceLevel` backfills all four keys on import.
+- The toolbar shows the name of the file being edited. The editor loads the
+  trial selected in the admin menu (this tab's `sessionStorage`) if there is
+  one, else the server default — the same precedence the game uses.
 
 ---
 
@@ -641,7 +657,9 @@ the drift definition is simpler than it used to be. Remaining causes:
   some hardware (commit bfb6fb7 prerequisite).
 - **Pyramid spotlights: `shadows_enabled = false`** in
   `spawn_pyramid_base` (`pyramid.rs`). Perf — shadow maps cost more than
-  the visual gain.
+  the visual gain. The main environment spotlight is intentionally separate:
+  it casts shadows natively but disables them on WASM through
+  `lighting_constants::SHADOWS_ENABLED`.
 - **FixedUpdate ordering changed** (commit bc13967): `handle_check_alignment`
   moved up to run right after `handle_reset_command`, and
   `handle_animation_door_command` moved to run after `handle_door_animation`.
@@ -729,10 +747,10 @@ the drift definition is simpler than it used to be. Remaining causes:
 - **`frame_number` + `render_frame_number` both retained in SHM and trial
   logs** for downstream compatibility. They differ only in pause
   semantics (frame_number pauses on `stop_rendering` / `is_animating`).
-- **`force_redraw_every_frame` + `WinitSettings::continuous()`** added in
-  [systems_logic.rs](game_node/src/utils/systems_logic.rs) and
-  [lib.rs](game_node/src/lib.rs) so `Update` keeps firing each vsync
-  even without input.
+- **`WinitSettings::continuous()`** in [lib.rs](game_node/src/lib.rs) keeps
+  `Update` firing each vsync even without input. The former
+  `force_redraw_every_frame` system was removed because changing the Bevy
+  `Window` component did not request a winit redraw and only duplicated work.
 
 ---
 
@@ -757,8 +775,8 @@ None of the §8 timing semantics changed.
   produce. At level start the bag is built from
   `_refill_chain_bag(exclude=active_chain)` / `_refillChainBag(activeChain)`
   so the starter is not re-drawn within its own first cycle. ADVANCE
-  still caps `idx` at `n`; finished chains can be re-visited but cannot
-  advance past their terminal index; a level completes only when every
+  still caps the chain position at `n` (see `_chain_pos` in §14e); finished
+  chains can be re-visited but cannot advance past their terminal position; a level completes only when every
   chain hits terminal simultaneously. The old `pr_switching_chain` field
   and `_maybe_switch_chain` / `_maybeSwitch` logic are gone; legacy
   trial JSONs that still contain the key are silently ignored (the
@@ -786,7 +804,8 @@ None of the §8 timing semantics changed.
   session can be replayed by copying the int back into the editor.
 - **`fixed.score_bar_max`** — editor int (`0` hides the bar). Persists
   across levels; the bar value is session-scoped.
-- **`fixed.show_progress_bar`** — bool, default `true`. Hides the
+- **`fixed.show_progress_bar`** — *removed in §14e; the key is ignored by both
+  controllers and stripped by the editor on import.* Was: bool, default `true`, hides the
   trial-progress dots column without touching chain logic. Implemented
   by gating `_progress_bar_size` / `_progressBarSize` to return `0`
   when the flag is false; the game-side dot visibility predicate
@@ -966,6 +985,164 @@ wasm-pack build game_node --target web --release --out-dir pkg      # web only
 
 ---
 
+## 14e. Progress UI, session clock, particles, backdrops, chain bookkeeping (2026-08-22)
+
+A feature batch driven by experimental feedback. No §8 timing semantics
+changed, and the **per-frame trial-log schema is untouched**
+(`LOGGED_STATE_FIELDS` is the same list).
+
+### Trial-config schema (`fixed`) — additive, old files keep working
+| key | default | meaning |
+|---|---|---|
+| `platform_texture` | `7` (`Rock024_1K`) | ground-plane texture, `Texture` enum index |
+| `platform_color_mask` | `[0,0,0,0]` | `[r,g,b,a]`; `a` = mask strength, `0` = bare texture |
+| `background_texture` | `10` (`Tiles017_1K`) | curved back-wall texture |
+| `background_color_mask` | `[0,0,0,0]` | same encoding |
+
+Names are identical to the SHM fields, so they flow through
+`expand_flat_trial` / `buildTrialState` with no conversion code. Both
+controllers' backfills and the editor's `enforceLevel` populate them, so an
+older `trials.jsonl` loads unchanged and re-saving through the editor writes
+them out. `fixed.show_progress_bar` is now inert (ignored by both controllers,
+stripped by the editor). `fixed.score_bar_max` kept its name but is now a
+**visibility switch** (`0` hides the trial bar), not a capacity.
+
+### SHM additions (`game_structure_control`)
+- `session_time_left: u32` (f32 bits) — fraction of the session left.
+- `correct_streak: u32` — consecutive correct answers in the level.
+- `platform_texture`, `background_texture: u32`; `platform_color_mask`,
+  `background_color_mask: [u32; 4]` (f32 bits).
+- `sync_live_state_from_shm` gained `progress_bar_size`,
+  `progress_bar_cur_size` (without these the chain could not animate mid-trial),
+  `session_time_left` and `correct_streak`.
+
+### Game side
+- **Level chain** (`spawn_score_bar_pool` / `update_score_bar`) moved to a
+  horizontal row at the **top center**, one dot per level, filled left→right on
+  level completion. **Trial bar** (`spawn_left_score_bar` /
+  `update_left_score_bar`) moved from the left edge to the **bottom**, showing
+  the mean trial position across the level's chains — full = level complete.
+  Both blink + swell during the door animation, using the value the controller
+  pre-pushes on the terminal attempt (`_projected_progress`), and settle at the
+  end of the animation. Rates/scales in `game_constants`
+  (`PROGRESS_PULSE_HZ`, `PROGRESS_PULSE_SCALE`, `TRIAL_BAR_PULSE_HZ`).
+- **Session clock** (`spawn_session_clock` / `update_session_clock`,
+  [ui.rs](game_node/src/utils/ui.rs)): a white-transparent disc whose spent
+  wedge sweeps clockwise from noon into dark, drawn with a Bevy
+  `Gradient::Conic`. Shown **only on the between-trial black screen**, top
+  center. Radius: `SESSION_CLOCK_RADIUS_PX`.
+- **Ambient particles** ([fog.rs](game_node/src/utils/fog.rs)): a second,
+  always-on swarm (`AmbientMote`) drifting in a ring in front of the back wall,
+  independent of the win-time `Firefly` burst. Pool of `AMBIENT_COUNT_MAX` is
+  spawned once at startup; density is pure visibility (motes past the current
+  count get scale 0), so a change costs nothing. Count follows `correct_streak`
+  in `AMBIENT_STEPS` steps from `AMBIENT_COUNT_MIN` to `AMBIENT_COUNT_MAX`;
+  streak 0 = no motes. Hidden while the black screen is up. All tuning lives in
+  `ambient_particle_constants` — nothing per-level, nothing in the editor.
+- **Backdrops** ([setup.rs](game_node/src/utils/setup.rs)): a `Backdrop`
+  marker (`Platform` / `Background`) on the ground plane and the curved wall;
+  `apply_backdrops`, called from `setup_round`, rewrites each material **in
+  place** via `materials.get_mut` (no asset churn per trial). `mask_tint`
+  multiplies the natural texture by `WHITE.lerp(rgb, a)`, so `a = 0` is
+  byte-identical to the pre-feature look. Defaults + UV tiling in
+  `backdrop_constants`.
+- **Perf**: both particle swarms are now `NotShadowCaster` +
+  `NotShadowReceiver` and use a low-poly sphere (`.mesh().uv(6, 4)`, ~36 tris
+  instead of ~600); ambient motes only spawn inside `AMBIENT_ARC_DEG`, the arc
+  facing the camera (the wall arc is on −Z, the camera on +Z).
+- **Components consolidated**: every `#[derive(Component)]` now lives in
+  [objects.rs](game_node/src/utils/objects.rs) — `Firefly`, `AmbientMote`,
+  `WarmupEntity`, `PhotodiodeMarker` moved there; their modules import them.
+  Resources stayed with their subsystems.
+
+### New constant modules ([shared/src/constants.rs](shared/src/constants.rs))
+- `ambient_particle_constants` — `AMBIENT_STEPS`, `AMBIENT_COUNT_MIN/MAX`,
+  `AMBIENT_WALL_GAP`, `AMBIENT_INNER_RADIUS`, `AMBIENT_ARC_DEG`,
+  `AMBIENT_Y_MIN/MAX`, `AMBIENT_SIZE/SPEED/GLOW/COLOR`.
+- `backdrop_constants` — `PLATFORM_TEXTURE`, `BACKGROUND_TEXTURE`,
+  `PLATFORM_TILE`, `BACKGROUND_TILE`, `COLOR_MASK_NONE`. The two texture
+  defaults are exported to Python (`monkey_shared.PLATFORM_TEXTURE`) and to JS
+  (`controller_constants()`), so neither controller nor the editor hard-codes
+  an enum index.
+- `game_constants` — `SESSION_CLOCK_RADIUS_PX`, `PROGRESS_PULSE_HZ`,
+  `PROGRESS_PULSE_SCALE`, `TRIAL_BAR_PULSE_HZ`.
+
+### Chain bookkeeping — position vs. logged trial index
+Previously a chain that beat its last trial parked at `idx = n`, a trial that
+does not exist: it was logged and named in filenames, and a later RETROCEED
+erased the fact that the chain had ever been completed. Now the position is
+stored **split**:
+
+```
+chain_idxs[i]        trial index, never leaves [0, n-1]  → what gets logged
+chain_last_beaten[i] bool, set when the chain beat its last trial
+_chain_pos(i)        = chain_idxs[i] + beaten            → 0..n, all the arithmetic
+```
+
+`_chain_pos` is used by `_level_complete`, the chain-bag refill filter,
+`_level_progress_frac` and `_projected_progress`, so every completion/progress
+computation sees exactly the number it saw before. `_trial_idx()` (logs,
+filenames, prints) now always names a trial that exists.
+
+`_next_pos(delta)` owns the step rule (`+1` advance, `0` stay, `-1` retroceed)
+and is used **both** by `_handle_trial_index_update` and by the value
+pre-pushed to the progress bar, so the animation and the real update cannot
+disagree. Rule change: **a retroceed steps back from the trial actually
+played**, not from the position — a chain that has beaten its last trial drops
+to the trial *before* it and needs two consecutive wins to complete again
+(previously it only lost the completion and replayed the same last trial).
+
+### Trial-log schema
+- **New**: `trial_chain_completed` (bool) in the per-trial log **and** in the
+  `trials_runs[]` summary row, true on the run that beat the chain's last
+  trial. Computed at save time (`ADVANCE && trial_index_in_chain == n-1`),
+  since `save_trial_log` runs before the index update.
+- `trial_index_in_chain` now always names a real trial (was `n` for a
+  completed chain).
+- `trial_config` picks up the four backdrop keys automatically (it is the
+  flattened `fixed`).
+- `level_config` drops `fixed`, so the level summary carries the backdrop under
+  its own `level_config.background` key with the same four field names.
+- Per-frame rows: **unchanged**.
+
+### Controller / frontend
+- **EN/DE toggle** on the name + instructions pages
+  ([index.html](deploy_frontend/index.html)); English is the markup and the
+  default, German comes from an `I18N_DE` table. The choice is handed to the
+  game through `sessionStorage.lang`; `controller_main.js` uses it for the
+  loading/instruction/press/end-popup strings. The title stays
+  "Object Manipulation" in both.
+- `#start-trial-overlay` now follows `state.is_blank` instead of being opaque
+  for the whole break, so game-drawn UI (the clock) is visible on the web
+  during breaks.
+- `correct_streak` resets to 0 at every level transition.
+- **Fixed**: `setSceneConfig` must stamp the backdrop fields. `controllerLoop`
+  writes the whole state every frame from a scratch object the reader never
+  fills for write-only fields, so leaving them out pushed `0` (=`Bark001_1K`,
+  a bark/wood look) over the real values, which the game then picked up at the
+  next reset.
+- **Fixed**: promoting a library trial to default (`★ default`) now clears the
+  tab's `custom_trials_jsonl` selection. `loadLevels()` prefers that selection
+  over the default, so without the clear, Play silently kept replaying the
+  previously selected file.
+
+### Rebuild order after this session
+```
+cargo build --release -p shared --features python
+cp target/release/libshared.so controller_python/monkey_shared.so
+cargo build --release -p game_node
+wasm-pack build game_node --target web --release --out-dir pkg
+gzip -9 -k -f game_node/pkg/game_node_bg.wasm
+npx terser controller_main.js -c drop_console=true,drop_debugger=true -m \
+  -o deploy_frontend/controller_main.min.js
+```
+The SHM layout **and** the PyO3 signature both changed: a stale
+`monkey_shared.so` now fails on `monkey_shared.PLATFORM_TEXTURE`, and the web
+bundle and the wasm must be deployed together (the JS reads its field offsets
+from the wasm).
+
+---
+
 ## 15. Known Open Issues / Follow-ups
 
 1. ~~**Warmup reads the now-paused frame counter.**~~ **Fixed.**
@@ -987,7 +1164,12 @@ wasm-pack build game_node --target web --release --out-dir pkg      # web only
    buffer is what's logged, but worth noting.
 4. **Trial-0 still shows residual drift in some sessions**, mostly from
    browser vsync alignment on the first few frames. Not blocking.
-5. **Camera rotation and zoom are per-tick, not per-second.**
+5. **The "Pay attention to the object's details" instruction is web-only.**
+   It lives in `TEXT_EN` / `TEXT_DE` in
+   [controller_main.js](controller_main.js); `controller_python/controller.py`
+   has no equivalent line, so a native session does not show it. Mirror it if
+   native sessions should read the same instructions.
+6. **Camera rotation and zoom are per-tick, not per-second.**
    [shared_memory_reader.rs:75-98](game_node/src/shared_memory/shared_memory_reader.rs#L75-L98)
    increments `pending.rotation`/`pending.zoom` by `camera_speed_rotate`
    / `CAMERA_3D_SPEED_ZOOM` on every read tick, without multiplying by

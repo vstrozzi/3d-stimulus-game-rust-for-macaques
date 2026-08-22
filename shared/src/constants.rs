@@ -344,9 +344,10 @@ pub mod backdrop_constants {
 
 /// Lighting constants
 pub mod lighting_constants {
-    // Shadow settings
+    // Keep main-light shadows on natively, but disable them on WASM where
+    // their extra shadow-map pass is costly and has caused visual artifacts.
     #[cfg(target_arch = "wasm32")]
-    pub const SHADOWS_ENABLED: bool = false;    // Need to disable shadowslight on WASM for weird artifacts
+    pub const SHADOWS_ENABLED: bool = false;
     #[cfg(not(target_arch = "wasm32"))]
     pub const SHADOWS_ENABLED: bool = true;
 
@@ -441,4 +442,3 @@ pub mod controller_constants {
     /// Trial-outcome labels.
     pub const PROCEEDING_VALUES: &[&str] = &["ADVANCE", "STAY", "RETROCEED"];
 }
-

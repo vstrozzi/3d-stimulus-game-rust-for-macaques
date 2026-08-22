@@ -14,7 +14,9 @@ use crate::utils::objects::PreloadedTextures;
 use shared::Texture;
 use shared::constants::{
     backdrop_constants::{BACKGROUND_TEXTURE, BACKGROUND_TILE, PLATFORM_TEXTURE, PLATFORM_TILE},
-    lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},
+    lighting_constants::{
+        GLOBAL_AMBIENT_LIGHT_INTENSITY, SHADOWS_ENABLED, SPOTLIGHT_LIGHT_INTENSITY,
+    },
     object_constants::GROUND_Y,
 };
 use crate::shared_memory::shared_memory_reader::SharedMemResource;
@@ -51,7 +53,7 @@ pub fn setup_environment(
     commands.spawn((
         SpotLight {
             intensity: SPOTLIGHT_LIGHT_INTENSITY,
-            shadows_enabled: true,
+            shadows_enabled: SHADOWS_ENABLED,
             outer_angle: std::f32::consts::PI / 7.0,
             inner_angle: std::f32::consts::PI / 18.0,
             range: 35.0,

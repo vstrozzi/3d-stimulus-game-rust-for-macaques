@@ -175,7 +175,7 @@ let gameTimeUnresponsive = 0;
 // Special flags
 let _start = false;
 let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
-let sessionStartMs = null;  // Date.now() when the game's countdown ends; anchor for MAX_SESSION_DURATION_MS + the clock
+let sessionStartMs = null;  // Date.now() when the first trial starts; anchor for MAX_SESSION_DURATION_MS + the clock
 let _running = false;
 let _sceneReadyPromptShown = false;
 let _instructionsShown = false;
@@ -222,7 +222,7 @@ async function flushPending() {
 }
 
 /** Fraction of the session still left (1 → 0), for the game's round clock.
- *  Full until the countdown ends and `sessionStartMs` is anchored. */
+ *  Full until the first trial starts and `sessionStartMs` is anchored. */
 function _sessionTimeLeftFrac() {
   if (sessionStartMs === null || MAX_SESSION_DURATION_MS <= 0) return 1;
   const left = 1 - (Date.now() - sessionStartMs) / MAX_SESSION_DURATION_MS;
@@ -1426,9 +1426,6 @@ function handleInit(state) {
   // pyramid (empty scene). The game draws its own black loading + 3/2/1
   // countdown screen during this wait, so nothing extra is shown here.
   if (!state.is_scene_ready) return;
-  // The game's loading countdown is over: the session clock (and the
-  // MAX_SESSION_DURATION cap it shares an anchor with) starts here.
-  if (sessionStartMs === null) sessionStartMs = Date.now();
 
   console.log("[FSM] INIT → issuing toggle_blank + toggle_stop_rendering");
 

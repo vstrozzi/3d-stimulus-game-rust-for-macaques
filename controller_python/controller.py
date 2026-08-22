@@ -605,7 +605,7 @@ class MonkeyGameController:
         return 0 if int(self.level["fixed"].get("score_bar_max", 10)) == 0 else LEVEL_PROGRESS_SCALE
 
     # Fraction of the session still left (1 -> 0), for the game's round clock.
-    # Full until the game's countdown ends and `session_start_time` is anchored.
+    # Full until the first trial starts and `session_start_time` is anchored.
     def _session_time_left(self):
         if self.session_start_time is None or MAX_SESSION_DURATION_S <= 0:
             return 1.0
@@ -1063,10 +1063,6 @@ class MonkeyGameController:
         # the trial pyramid we just spawned, leaving an empty scene on trial 0.
         if not self.current_state.get("is_scene_ready", False):
             return
-        # The game's loading countdown is over: the session clock (and the
-        # MAX_SESSION_DURATION cap it shares an anchor with) starts here.
-        if self.session_start_time is None:
-            self.session_start_time = time.time()
         print("[FSM] INIT → issuing blank_screen + stop_rendering + load trial")
         flat = self.flat_trial
         print(f"[FSM] Level {self.current_level_index} chain {self.active_chain} "

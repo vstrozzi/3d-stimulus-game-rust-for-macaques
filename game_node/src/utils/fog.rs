@@ -9,13 +9,19 @@
 //!
 //! Fireflies spawn the moment a correct (green) animation begins and drift
 //! until the black screen appears, then despawn.
+//!
+//! A second, always-on swarm of ambient motes drifts in a ring in front of the
+//! back wall. Its size follows the player's consecutive-correct streak, so the
+//! scene gets visibly more magical the longer the run within a level.
 use std::f32::consts::TAU;
 
+use bevy::light::{NotShadowCaster, NotShadowReceiver};
 use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 use rand::Rng;
 
 use crate::utils::objects::{DoorWinEntities, GameStateLocal, PersistentCamera};
+use shared::constants::ambient_particle_constants::*;
 use shared::constants::fog_constants::*;
 use shared::constants::pyramid_constants::{LIGHT_GREEN, PYRAMID_HEIGHT};
 
@@ -26,6 +32,20 @@ const WALL_RADIUS: f32 = 9.0;
 /// One drifting firefly. Position is `base + amp * sin(freq * t + phase)`.
 #[derive(Component)]
 pub struct Firefly {
+    base: Vec3,
+    amp: Vec3,
+    freq: Vec3,
+    phase: Vec3,
+    flicker_phase: f32,
+}
+
+/// One ambient mote. Drifts like a [`Firefly`], but never bursts in and never
+/// despawns: the pool is spawned once and motes past the current density are
+/// simply scaled to zero.
+#[derive(Component)]
+pub struct AmbientMote {
+    /// Position in the pool; only motes with `index < count` are shown.
+    index: u32,
     base: Vec3,
     amp: Vec3,
     freq: Vec3,
@@ -175,7 +195,9 @@ fn spawn_fireflies(
     firefly_count: u32,
     firefly_size: f32,
 ) {
-    let mesh = meshes.add(Sphere::new(firefly_size));
+    // Low-poly, like the ambient motes: at this size a full-resolution UV
+    // sphere is invisible detail on a swarm that can be hundreds strong.
+    let mesh = meshes.add(Sphere::new(firefly_size).mesh().uv(6, 4));
     let glow = FIREFLY_COLOR.to_linear();
     let material = materials.add(StandardMaterial {
         base_color: FIREFLY_COLOR,
@@ -227,7 +249,130 @@ fn spawn_fireflies(
             // Start at the winning hole, invisible: the first frame they render
             // is already the start of the burst, so no outside-position flash.
             Transform::from_translation(origin).with_scale(Vec3::ZERO),
+            // Glowing dots: keep them out of the spotlight's shadow pass.
+            NotShadowCaster,
+            NotShadowReceiver,
             firefly,
         ));
+    }
+}
+
+
+
+/// Number of motes to show for a given consecutive-correct streak. A streak of
+/// 0 always means none; from there the count steps linearly from
+/// `AMBIENT_COUNT_MIN` up to `AMBIENT_COUNT_MAX` over `AMBIENT_STEPS` wins.
+fn ambient_mote_count(streak: u32) -> u32 {
+    if streak == 0 {
+        return 0;
+    }
+    let steps = AMBIENT_STEPS.max(1);
+    let step = streak.min(steps);
+    let frac = (step - 1) as f32 / (steps - 1).max(1) as f32;
+    let count = AMBIENT_COUNT_MIN as f32 + (AMBIENT_COUNT_MAX as f32 - AMBIENT_COUNT_MIN as f32) * frac;
+    count.round().max(0.0) as u32
+}
+
+/// Spawn the full mote pool once at startup. They are not `GameEntity`, so
+/// trial resets leave them alone, and density changes cost nothing at runtime.
+pub fn setup_ambient_motes(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if AMBIENT_COUNT_MAX == 0 {
+        return;
+    }
+    // Low-poly: the motes are sub-centimeter glowing dots, a full-resolution
+    // UV sphere each is pure vertex cost.
+    let mesh = meshes.add(Sphere::new(AMBIENT_SIZE).mesh().uv(6, 4));
+    let glow = AMBIENT_COLOR.to_linear();
+    let material = materials.add(StandardMaterial {
+        base_color: AMBIENT_COLOR,
+        emissive: LinearRgba::new(
+            glow.red * AMBIENT_GLOW,
+            glow.green * AMBIENT_GLOW,
+            glow.blue * AMBIENT_GLOW,
+            1.0,
+        ),
+        unlit: true,
+        ..default()
+    });
+
+    // Band in front of the wall, clamped so nothing pokes through it.
+    let outer = (WALL_RADIUS - AMBIENT_WALL_GAP).clamp(0.0, WALL_RADIUS - AMBIENT_SIZE);
+    let inner = AMBIENT_INNER_RADIUS.clamp(0.0, outer);
+
+    // Arc centered on the middle of the wall, i.e. straight away from the
+    // camera along -Z, which is `(cos, sin) = (0, -1)`.
+    let arc = AMBIENT_ARC_DEG.to_radians().clamp(0.0, TAU);
+    let arc_center = -std::f32::consts::FRAC_PI_2;
+
+    let mut rng = rand::rng();
+    for index in 0..AMBIENT_COUNT_MAX {
+        let angle = arc_center + rng.random_range(-arc / 2.0..=arc / 2.0);
+        let radius = if inner < outer { rng.random_range(inner..=outer) } else { outer };
+        let base = Vec3::new(
+            radius * angle.cos(),
+            rng.random_range(AMBIENT_Y_MIN..=AMBIENT_Y_MAX.max(AMBIENT_Y_MIN)),
+            radius * angle.sin(),
+        );
+        commands.spawn((
+            Mesh3d(mesh.clone()),
+            MeshMaterial3d(material.clone()),
+            // Hidden until `update_ambient_motes` decides otherwise.
+            Transform::from_translation(base).with_scale(Vec3::ZERO),
+            // Glowing dots: keep them out of the spotlight's shadow pass.
+            NotShadowCaster,
+            NotShadowReceiver,
+            AmbientMote {
+                index,
+                base,
+                amp: Vec3::new(
+                    rng.random_range(0.3..0.9),
+                    rng.random_range(0.3..0.9),
+                    rng.random_range(0.3..0.9),
+                ),
+                freq: Vec3::new(
+                    rng.random_range(0.2..0.8) * AMBIENT_SPEED,
+                    rng.random_range(0.2..0.8) * AMBIENT_SPEED,
+                    rng.random_range(0.2..0.8) * AMBIENT_SPEED,
+                ),
+                phase: Vec3::new(
+                    rng.random_range(0.0..TAU),
+                    rng.random_range(0.0..TAU),
+                    rng.random_range(0.0..TAU),
+                ),
+                flicker_phase: rng.random_range(0.0..TAU),
+            },
+        ));
+    }
+}
+
+/// Drift and twinkle the motes the current streak calls for, and keep the rest
+/// scaled to zero. Hidden entirely while the black screen is up.
+pub fn update_ambient_motes(
+    time: Res<Time>,
+    local_game_struct: Res<GameStateLocal>,
+    mut motes: Query<(&AmbientMote, &mut Transform)>,
+) {
+    let gs = &local_game_struct.0;
+    let count = if gs.is_blank { 0 } else { ambient_mote_count(gs.correct_streak) };
+    let t = time.elapsed_secs();
+    for (mote, mut transform) in &mut motes {
+        if mote.index >= count {
+            transform.scale = Vec3::ZERO;
+            continue;
+        }
+        transform.translation = mote.base
+            + Vec3::new(
+                mote.amp.x * (mote.freq.x * t + mote.phase.x).sin(),
+                mote.amp.y * (mote.freq.y * t + mote.phase.y).sin(),
+                mote.amp.z * (mote.freq.z * t + mote.phase.z).sin(),
+            );
+        let flicker = 1.0
+            + 0.35 * (7.0 * t + mote.flicker_phase).sin()
+            + 0.15 * (19.0 * t + mote.flicker_phase * 1.7).sin();
+        transform.scale = Vec3::splat(flicker.max(0.0));
     }
 }

@@ -117,7 +117,7 @@ let currentLevelIndex = 0;
 let chainIdxs = [];      // one entry per object (chain)
 let activeChain = 0;
 let chainBag = [];       // shuffled queue of upcoming chain picks
-let correctStreak = 0;   // consecutive-correct counter; will drive particle density
+let correctStreak = 0;   // consecutive-correct counter; drives the particle density
 let levelRandomSeed = 0; // resolved seed used by _rand() for the active level
 let _rngState = 0;
 
@@ -410,6 +410,7 @@ function _newStateScratch() {
     progress_bar_cur_size: 0, progress_bar_size: 0,
     score_bar_value: 0, score_bar_max: 10,
     session_time_left: 0,
+    correct_streak: 0,
     shake_amplitude: 0, shake_duration: 0,
     sound_effects_volume: 0, background_music_volume: 0, fog_enabled: false,
     fog_thickness_base: 0, firefly_count: 0,
@@ -678,6 +679,7 @@ function writeGameStateControl(state) {
   v.setUint32(base + o.score_bar_value, state.score_bar_value ?? 0, true);
   v.setUint32(base + o.score_bar_max, state.score_bar_max ?? 10, true);
   v.setUint32(base + o.session_time_left, state.session_time_left ?? 0, true);
+  v.setUint32(base + o.correct_streak, state.correct_streak ?? 0, true);
   v.setUint32(base + o.shake_amplitude, state.shake_amplitude ?? 0, true);
   v.setUint32(base + o.shake_duration, state.shake_duration ?? 0, true);
   v.setUint32(base + o.sound_effects_volume, state.sound_effects_volume ?? 0, true);
@@ -1457,6 +1459,7 @@ function handleInit(state) {
   trialState.score_bar_value = Math.round(_levelProgressFrac() * LEVEL_PROGRESS_SCALE);
   trialState.score_bar_max = _levelProgressMax();
   trialState.session_time_left = floatToU32Bits(_sessionTimeLeftFrac());
+  trialState.correct_streak = correctStreak;
   trialState.shake_amplitude = floatToU32Bits(level.fixed.shake_amplitude ?? 0.5);
   trialState.shake_duration = floatToU32Bits(level.fixed.shake_duration ?? 1.0);
   setSceneConfig(trialState, level);
@@ -1620,8 +1623,8 @@ function handlePlaying(state) {
       _pendingProgress = _projectedProgress(correct ? (inWinBudget ? 1 : 0) : -1);
     }
 
-    // Consecutive-correct counter. Nothing reads it yet: it is the input for
-    // the particle density (capped, constant in constants.rs) once that lands.
+    // Consecutive-correct counter: drives the ambient particle density in the
+    // game (steps + extremes are constants in constants.rs).
     if (correct) {
       correctStreak = correctStreak + 1;
     } else {
@@ -1738,6 +1741,7 @@ function handleTrialIndexUpdate() {
       return;
     }
     currentLevelIndex = (currentLevelIndex + 1) % levels.length;
+    correctStreak = 0;   // every level starts with no particles
     const newLevel = currentLevel();
     const start = newLevel.fixed.start_trial ?? 0;
     chainIdxs = new Array(newLevel.objects.length).fill(start);
@@ -1857,6 +1861,7 @@ function controllerLoop() {
     : Math.round(_levelProgressFrac() * LEVEL_PROGRESS_SCALE);
   state.score_bar_max = _levelProgressMax();
   state.session_time_left = floatToU32Bits(_sessionTimeLeftFrac());
+  state.correct_streak = correctStreak;
   state.shake_amplitude = floatToU32Bits(currentLevel().fixed.shake_amplitude ?? 0.5);
   state.shake_duration = floatToU32Bits(currentLevel().fixed.shake_duration ?? 1.0);
   setSceneConfig(state, currentLevel());

@@ -274,6 +274,54 @@ pub mod fog_constants {
     pub const FIREFLY_COLOR: Color = crate::constants::pyramid_constants::LIGHT_GREEN;
 }
 
+/// Ambient "magic" motes drifting in a ring in front of the curved back wall.
+/// Their number tracks the player's consecutive-correct streak, which the
+/// controller pushes as `correct_streak`: no correct answer in a row means no
+/// motes at all, and the ring then thickens step by step up to
+/// `AMBIENT_COUNT_MAX`. The streak — and so the ring — restarts at 0 on every
+/// new level.
+pub mod ambient_particle_constants {
+    use bevy_color::Color;
+
+    /// Granularity: a streak at or above this shows the densest ring. With `5`
+    /// the states are none / very few / few / okay / some / a good amount.
+    pub const AMBIENT_STEPS: u32 = 5;
+
+    /// Number of motes at the first step (streak 1) and at the last one. A
+    /// streak of 0 always means 0 motes, whatever `AMBIENT_COUNT_MIN` says.
+    /// `AMBIENT_COUNT_MAX` is also the size of the pool spawned at startup, so
+    /// it is the only knob that costs anything: keep it small.
+    pub const AMBIENT_COUNT_MIN: u32 = 3;
+    pub const AMBIENT_COUNT_MAX: u32 = 48;
+
+    /// Radial band the motes are scattered in, in world units from the pyramid
+    /// center. The outer edge sits `AMBIENT_WALL_GAP` in front of the curved
+    /// wall (radius 9.0, see `setup_environment`); the inner edge is about
+    /// halfway between the platform rim (`BASE_RADIUS`, 5.0) and the wall.
+    /// Setting both to the same value gives a thin ring.
+    pub const AMBIENT_WALL_GAP: f32 = 1.0;
+    pub const AMBIENT_INNER_RADIUS: f32 = 7.0;
+
+    /// Angular width of the ring, in degrees, centered on the middle of the
+    /// curved wall (the -Z side the camera faces). Motes outside it would sit
+    /// behind or beside the camera, costing frames for nothing. `360.0` is the
+    /// full circle again.
+    pub const AMBIENT_ARC_DEG: f32 = 170.0;
+
+    /// Height band above the ground the motes drift in.
+    pub const AMBIENT_Y_MIN: f32 = 0.5;
+    pub const AMBIENT_Y_MAX: f32 = 4.5;
+
+    /// Mote size (world units), wander speed multiplier and emissive boost —
+    /// same meaning as their `FIREFLY_*` counterparts.
+    pub const AMBIENT_SIZE: f32 = 0.010;
+    pub const AMBIENT_SPEED: f32 = 2.0;
+    pub const AMBIENT_GLOW: f32 = 500.0;
+
+    /// Mote color — kept distinct from the gold-green win burst.
+    pub const AMBIENT_COLOR: Color = crate::constants::pyramid_constants::LIGHT_BLUE;
+}
+
 /// Lighting constants
 pub mod lighting_constants {
     // Shadow settings

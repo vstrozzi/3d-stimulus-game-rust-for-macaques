@@ -354,6 +354,7 @@ impl WebSharedMemory {
         set("score_bar_value", off!(gs.score_bar_value));
         set("score_bar_max", off!(gs.score_bar_max));
         set("session_time_left", off!(gs.session_time_left));
+        set("correct_streak", off!(gs.correct_streak));
         set("shake_amplitude", off!(gs.shake_amplitude));
         set("shake_duration", off!(gs.shake_duration));
         set("sound_effects_volume", off!(gs.sound_effects_volume));
@@ -466,6 +467,7 @@ impl WebSharedMemory {
         set_u32("score_bar_value", def.score_bar_value.load(Relaxed));
         set_u32("score_bar_max", def.score_bar_max.load(Relaxed));
         set_u32("session_time_left", def.session_time_left.load(Relaxed));
+        set_u32("correct_streak", def.correct_streak.load(Relaxed));
         set_u32("shake_amplitude", def.shake_amplitude.load(Relaxed));
         set_u32("shake_duration", def.shake_duration.load(Relaxed));
         set_u32("sound_effects_volume", def.sound_effects_volume.load(Relaxed));

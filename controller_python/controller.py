@@ -393,9 +393,9 @@ class MonkeyGameController:
             self.active_chain = self._level_start_object(self.levels[0])
             self._refill_chain_bag(exclude=self.active_chain)
 
-        # Consecutive-correct counter, session-wide. Nothing reads it yet: it
-        # is the input for the particle density (capped, constant in
-        # constants.rs) once that lands.
+        # Consecutive-correct counter, reset at every new level: it drives the
+        # ambient particle density in the game (steps + extremes are constants
+        # in constants.rs).
         self.correct_streak = 0
 
         # Progress values pushed ahead of the real chain-index update so the
@@ -1011,6 +1011,7 @@ class MonkeyGameController:
                 pending["value"] if pending else round(self._level_progress_frac() * LEVEL_PROGRESS_SCALE))
             self.current_state["score_bar_max"] = self._level_progress_max()
             self.current_state["session_time_left"] = self._session_time_left()
+            self.current_state["correct_streak"] = self.correct_streak
             self.current_state["shake_amplitude"] = float(self.level["fixed"].get("shake_amplitude", 0.5))
             self.current_state["shake_duration"] = float(self.level["fixed"].get("shake_duration", 1.0))
             
@@ -1080,6 +1081,7 @@ class MonkeyGameController:
         trial_state["score_bar_value"] = round(self._level_progress_frac() * LEVEL_PROGRESS_SCALE)
         trial_state["score_bar_max"] = self._level_progress_max()
         trial_state["session_time_left"] = self._session_time_left()
+        trial_state["correct_streak"] = self.correct_streak
 
         # Position camera using fixed camera_y and camera_radius
         cam_y = self.level["fixed"].get("camera_y", DEFAULT_CAMERA_Y)
@@ -1342,6 +1344,7 @@ class MonkeyGameController:
         if self._level_complete():
             self._finalize_level_run("completed")
             self.current_level_index = (self.current_level_index + 1) % self.total_levels
+            self.correct_streak = 0   # every level starts with no particles
             start = self.level["fixed"].get("start_trial", 0)
             self.chain_idxs = [start] * len(self.level["objects"])
             self._reseed_rng_for_level()

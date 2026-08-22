@@ -12,7 +12,7 @@ use crate::utils::game_functions::{
     update_score_bar,
 };
 use crate::utils::setup::setup_environment;
-use crate::utils::fog::{setup_fog, update_fog, update_fireflies, FireflyState};
+use crate::utils::fog::{setup_ambient_motes, setup_fog, update_ambient_motes, update_fog, update_fireflies, FireflyState};
 use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
 use crate::utils::load_assets::{preload_all_textures, check_scene_ready, load_sounds, update_background_music_volume};
 use crate::utils::warmup::{spawn_warmup_scene, tick_warmup};
@@ -47,6 +47,7 @@ impl Plugin for SystemsLogicPlugin {
                     spawn_score_bar_pool,
                     spawn_left_score_bar,
                     spawn_session_clock,
+                    setup_ambient_motes,
                 ).chain())
             // Shared memory
             .add_systems(
@@ -56,7 +57,7 @@ impl Plugin for SystemsLogicPlugin {
             // Offscreen render-to-texture + upscale.
             .add_systems(Update, (setup_fixed_resolution, on_window_resized))
             // Pyramid-centered distance fog + win-time gold fireflies.
-            .add_systems(Update, (update_fog, update_fireflies))
+            .add_systems(Update, (update_fog, update_fireflies, update_ambient_motes))
             // Global UI responsiveness system (runs every frame)
             .add_systems(Update, update_ui_scale)
             // Tick warmup state machine each frame; despawns warmup entities

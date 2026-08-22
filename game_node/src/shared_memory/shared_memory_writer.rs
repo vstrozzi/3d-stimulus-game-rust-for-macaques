@@ -116,7 +116,7 @@ pub fn stage_render_sample(
     mut counter: ResMut<RenderFrameCounterResource>,
     mut staged: ResMut<StagedRenderSample>,
     round_start: Res<RoundStartTimestamp>,
-    photodiode_query: Query<(&Visibility, &BackgroundColor), With<crate::utils::debug_functions::PhotodiodeMarker>>,
+    photodiode_query: Query<(&Visibility, &BackgroundColor), With<crate::utils::objects::PhotodiodeMarker>>,
 ) {
     counter.0 += 1;
     let render_secs_bits = round_start.0

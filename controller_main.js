@@ -49,6 +49,8 @@ let CONTROLLER_META_FIELDS = null;    // Set<string>
 let FSM_STATES = null;                // string[]
 let PROCEEDING_VALUES = null;         // string[]
 let MAX_SESSION_DURATION_MIN = 0;     // from Rust; session wall-clock cap in minutes
+let DEFAULT_PLATFORM_TEXTURE = 0;     // from Rust; ground-plane texture of a level that sets none
+let DEFAULT_BACKGROUND_TEXTURE = 0;   // from Rust; back-wall texture of a level that sets none
 let MAX_SESSION_DURATION_MS = 0;      // derived; cap in milliseconds (used by the loop)
 let MAX_TRIAL_FRAMES = 0;             // derived; per-trial frame-log capacity (session cap × 120 Hz)
 
@@ -415,6 +417,8 @@ function _newStateScratch() {
     sound_effects_volume: 0, background_music_volume: 0, fog_enabled: false,
     fog_thickness_base: 0, firefly_count: 0,
     firefly_size: 0, firefly_expand_secs: 0,
+    platform_texture: 0, platform_color_mask: new Array(4).fill(0),
+    background_texture: 0, background_color_mask: new Array(4).fill(0),
   };
 }
 
@@ -650,6 +654,8 @@ function writeGameStateControl(state) {
   if (state.decorations_texture) writeU32Array(o.decorations_texture, state.decorations_texture, N_FACES);
   if (state.decorations_thickness) writeU32Array(o.decorations_thickness, state.decorations_thickness, N_FACES);
   if (state.decorations_color) writeU32Array(o.decorations_color, state.decorations_color, N_COLOR_FLOATS);
+  if (state.platform_color_mask) writeU32Array(o.platform_color_mask, state.platform_color_mask, 4);
+  if (state.background_color_mask) writeU32Array(o.background_color_mask, state.background_color_mask, 4);
   if (state.decorations_seeds) {
     for (let i = 0; i < N_FACES; i++) {
       const off = base + o.decorations_seeds + i * 8;
@@ -688,6 +694,8 @@ function writeGameStateControl(state) {
   v.setUint32(base + o.firefly_count, state.firefly_count ?? 0, true);
   v.setUint32(base + o.firefly_size, state.firefly_size ?? 0, true);
   v.setUint32(base + o.firefly_expand_secs, state.firefly_expand_secs ?? 0, true);
+  v.setUint32(base + o.platform_texture, state.platform_texture ?? 0, true);
+  v.setUint32(base + o.background_texture, state.background_texture ?? 0, true);
 
   // Dynamic fields
   if (state.frame_number !== undefined) {
@@ -926,6 +934,10 @@ function _levelStartObject(level) {
 // "f32[]"   → value.map(floatToU32Bits)
 // "f32[][]" → value.flatMap(face => face.map(floatToU32Bits))   (nested → flat u32 array)
 // "u32" / "u32[]" / "u64[]" → pass through unchanged
+// Per-level backdrop: ground plane ("platform") + curved wall ("background"),
+// each a `Texture` enum index and an [r, g, b, a] colour mask (a = strength).
+const BACKDROP_FIELDS = ["platform_texture", "platform_color_mask", "background_texture", "background_color_mask"];
+
 const FIELD_SCHEMA = {
   base_radius: "f32", height: "f32", start_orient: "f32",
   cosine_alignment_threshold: "f32",
@@ -950,6 +962,12 @@ const FIELD_SCHEMA = {
   camera_speed_rotate: "f32",
   // i32 stored as u32. Valid runtime values are +1 (default) or -1.
   camera_rotation_sense: "u32",
+  // Backdrops: texture is a `Texture` enum index, the mask is [r, g, b, a]
+  // with a = strength (0 = bare texture).
+  platform_texture: "u32",
+  background_texture: "u32",
+  platform_color_mask: "f32[]",
+  background_color_mask: "f32[]",
 };
 
 /** Build a game-state object from default + trial config overlay.
@@ -1201,6 +1219,10 @@ function _startLevelRunIfNeeded() {
   const started = new Date();
   const filename = _summaryFilename(currentLevelIndex, started);
   const { fixed: _dropFixed, ...levelCfg } = currentLevel();
+  // The backdrop lives in `fixed`, dropped just above; keep it here under its
+  // own key (same field names) so an analysis can see which surfaces the level
+  // was played with.
+  levelCfg.background = Object.fromEntries(BACKDROP_FIELDS.map(k => [k, _dropFixed?.[k]]));
   currentLevelSummary = {
     participant: _participantName(),
     level_index: currentLevelIndex,
@@ -2290,6 +2312,10 @@ function backfillLevelDefaults(level) {
   if (level.fixed.firefly_count == null) level.fixed.firefly_count = 10000;
   if (level.fixed.firefly_size == null) level.fixed.firefly_size = 0.013;
   if (level.fixed.firefly_expand_secs == null) level.fixed.firefly_expand_secs = 1.5;
+  if (level.fixed.platform_texture == null) level.fixed.platform_texture = DEFAULT_PLATFORM_TEXTURE;
+  if (level.fixed.background_texture == null) level.fixed.background_texture = DEFAULT_BACKGROUND_TEXTURE;
+  if (!Array.isArray(level.fixed.platform_color_mask)) level.fixed.platform_color_mask = [0, 0, 0, 0];
+  if (!Array.isArray(level.fixed.background_color_mask)) level.fixed.background_color_mask = [0, 0, 0, 0];
   for (const obj of (level.objects || [])) {
     if (!Array.isArray(obj.decorations_rotation)) obj.decorations_rotation = [0, 0, 0];
   }
@@ -2393,6 +2419,8 @@ async function start() {
   LOGGED_STATE_FIELDS = new Set(cc.LOGGED_STATE_FIELDS);
   LOGGED_STATE_FIELDS_LIST = cc.LOGGED_STATE_FIELDS.slice();
   MAX_SESSION_DURATION_MIN = cc.MAX_SESSION_DURATION_MIN | 0;
+  DEFAULT_PLATFORM_TEXTURE = cc.PLATFORM_TEXTURE | 0;
+  DEFAULT_BACKGROUND_TEXTURE = cc.BACKGROUND_TEXTURE | 0;
   MAX_SESSION_DURATION_MS = MAX_SESSION_DURATION_MIN * 60 * 1000;
   MAX_TRIAL_FRAMES = MAX_SESSION_DURATION_MIN * 60 * 120;
   _initFrameLogScratch();

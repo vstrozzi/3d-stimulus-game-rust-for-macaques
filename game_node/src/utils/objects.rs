@@ -142,6 +142,51 @@ pub struct HoleEmissive {
 #[derive(Component)]
 pub struct GameEntity;
 
+/// Marker for entities spawned during warmup; despawned once warmup
+/// completes. Distinct from `GameEntity` so the normal trial reset path
+/// never touches these.
+#[derive(Component)]
+pub struct WarmupEntity;
+
+/// Marker for the photodiode square UI element.
+#[derive(Component)]
+pub struct PhotodiodeMarker;
+
+/// One drifting firefly of the win-time swarm. Position is
+/// `base + amp * sin(freq * t + phase)`. Driven by `fog.rs`.
+#[derive(Component)]
+pub struct Firefly {
+    pub base: Vec3,
+    pub amp: Vec3,
+    pub freq: Vec3,
+    pub phase: Vec3,
+    pub flicker_phase: f32,
+}
+
+/// One ambient mote. Drifts like a [`Firefly`], but never bursts in and never
+/// despawns: the pool is spawned once and motes past the current density are
+/// simply scaled to zero. Driven by `fog.rs`.
+#[derive(Component)]
+pub struct AmbientMote {
+    /// Position in the pool; only motes with `index < count` are shown.
+    pub index: u32,
+    pub base: Vec3,
+    pub amp: Vec3,
+    pub freq: Vec3,
+    pub phase: Vec3,
+    pub flicker_phase: f32,
+}
+
+/// Marks the two persistent backdrop surfaces, which are re-skinned from the
+/// level config at every trial reset.
+#[derive(Component)]
+pub enum Backdrop {
+    /// The ground plane the whole scene stands on.
+    Platform,
+    /// The curved wall behind the object.
+    Background,
+}
+
 /// A component that marks an entity as a UI entity
 #[derive(Component)]
 pub struct UIEntity;

@@ -14,13 +14,7 @@ use strum::IntoEnumIterator;
 use crate::shared_memory::shared_memory_writer::RenderFrameCounterResource;
 use crate::utils::decorations::create_decoration_mesh;
 use crate::utils::load_assets::{natural_material, tinted_material_tiled};
-use crate::utils::objects::PreloadedTextures;
-
-/// Marker for entities spawned during warmup; despawned once warmup
-/// completes. Distinct from `GameEntity` so the normal trial reset path
-/// never touches these.
-#[derive(Component)]
-pub struct WarmupEntity;
+use crate::utils::objects::{PreloadedTextures, WarmupEntity};
 
 /// Tracks warmup progress. `complete` is what `check_scene_ready` gates on.
 #[derive(Resource, Default)]

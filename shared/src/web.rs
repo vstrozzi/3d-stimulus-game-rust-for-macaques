@@ -83,9 +83,9 @@ pub fn controller_constants() -> JsValue {
 #[wasm_bindgen]
 pub fn editor_constants() -> JsValue {
     use crate::constants::{
-        camera_3d_constants as cam, controller_constants as cc, fog_constants as fog,
-        game_constants as gc, lighting_constants as light, pyramid_constants as pyr,
-        sound_constants as snd,
+        backdrop_constants as bd, camera_3d_constants as cam, controller_constants as cc,
+        fog_constants as fog, game_constants as gc, lighting_constants as light,
+        pyramid_constants as pyr, sound_constants as snd,
     };
 
     let obj = js_sys::Object::new();
@@ -148,6 +148,8 @@ pub fn editor_constants() -> JsValue {
     set("FIREFLY_COUNT", JsValue::from_f64(fog::FIREFLY_COUNT as f64));
     set("FIREFLY_SIZE", JsValue::from_f64(fog::FIREFLY_SIZE as f64));
     set("FIREFLY_EXPAND_SECS", JsValue::from_f64(fog::FIREFLY_EXPAND_SECS as f64));
+    set("PLATFORM_TEXTURE", JsValue::from_f64(bd::PLATFORM_TEXTURE as u32 as f64));
+    set("BACKGROUND_TEXTURE", JsValue::from_f64(bd::BACKGROUND_TEXTURE as u32 as f64));
 
     // Per-face arrays (length N_FACES). Editor uses these to populate a new
     // object's default shape/size/count/color/seed values.
@@ -364,6 +366,10 @@ impl WebSharedMemory {
         set("firefly_count", off!(gs.firefly_count));
         set("firefly_size", off!(gs.firefly_size));
         set("firefly_expand_secs", off!(gs.firefly_expand_secs));
+        set("platform_texture", off!(gs.platform_texture));
+        set("platform_color_mask", off!(gs.platform_color_mask));
+        set("background_texture", off!(gs.background_texture));
+        set("background_color_mask", off!(gs.background_color_mask));
 
         // Dynamic fields
         set("frame_number",       off!(gs.frame_number));
@@ -477,6 +483,16 @@ impl WebSharedMemory {
         set_u32("firefly_count", def.firefly_count.load(Relaxed));
         set_u32("firefly_size", def.firefly_size.load(Relaxed));
         set_u32("firefly_expand_secs", def.firefly_expand_secs.load(Relaxed));
+        set_u32("platform_texture", def.platform_texture.load(Relaxed));
+        set_u32("background_texture", def.background_texture.load(Relaxed));
+        let platform_mask = js_sys::Array::new();
+        let background_mask = js_sys::Array::new();
+        for i in 0..4 {
+            platform_mask.push(&JsValue::from_f64(def.platform_color_mask[i].load(Relaxed) as f64));
+            background_mask.push(&JsValue::from_f64(def.background_color_mask[i].load(Relaxed) as f64));
+        }
+        js_sys::Reflect::set(&obj, &JsValue::from_str("platform_color_mask"), &platform_mask).unwrap();
+        js_sys::Reflect::set(&obj, &JsValue::from_str("background_color_mask"), &background_mask).unwrap();
 
         set_f64("frame_number", def.frame_number.load(Relaxed) as f64);
         set_f64("render_frame_number", def.render_frame_number.load(Relaxed) as f64);

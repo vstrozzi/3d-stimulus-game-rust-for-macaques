@@ -195,6 +195,14 @@ macro_rules! shared_game_state {
             pub firefly_size: $U32,
             pub firefly_expand_secs: $U32,
 
+            // Backdrop surfaces (per-level config): the ground plane and the
+            // curved wall behind it. Texture is a `Texture` enum index; the
+            // mask is `[r, g, b, a]` with `a` as strength (0 = bare texture).
+            pub platform_texture: $U32,
+            pub platform_color_mask: [$U32; 4],
+            pub background_texture: $U32,
+            pub background_color_mask: [$U32; 4],
+
             // Dynamic trials fields
             pub frame_number: $U64,
             pub render_frame_number: $U64,
@@ -346,6 +354,21 @@ impl SharedGameState {
             firefly_size: AtomicU32::new(constants::fog_constants::FIREFLY_SIZE.to_bits()),
             firefly_expand_secs: AtomicU32::new(constants::fog_constants::FIREFLY_EXPAND_SECS.to_bits()),
 
+            platform_texture: AtomicU32::new(constants::backdrop_constants::PLATFORM_TEXTURE as u32),
+            platform_color_mask: [
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[0].to_bits()),
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[1].to_bits()),
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[2].to_bits()),
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[3].to_bits()),
+            ],
+            background_texture: AtomicU32::new(constants::backdrop_constants::BACKGROUND_TEXTURE as u32),
+            background_color_mask: [
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[0].to_bits()),
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[1].to_bits()),
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[2].to_bits()),
+                AtomicU32::new(constants::backdrop_constants::COLOR_MASK_NONE[3].to_bits()),
+            ],
+
             // Dynamic trials fields
             frame_number: AtomicU64::new(0),
             render_frame_number: AtomicU64::new(0),
@@ -416,6 +439,12 @@ impl SharedGameState {
         self.firefly_count.store(other.firefly_count.load(Ordering::Relaxed), Ordering::Relaxed);
         self.firefly_size.store(other.firefly_size.load(Ordering::Relaxed), Ordering::Relaxed);
         self.firefly_expand_secs.store(other.firefly_expand_secs.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.platform_texture.store(other.platform_texture.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.background_texture.store(other.background_texture.load(Ordering::Relaxed), Ordering::Relaxed);
+        for i in 0..4 {
+            self.platform_color_mask[i].store(other.platform_color_mask[i].load(Ordering::Relaxed), Ordering::Relaxed);
+            self.background_color_mask[i].store(other.background_color_mask[i].load(Ordering::Relaxed), Ordering::Relaxed);
+        }
 
         self.frame_number.store(other.frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
         self.render_frame_number.store(other.render_frame_number.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -529,6 +558,22 @@ impl SharedGameState {
             firefly_count: self.firefly_count.load(Ordering::Relaxed),
             firefly_size: self.firefly_size.load(Ordering::Relaxed),
             firefly_expand_secs: self.firefly_expand_secs.load(Ordering::Relaxed),
+            platform_texture: self.platform_texture.load(Ordering::Relaxed),
+            platform_color_mask: {
+                let mut m = [0u32; 4];
+                for (i, c) in m.iter_mut().enumerate() {
+                    *c = self.platform_color_mask[i].load(Ordering::Relaxed);
+                }
+                m
+            },
+            background_texture: self.background_texture.load(Ordering::Relaxed),
+            background_color_mask: {
+                let mut m = [0u32; 4];
+                for (i, c) in m.iter_mut().enumerate() {
+                    *c = self.background_color_mask[i].load(Ordering::Relaxed);
+                }
+                m
+            },
             frame_number: self.frame_number.load(Ordering::Relaxed),
             render_frame_number: self.render_frame_number.load(Ordering::Relaxed),
             elapsed_secs: self.elapsed_secs.load(Ordering::Relaxed),
@@ -593,6 +638,12 @@ impl SharedGameState {
         self.firefly_count.store(state.firefly_count, Ordering::Relaxed);
         self.firefly_size.store(state.firefly_size, Ordering::Relaxed);
         self.firefly_expand_secs.store(state.firefly_expand_secs, Ordering::Relaxed);
+        self.platform_texture.store(state.platform_texture, Ordering::Relaxed);
+        self.background_texture.store(state.background_texture, Ordering::Relaxed);
+        for i in 0..4 {
+            self.platform_color_mask[i].store(state.platform_color_mask[i], Ordering::Relaxed);
+            self.background_color_mask[i].store(state.background_color_mask[i], Ordering::Relaxed);
+        }
         self.frame_number.store(state.frame_number, Ordering::Relaxed);
         self.render_frame_number.store(state.render_frame_number, Ordering::Relaxed);
         self.elapsed_secs.store(state.elapsed_secs, Ordering::Relaxed);

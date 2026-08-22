@@ -11,7 +11,9 @@ use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::load_assets::{load_texture_set, natural_material_tiled};
 use crate::utils::objects::PreloadedTextures;
+use shared::Texture;
 use shared::constants::{
+    backdrop_constants::{BACKGROUND_TEXTURE, BACKGROUND_TILE, PLATFORM_TEXTURE, PLATFORM_TILE},
     lighting_constants::{GLOBAL_AMBIENT_LIGHT_INTENSITY, SPOTLIGHT_LIGHT_INTENSITY},
     object_constants::GROUND_Y,
 };
@@ -25,22 +27,25 @@ pub fn setup_environment(
     mut materials: ResMut<Assets<StandardMaterial>>,
     asset_server: Res<AssetServer>,
 ) {
-    // Ground
-    let marble = load_texture_set(&asset_server, "textures/Rock024_1K-JPG/bevy_ready");
+    // Ground. Texture and tint are re-applied from the level config at every
+    // trial reset (`apply_backdrops`); these are just the defaults.
+    let marble = load_texture_set(&asset_server, &PLATFORM_TEXTURE.asset_folder());
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 200.0))),
         MeshMaterial3d(materials.add(StandardMaterial {
-            ..natural_material_tiled(&marble, 40.0)
+            ..natural_material_tiled(&marble, PLATFORM_TILE)
         })),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
+        Backdrop::Platform,
     ));
 
     // Wall
-    let metal = load_texture_set(&asset_server, "textures/Tiles017_1K-JPG/bevy_ready");
+    let metal = load_texture_set(&asset_server, &BACKGROUND_TEXTURE.asset_folder());
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 40.0, 50.0, 64))),
-        MeshMaterial3d(materials.add(natural_material_tiled(&metal, 9.0))),
+        MeshMaterial3d(materials.add(natural_material_tiled(&metal, BACKGROUND_TILE))),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
+        Backdrop::Background,
     ));
 
     commands.spawn((
@@ -77,6 +82,7 @@ pub fn setup_round(
     mut round_start: ResMut<RoundStartTimestamp>,
     mut local_game_struct: ResMut<GameStateLocal>,
     mut door_win_entities: ResMut<DoorWinEntities>,
+    backdrops: Query<(&Backdrop, &MeshMaterial3d<StandardMaterial>)>,
     time: Res<Time>,
 ) {
     let Some(shm_res) = shm_res else {
@@ -106,6 +112,8 @@ pub fn setup_round(
         .looking_at(Vec3::ZERO, Vec3::Y);
     }
 
+    apply_backdrops(&backdrops, &mut materials, &preloaded, gs_game);
+
     let config = build_pyramid_config(gs_game);
     let (winning_light, winning_emissive) =
         spawn_pyramid(&mut commands, &mut meshes, &mut materials, &preloaded, &config);
@@ -114,6 +122,48 @@ pub fn setup_round(
     door_win_entities.winning_emissive = winning_emissive;
     door_win_entities.animation_start_time = Some(time.elapsed());
 
+}
+
+/// Re-skin the ground plane and the back wall from this level's config. The
+/// material assets are edited in place, so trials don't pile up new assets.
+fn apply_backdrops(
+    backdrops: &Query<(&Backdrop, &MeshMaterial3d<StandardMaterial>)>,
+    materials: &mut Assets<StandardMaterial>,
+    preloaded: &PreloadedTextures,
+    gs_game: &shared::SharedGameStateLocal,
+) {
+    for (backdrop, material) in backdrops.iter() {
+        let (texture, mask, tile) = match backdrop {
+            Backdrop::Platform => (
+                gs_game.platform_texture,
+                gs_game.platform_color_mask,
+                PLATFORM_TILE,
+            ),
+            Backdrop::Background => (
+                gs_game.background_texture,
+                gs_game.background_color_mask,
+                BACKGROUND_TILE,
+            ),
+        };
+        let Some(slot) = materials.get_mut(&material.0) else { continue };
+        *slot = StandardMaterial {
+            base_color: mask_tint(mask),
+            ..natural_material_tiled(preloaded.get(Texture::from_u32(texture)), tile)
+        };
+    }
+}
+
+/// Turn a `[r, g, b, a]` mask (f32 bits) into the colour the texture is
+/// multiplied by: white at strength `a = 0` (the bare texture, as before),
+/// the mask colour at `a = 1`.
+fn mask_tint(mask: [u32; 4]) -> Color {
+    let [r, g, b, a] = mask.map(f32::from_bits);
+    let a = a.clamp(0.0, 1.0);
+    Color::srgb(
+        1.0 + (r - 1.0) * a,
+        1.0 + (g - 1.0) * a,
+        1.0 + (b - 1.0) * a,
+    )
 }
 
 /// Constructs a `PyramidConfig` from the current local game state

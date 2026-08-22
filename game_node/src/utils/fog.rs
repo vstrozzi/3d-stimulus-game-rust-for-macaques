@@ -20,7 +20,7 @@ use bevy::pbr::{DistanceFog, FogFalloff};
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::utils::objects::{DoorWinEntities, GameStateLocal, PersistentCamera};
+use crate::utils::objects::{AmbientMote, DoorWinEntities, Firefly, GameStateLocal, PersistentCamera};
 use shared::constants::ambient_particle_constants::*;
 use shared::constants::fog_constants::*;
 use shared::constants::pyramid_constants::{LIGHT_GREEN, PYRAMID_HEIGHT};
@@ -28,30 +28,6 @@ use shared::constants::pyramid_constants::{LIGHT_GREEN, PYRAMID_HEIGHT};
 /// Outer wall radius (see `setup_environment`). Nothing renders past it, so
 /// fireflies are clamped to stay inside.
 const WALL_RADIUS: f32 = 9.0;
-
-/// One drifting firefly. Position is `base + amp * sin(freq * t + phase)`.
-#[derive(Component)]
-pub struct Firefly {
-    base: Vec3,
-    amp: Vec3,
-    freq: Vec3,
-    phase: Vec3,
-    flicker_phase: f32,
-}
-
-/// One ambient mote. Drifts like a [`Firefly`], but never bursts in and never
-/// despawns: the pool is spawned once and motes past the current density are
-/// simply scaled to zero.
-#[derive(Component)]
-pub struct AmbientMote {
-    /// Position in the pool; only motes with `index < count` are shown.
-    index: u32,
-    base: Vec3,
-    amp: Vec3,
-    freq: Vec3,
-    phase: Vec3,
-    flicker_phase: f32,
-}
 
 /// Tracks whether a firefly swarm is currently alive and when it spawned (so
 /// the burst-from-center expansion can be timed).

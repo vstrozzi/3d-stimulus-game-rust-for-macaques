@@ -1,9 +1,7 @@
 //! Debug functions.
 use bevy::{prelude::*, window::*};
 
-/// Marker for the photodiode square UI element.
-#[derive(Component)]
-pub struct PhotodiodeMarker;
+use crate::utils::objects::PhotodiodeMarker;
 
 pub struct DebugFunctionsPlugin;
 

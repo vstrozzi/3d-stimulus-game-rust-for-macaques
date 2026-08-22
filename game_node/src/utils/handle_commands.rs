@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
 use crate::utils::objects::{
     DoorWinEntities,BaseDoor,  RotableComponent, RoundStartTimestamp, PersistentCamera, GameConditions,
-    UIEntity, BlankScreen, GameEntity, GameStateLocal};
+    UIEntity, BlankScreen, GameEntity, GameStateLocal, Backdrop};
 use crate::utils::helpers::{spawn_blank_screen, despawn_all_game_and_ui};
 use crate::utils::setup::{setup_round};
 use shared::constants::camera_3d_constants::{CAMERA_3D_MAX_RADIUS, CAMERA_3D_MIN_RADIUS,
@@ -26,6 +26,7 @@ pub fn handle_reset_command(
     spotlight_query: Query<&mut SpotLight, (Without<crate::utils::objects::HoleLight>, Without<GameEntity>)>,
     round_start: ResMut<RoundStartTimestamp>,
     mut door_win_entities: ResMut<DoorWinEntities>,
+    backdrops: Query<(&Backdrop, &MeshMaterial3d<StandardMaterial>)>,
     time: Res<Time>,
 ) {
 
@@ -62,6 +63,7 @@ pub fn handle_reset_command(
     round_start,
     local_game_struct,
     door_win_entities,
+    backdrops,
     time,
     );
 

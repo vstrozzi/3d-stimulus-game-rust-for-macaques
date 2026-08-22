@@ -106,6 +106,8 @@ DEFAULT_CAMERA_Y = monkey_shared.DEFAULT_CAMERA_Y
 CAMERA_3D_INITIAL_RADIUS = monkey_shared.CAMERA_3D_INITIAL_RADIUS
 N_START_ORIENTS = monkey_shared.N_START_ORIENTS
 MAX_SESSION_DURATION_MIN = monkey_shared.MAX_SESSION_DURATION_MIN
+PLATFORM_TEXTURE = monkey_shared.PLATFORM_TEXTURE
+BACKGROUND_TEXTURE = monkey_shared.BACKGROUND_TEXTURE
 MAX_SESSION_DURATION_S = MAX_SESSION_DURATION_MIN * 60
 # Per-trial frame-log buffer sized to cover the whole session at up to 120 Hz.
 MAX_TRIAL_FRAMES = MAX_SESSION_DURATION_S * 120
@@ -165,6 +167,15 @@ state_schema = {
     "camera_rotation_sense": int,
 }
 
+# Per-level backdrop: ground plane ("platform") + curved wall ("background"),
+# each a `Texture` enum index and an [r, g, b, a] colour mask (a = strength).
+BACKDROP_FIELDS = (
+    "platform_texture",
+    "platform_color_mask",
+    "background_texture",
+    "background_color_mask",
+)
+
 # Fields present in level["fixed"] that are shared across all trials in a level
 FIXED_FIELDS = {
     "base_radius",
@@ -188,6 +199,7 @@ FIXED_FIELDS = {
     "firefly_count",
     "firefly_size",
     "firefly_expand_secs",
+    *BACKDROP_FIELDS,
 }
 
 
@@ -238,6 +250,12 @@ def _backfill_level_defaults(level):
     fixed.setdefault("firefly_count", 10000)
     fixed.setdefault("firefly_size", 0.013)
     fixed.setdefault("firefly_expand_secs", 1.5)
+    fixed.setdefault("platform_texture", PLATFORM_TEXTURE)
+    fixed.setdefault("background_texture", BACKGROUND_TEXTURE)
+    if not isinstance(fixed.get("platform_color_mask"), list):
+        fixed["platform_color_mask"] = [0.0, 0.0, 0.0, 0.0]
+    if not isinstance(fixed.get("background_color_mask"), list):
+        fixed["background_color_mask"] = [0.0, 0.0, 0.0, 0.0]
     for obj in level.get("objects", []):
         obj.setdefault("decorations_rotation", [0, 0, 0])
     for trial in level.get("trials", []):
@@ -770,7 +788,9 @@ class MonkeyGameController:
         self.current_level_dir = level_dir
         self.current_level_summary_path = os.path.join(level_dir, summary_filename)
         os.makedirs(trials_dir, exist_ok=True)
-        level_cfg = {k: v for k, v in self.levels[self.current_level_index].items() if k != "fixed"}
+        level = self.levels[self.current_level_index]
+        level_cfg = {k: v for k, v in level.items() if k != "fixed"}
+        level_cfg["background"] = {k: level["fixed"].get(k) for k in BACKDROP_FIELDS}
         self.current_level_summary = {
             "participant": PARTICIPANT_NAME,
             "level_index": self.current_level_index,

@@ -322,6 +322,26 @@ pub mod ambient_particle_constants {
     pub const AMBIENT_COLOR: Color = crate::constants::pyramid_constants::LIGHT_BLUE;
 }
 
+/// Backdrop surfaces, configurable per level: the ground plane the scene
+/// stands on ("platform") and the curved wall behind it ("background"). Each
+/// takes a texture from the `Texture` enum plus a colour mask `[r, g, b, a]`,
+/// where `a` is the mask strength — `0` leaves the texture exactly as authored,
+/// `1` washes it fully toward the colour. These are the values used when a
+/// level (or an older `trials.jsonl`) says nothing.
+pub mod backdrop_constants {
+    use crate::Texture;
+
+    pub const PLATFORM_TEXTURE: Texture = Texture::Rock024_1K;
+    pub const BACKGROUND_TEXTURE: Texture = Texture::Tiles017_1K;
+
+    /// UV tiling of each surface — how often the texture repeats across it.
+    pub const PLATFORM_TILE: f32 = 40.0;
+    pub const BACKGROUND_TILE: f32 = 9.0;
+
+    /// Default mask: none.
+    pub const COLOR_MASK_NONE: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
+}
+
 /// Lighting constants
 pub mod lighting_constants {
     // Shadow settings

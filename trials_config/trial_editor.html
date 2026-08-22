@@ -531,6 +531,10 @@ function defaultLevel(nObjects = 2) {
       firefly_count: SCENE_DEFAULTS.firefly_count,
       firefly_size: SCENE_DEFAULTS.firefly_size,
       firefly_expand_secs: SCENE_DEFAULTS.firefly_expand_secs,
+      platform_texture: SCENE_DEFAULTS.platform_texture,
+      platform_color_mask: [0, 0, 0, 0],
+      background_texture: SCENE_DEFAULTS.background_texture,
+      background_color_mask: [0, 0, 0, 0],
       base_radius: PYRAMID_DEFAULTS.base_radius,
       height: PYRAMID_DEFAULTS.height,
       cosine_alignment_threshold: GAME_DEFAULTS.cosine_alignment_to_win,
@@ -620,6 +624,15 @@ function enforceLevel(lv) {
   f.firefly_size = Math.max(0, f.firefly_size);
   if (f.firefly_expand_secs == null) f.firefly_expand_secs = SCENE_DEFAULTS.firefly_expand_secs;
   f.firefly_expand_secs = Math.max(0, f.firefly_expand_secs);
+  // Backdrops. `*_color_mask` is [r, g, b, a] with a = mask strength; all-zero
+  // (the default) leaves the texture untouched, exactly as before the field
+  // existed, so older files look unchanged.
+  if (f.platform_texture == null) f.platform_texture = SCENE_DEFAULTS.platform_texture;
+  if (f.background_texture == null) f.background_texture = SCENE_DEFAULTS.background_texture;
+  f.platform_texture = Math.max(0, Math.round(f.platform_texture));
+  f.background_texture = Math.max(0, Math.round(f.background_texture));
+  if (!Array.isArray(f.platform_color_mask) || f.platform_color_mask.length !== 4) f.platform_color_mask = [0, 0, 0, 0];
+  if (!Array.isArray(f.background_color_mask) || f.background_color_mask.length !== 4) f.background_color_mask = [0, 0, 0, 0];
   // Pyramid / animation / lighting — backfill so files saved before these were
   // editable (or hand-written without them) load with sensible defaults instead
   // of rendering `undefined` inputs and exporting them back as missing.
@@ -816,6 +829,10 @@ function renderLevelEditor() {
       </div>
     </div>
     <div class="section">
+      <div class="sec-title">Background</div>
+      ${renderBackdrop(lv.fixed)}
+    </div>
+    <div class="section">
       <div class="sec-title">Trials (shared across all chains · ${lv.trials.length} step${lv.trials.length !== 1 ? 's' : ''})</div>
       ${renderTrials(lv.trials)}
     </div>
@@ -962,6 +979,26 @@ function rotationInputHtml(ci, fi, val) {
 // ================================================================
 // Render — trials
 // ================================================================
+/** Per-level backdrop: the ground plane the scene stands on and the curved
+ *  wall behind it. The mask's alpha is its strength — 0 shows the bare
+ *  texture, 1 washes it fully toward the picked colour. */
+function renderBackdrop(fixed) {
+  const row = (label, hint, texId, texVal, maskId, mask) => `
+    <div class="trial-row">
+      <span class="trial-field" title="${hint}"><strong>${label}</strong></span>
+      <span class="trial-field"><span>Texture</span>${texSelectHtml(texId, texVal)}</span>
+      <span class="trial-field" title="Alpha is the mask strength: 0 = bare texture.">
+        <span>Color mask</span>${colorInputHtml(maskId, mask)}
+      </span>
+    </div>`;
+  return `<div class="trials-list">
+    ${row('Platform', 'The ground plane the scene stands on.',
+          'bdPlatformTex', fixed.platform_texture, 'bdPlatformMask', fixed.platform_color_mask)}
+    ${row('Background', 'The curved wall behind the object.',
+          'bdBackgroundTex', fixed.background_texture, 'bdBackgroundMask', fixed.background_color_mask)}
+  </div>`;
+}
+
 function renderTrials(trials) {
   const rows = trials.map((t, ti) => `
     <div class="trial-row">
@@ -1358,11 +1395,16 @@ function attachEvents() {
 // ================================================================
 // Color / texture / shape helpers
 // ================================================================
+// Editor ids of the two backdrop surfaces -> the `fixed` keys they write.
+const BACKDROP_MASK_FIELDS = { bdPlatformMask: 'platform_color_mask', bdBackgroundMask: 'background_color_mask' };
+const BACKDROP_TEX_FIELDS  = { bdPlatformTex: 'platform_texture', bdBackgroundTex: 'background_texture' };
+
 function applyColorFromId(cid) {
   const rgbEl = document.querySelector(`input[type=color][data-cid="${cid}"]`);
   const aEl   = document.querySelector(`input.alpha-in[data-cid="${cid}"]`);
   if (!rgbEl || !aEl) return;
   const rgba = hexToRgba(rgbEl.value, aEl.value);
+  if (BACKDROP_MASK_FIELDS[cid]) { levels[sel].fixed[BACKDROP_MASK_FIELDS[cid]] = rgba; return; }
   const m = cid.match(/^c(\d)f(\d)(fc|dc)$/);
   if (!m) return;
   const [, ci, fi, type] = m.map((v, i) => i === 0 ? v : (i <= 2 ? +v : v));
@@ -1388,6 +1430,7 @@ function applyColorFromId(cid) {
 }
 
 function applyTexture(id, val) {
+  if (BACKDROP_TEX_FIELDS[id]) { levels[sel].fixed[BACKDROP_TEX_FIELDS[id]] = val; return; }
   const m = id.match(/^c(\d)f(\d)(ft|dt)$/);
   if (!m) return;
   const ci = +m[1], fi = +m[2], type = m[3];
@@ -1607,6 +1650,8 @@ document.getElementById('levelList').addEventListener('click', e => {
     firefly_count: ec.FIREFLY_COUNT ?? 200,
     firefly_size: ec.FIREFLY_SIZE ?? 0.010,
     firefly_expand_secs: ec.FIREFLY_EXPAND_SECS ?? 1.5,
+    platform_texture: ec.PLATFORM_TEXTURE ?? 7,
+    background_texture: ec.BACKGROUND_TEXTURE ?? 10,
   };
 
   // Sanity check — drift here means SHAPE_ICONS got out of sync with the Rust

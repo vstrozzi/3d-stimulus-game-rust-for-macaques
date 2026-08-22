@@ -206,6 +206,10 @@ impl SharedMemoryWrapper {
         firefly_count: u32,
         firefly_size: f32,
         firefly_expand_secs: f32,
+        platform_texture: u32,
+        platform_color_mask: Vec<f32>,
+        background_texture: u32,
+        background_color_mask: Vec<f32>,
         frame_number: u64,
         elapsed_secs: f32,
         camera_radius: f32,
@@ -295,6 +299,15 @@ impl SharedMemoryWrapper {
         gs.firefly_count.store(firefly_count, Ordering::Relaxed);
         gs.firefly_size.store(firefly_size.to_bits(), Ordering::Relaxed);
         gs.firefly_expand_secs.store(firefly_expand_secs.to_bits(), Ordering::Relaxed);
+
+        gs.platform_texture.store(platform_texture, Ordering::Relaxed);
+        gs.background_texture.store(background_texture, Ordering::Relaxed);
+        for i in 0..4 {
+            let p = platform_color_mask.get(i).copied().unwrap_or(0.0);
+            let b = background_color_mask.get(i).copied().unwrap_or(0.0);
+            gs.platform_color_mask[i].store(p.to_bits(), Ordering::Relaxed);
+            gs.background_color_mask[i].store(b.to_bits(), Ordering::Relaxed);
+        }
 
         gs.frame_number.store(frame_number, Ordering::Relaxed);
         gs.elapsed_secs.store(elapsed_secs.to_bits(), Ordering::Relaxed);
@@ -413,6 +426,17 @@ impl SharedMemoryWrapper {
             dict.set_item("firefly_size", f32::from_bits(gs.firefly_size.load(Ordering::Relaxed)))?;
             dict.set_item("firefly_expand_secs", f32::from_bits(gs.firefly_expand_secs.load(Ordering::Relaxed)))?;
 
+            dict.set_item("platform_texture", gs.platform_texture.load(Ordering::Relaxed))?;
+            dict.set_item("background_texture", gs.background_texture.load(Ordering::Relaxed))?;
+            let mut platform_mask: Vec<f32> = Vec::with_capacity(4);
+            let mut background_mask: Vec<f32> = Vec::with_capacity(4);
+            for i in 0..4 {
+                platform_mask.push(f32::from_bits(gs.platform_color_mask[i].load(Ordering::Relaxed)));
+                background_mask.push(f32::from_bits(gs.background_color_mask[i].load(Ordering::Relaxed)));
+            }
+            dict.set_item("platform_color_mask", platform_mask)?;
+            dict.set_item("background_color_mask", background_mask)?;
+
             // Dynamic trials fields
             dict.set_item("frame_number", gs.frame_number.load(Ordering::Relaxed))?;
             dict.set_item("render_frame_number", gs.render_frame_number.load(Ordering::Relaxed))?;
@@ -462,6 +486,9 @@ impl SharedMemoryWrapper {
         m.add("DOOR_ANIM_FADE_OUT", pyramid_constants::DOOR_ANIM_FADE_OUT)?;
         m.add("DOOR_ANIM_STAY_OPEN", pyramid_constants::DOOR_ANIM_STAY_OPEN)?;
         m.add("DOOR_ANIM_FADE_IN", pyramid_constants::DOOR_ANIM_FADE_IN)?;
+        use crate::constants::backdrop_constants;
+        m.add("PLATFORM_TEXTURE", backdrop_constants::PLATFORM_TEXTURE as u32)?;
+        m.add("BACKGROUND_TEXTURE", backdrop_constants::BACKGROUND_TEXTURE as u32)?;
 
         // lighting_constants
         use crate::constants::lighting_constants;

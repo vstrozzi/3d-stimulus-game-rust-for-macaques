@@ -53,6 +53,7 @@
   #toolbar button:hover, #toolbar label:hover { background: var(--accent-dim); }
   #toolbar .spacer { flex: 1; }
   #toolbar .title { font-weight: 700; font-size: 15px; color: var(--accent); }
+  #toolbar .file-name { font-size: 13px; color: var(--muted, #9aa); }
   #fileInput { display: none; }
 
   /* ── Layout ── */
@@ -380,6 +381,7 @@
 
 <div id="toolbar">
   <span class="title">Level Editor</span>
+  <span class="file-name" id="fileNameLabel"></span>
   <button id="btnNew">+ Level</button>
   <button id="btnDup">Duplicate</button>
   <button id="btnDel">Delete</button>
@@ -560,6 +562,13 @@ function defaultLevel(nObjects = 2) {
 let levels = [];
 let sel = -1;
 let fileName = TRIALS_FILENAME;
+/** Set the file being edited (also the Export download name) and show it in
+ *  the toolbar, with `source` explaining where it came from. */
+function setFileName(name, source) {
+  fileName = name;
+  const el = document.getElementById('fileNameLabel');
+  if (el) { el.textContent = name; el.title = source || ''; }
+}
 
 // ================================================================
 // Constraint enforcement
@@ -1536,7 +1545,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
 document.getElementById('fileInput').addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
-  fileName = file.name;
+  setFileName(file.name, 'Imported from disk');
   const reader = new FileReader();
   reader.onload = ev => {
     try {
@@ -1660,11 +1669,24 @@ document.getElementById('levelList').addEventListener('click', e => {
     console.warn(`SHAPE_ICONS (${SHAPE_ICONS.length}) does not match SHAPES (${SHAPES.length}); add a glyph in trial_editor.html.`);
   }
 
-  // 2. Auto-load trials file (now lives under trials/, the new default location)
+  // 2. Auto-load: the trial selected in the admin menu (this tab) if there is
+  //    one, else the server default. Same precedence the game uses, so the
+  //    editor never edits a different file than the one that will be played.
   try {
-    const resp = await fetch(`./trials/${TRIALS_FILENAME}`);
-    if (resp.ok) {
-      const text = await resp.text();
+    const selText = sessionStorage.getItem('custom_trials_jsonl');
+    const selName = sessionStorage.getItem('custom_trials_name');
+    let text = null;
+    let name = TRIALS_FILENAME;
+    let source = `Loaded from the default ${TRIALS_FILENAME}`;
+    if (selText) {
+      text = selText;
+      name = selName || 'custom.jsonl';
+      source = 'Loaded from the trial selected in the menu';
+    } else {
+      const resp = await fetch(`./trials/${TRIALS_FILENAME}`);
+      if (resp.ok) text = await resp.text();
+    }
+    if (text !== null) {
       levels = text.split('\n')
         .map(l => l.trim()).filter(Boolean)
         .map(l => {
@@ -1673,8 +1695,8 @@ document.getElementById('levelList').addEventListener('click', e => {
           return lv;
         });
       sel = levels.length > 0 ? 0 : -1;
-      fileName = TRIALS_FILENAME;
-      console.log(`Auto-loaded ${levels.length} levels from ${TRIALS_FILENAME}`);
+      setFileName(name, source);
+      console.log(`Auto-loaded ${levels.length} levels from ${name}`);
     }
   } catch (e) {
     console.log(`No ${TRIALS_FILENAME} found, starting empty.`, e);

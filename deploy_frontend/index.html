@@ -463,7 +463,7 @@
         <span class="action-icon">&#9998;</span>
         <span class="action-text">
           <span class="action-title">Create / Edit Trials</span>
-          <span class="action-desc">Open the trial editor with the current trials.jsonl</span>
+          <span class="action-desc">Open the trial editor with the selected trial (or the default)</span>
         </span>
       </a>
 
@@ -768,6 +768,13 @@
       loadedInfo.textContent = `Selected: ${name} (${nLevels} level${nLevels !== 1 ? 's' : ''})`;
       loadedInfo.className = 'loaded-info';
     }
+    // Drop the tab's selection so Play falls back to the server default.
+    function clearSelected() {
+      sessionStorage.removeItem('custom_trials_jsonl');
+      sessionStorage.removeItem('custom_trials_name');
+      loadedInfo.textContent = 'Using default trials';
+      loadedInfo.className = 'loaded-info empty';
+    }
     // Restore any selection from a previous step in this tab.
     (function () {
       const stored = sessionStorage.getItem('custom_trials_jsonl');
@@ -830,7 +837,14 @@
         const def = document.createElement('button'); def.className = 'tbtn'; def.textContent = '★ default';
         def.title = 'Make this the default trials (played by everyone)';
         def.onclick = async () => {
-          if (await adminPost('/admin/trials/make_default', { name: t.name })) { alert(`"${t.name}" is now the default.`); renderTrials(); }
+          if (await adminPost('/admin/trials/make_default', { name: t.name })) {
+            // A selection made earlier in this tab wins over the default in
+            // loadLevels(), so promoting one has to drop it — otherwise Play
+            // silently keeps using the old file.
+            clearSelected();
+            alert(`"${t.name}" is now the default.`);
+            renderTrials();
+          }
           else alert('Could not set default.');
         };
         const ren = document.createElement('button'); ren.className = 'tbtn'; ren.textContent = '✎';

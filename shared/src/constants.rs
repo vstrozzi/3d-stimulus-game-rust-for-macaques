@@ -35,6 +35,9 @@ pub mod game_constants {
 
     /// Duration of the black pre-start countdown.
     pub const LOADING_COUNTDOWN_SECS: f32 = 3.0;
+
+    /// Radius of the round session clock in the top-right corner.
+    pub const SESSION_CLOCK_RADIUS_PX: f32 = 40.0;
 }
 
 /// Audio toggles and levels. Both effects and the background loop are on by

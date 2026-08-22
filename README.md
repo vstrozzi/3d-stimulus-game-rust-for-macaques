@@ -113,8 +113,10 @@ python tools/verify_trial_logs.py out/trial_logs/
 
 ## Hosted web server
 
-The web build is served by a small Python server (`deploy_backend/log_server.py`)
-that also receives one POST per trial and writes it to disk. The stack:
+The web application is served by a small Python server (`deploy_backend/log_server.py`)
+that also receives one POST at the end of each trial and stores it it to disk. 
+
+The stack:
 
 ```
   Browser ──HTTPS──▶ Caddy ──HTTP──▶ uvicorn ──▶ FastAPI app (log_server.py)
@@ -125,11 +127,11 @@ that also receives one POST per trial and writes it to disk. The stack:
                                                   out/server_logs/  (per-trial JSON)
 ```
 
-* **FastAPI** — the app: defines the routes (login, static bundle, `/log`, `/admin/*`).
-* **uvicorn** — the ASGI server that actually runs the FastAPI app and speaks HTTP.
+* **FastAPI** — the app: defines the API calls for each user level (login, static bundle, `/log`, `/admin/*`).
+* **uvicorn** — the ASGI (asynchronous here) implementation, that allows the server to deploy the FastAPI app and works using the HTTP protocol.
   (FastAPI is just a library; uvicorn is the process listening on a port.)
-* **Caddy** — reverse proxy in front, only to terminate **HTTPS** (auto Let's Encrypt
-  cert). HTTPS is mandatory because `SharedArrayBuffer` needs a secure context.
+* **Caddy** — reverse proxy (server of servers)in front, terminates **HTTPS** (auto Let's Encrypt
+  cert) and provides individual http request to uvicor per user. HTTPS is mandatory because `SharedArrayBuffer` needs a secure context.
 * **passlib[argon2]** — hashes the two passwords (player / admin); only hashes are stored.
 * **itsdangerous** — signs the auth cookie so it can't be forged (needs `SECRET_KEY`).
 
@@ -223,5 +225,4 @@ export ADMIN_PW_HASH=$(python -c "from passlib.hash import argon2;print(argon2.h
 python -m uvicorn deploy_backend.log_server:app --port 8000
 # open http://localhost:8000  → log in with PLAYERPW (play) or ADMINPW (browse data)
 ```
-The passwords are whatever plaintext you hash above; only the hashes are stored
-(in these env vars), never the plaintext.
+The passwords are whatever plaintext you hash above.

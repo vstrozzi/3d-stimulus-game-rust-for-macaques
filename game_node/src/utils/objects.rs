@@ -118,6 +118,11 @@ pub struct LeftScoreBarRoot;
 #[derive(Component)]
 pub struct LeftScoreBarFill;
 
+/// Round session clock (top-right): a disc whose spent wedge sweeps
+/// clockwise from noon as the session runs down.
+#[derive(Component)]
+pub struct SessionClock;
+
 #[derive(Component)]
 pub struct HoleLight {
     pub door_index: usize,

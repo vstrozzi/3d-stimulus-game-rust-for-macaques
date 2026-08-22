@@ -564,6 +564,14 @@ class MonkeyGameController:
         remaining = max(0, len(self.level["trials"]))
         return remaining * len(self.level["objects"])
 
+    # Fraction of the session still left (1 -> 0), for the game's round clock.
+    # Full until the game's countdown ends and `session_start_time` is anchored.
+    def _session_time_left(self):
+        if self.session_start_time is None or MAX_SESSION_DURATION_S <= 0:
+            return 1.0
+        left = 1.0 - (time.time() - self.session_start_time) / MAX_SESSION_DURATION_S
+        return max(0.0, min(1.0, left))
+
     # Command helpers
     def check_has_finished(self, state):
         trial = self.flat_trial
@@ -961,6 +969,7 @@ class MonkeyGameController:
             self.score_bar_value = max(0, min(self.score_bar_value, sb_max))
             self.current_state["score_bar_value"] = self.score_bar_value
             self.current_state["score_bar_max"] = sb_max
+            self.current_state["session_time_left"] = self._session_time_left()
             self.current_state["shake_amplitude"] = float(self.level["fixed"].get("shake_amplitude", 0.5))
             self.current_state["shake_duration"] = float(self.level["fixed"].get("shake_duration", 1.0))
             
@@ -1013,6 +1022,10 @@ class MonkeyGameController:
         # the trial pyramid we just spawned, leaving an empty scene on trial 0.
         if not self.current_state.get("is_scene_ready", False):
             return
+        # The game's loading countdown is over: the session clock (and the
+        # MAX_SESSION_DURATION cap it shares an anchor with) starts here.
+        if self.session_start_time is None:
+            self.session_start_time = time.time()
         print("[FSM] INIT → issuing blank_screen + stop_rendering + load trial")
         flat = self.flat_trial
         print(f"[FSM] Level {self.current_level_index} chain {self.active_chain} "
@@ -1031,6 +1044,7 @@ class MonkeyGameController:
         self.score_bar_value = max(0, min(self.score_bar_value, sb_max))
         trial_state["score_bar_value"] = self.score_bar_value
         trial_state["score_bar_max"] = sb_max
+        trial_state["session_time_left"] = self._session_time_left()
 
         # Position camera using fixed camera_y and camera_radius
         cam_y = self.level["fixed"].get("camera_y", DEFAULT_CAMERA_Y)

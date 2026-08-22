@@ -195,6 +195,7 @@ impl SharedMemoryWrapper {
         progress_bar_cur_size: u32,
         score_bar_value: u32,
         score_bar_max: u32,
+        session_time_left: f32,
         shake_amplitude: f32,
         shake_duration: f32,
         sound_effects_volume: f32,
@@ -282,6 +283,7 @@ impl SharedMemoryWrapper {
         gs.progress_bar_cur_size.store(progress_bar_cur_size, Ordering::Relaxed);
         gs.score_bar_value.store(score_bar_value, Ordering::Relaxed);
         gs.score_bar_max.store(score_bar_max, Ordering::Relaxed);
+        gs.session_time_left.store(session_time_left.to_bits(), Ordering::Relaxed);
         gs.shake_amplitude.store(shake_amplitude.to_bits(), Ordering::Relaxed);
         gs.shake_duration.store(shake_duration.to_bits(), Ordering::Relaxed);
         gs.sound_effects_volume.store(sound_effects_volume.to_bits(), Ordering::Relaxed);
@@ -397,6 +399,7 @@ impl SharedMemoryWrapper {
             dict.set_item("progress_bar_cur_size", gs.progress_bar_cur_size.load(Ordering::Relaxed))?;
             dict.set_item("score_bar_value", gs.score_bar_value.load(Ordering::Relaxed))?;
             dict.set_item("score_bar_max", gs.score_bar_max.load(Ordering::Relaxed))?;
+            dict.set_item("session_time_left", f32::from_bits(gs.session_time_left.load(Ordering::Relaxed)))?;
             dict.set_item("shake_amplitude", f32::from_bits(gs.shake_amplitude.load(Ordering::Relaxed)))?;
             dict.set_item("shake_duration", f32::from_bits(gs.shake_duration.load(Ordering::Relaxed)))?;
             dict.set_item("sound_effects_volume", f32::from_bits(gs.sound_effects_volume.load(Ordering::Relaxed)))?;

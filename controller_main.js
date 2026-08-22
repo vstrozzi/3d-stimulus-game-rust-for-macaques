@@ -60,8 +60,9 @@ const TEXT_EN = {
   instructions:
     "Left arrow: rotate the object to the left<br>" +
     "Right arrow: rotate the object to the right<br>" +
-    "Press spacebar: interact and select a view<br><br>" +
-    "Press the screen or press space bar to start",
+    "Press spacebar: interact and select<br><br>" +
+    "Press the screen or press spacebar to start\n" +
+    "Pay attention to the object's details",
   press: "Press the screen<br>or press space bar",
   savedTitle: "All data saved",
   savedText: "You can close this tab.",
@@ -74,7 +75,8 @@ const TEXT_DE = {
     "Pfeiltaste links: Objekt nach links drehen<br>" +
     "Pfeiltaste rechts: Objekt nach rechts drehen<br>" +
     "Leertaste: interagieren und eine Ansicht auswählen<br><br>" +
-    "Bildschirm berühren oder Leertaste drücken, um zu starten",
+    "Bildschirm berühren oder Leertaste drücken, um zu starten\n" +
+    "Achte auf die Details des Objekts",
   press: "Bildschirm berühren<br>oder Leertaste drücken",
   savedTitle: "Alle Daten gespeichert",
   savedText: "Sie können diesen Tab schließen.",
@@ -165,7 +167,7 @@ let gameTimeUnresponsive = 0;
 // Special flags
 let _start = false;
 let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
-let sessionStartMs = null;  // Date.now() when the first trial starts; anchor for MAX_SESSION_DURATION_MS
+let sessionStartMs = null;  // Date.now() when the game's countdown ends; anchor for MAX_SESSION_DURATION_MS + the clock
 let _running = false;
 let _sceneReadyPromptShown = false;
 let _instructionsShown = false;
@@ -209,6 +211,14 @@ async function flushPending() {
     _flushing = false;
   }
   _updateEndPopup();
+}
+
+/** Fraction of the session still left (1 → 0), for the game's round clock.
+ *  Full until the countdown ends and `sessionStartMs` is anchored. */
+function _sessionTimeLeftFrac() {
+  if (sessionStartMs === null || MAX_SESSION_DURATION_MS <= 0) return 1;
+  const left = 1 - (Date.now() - sessionStartMs) / MAX_SESSION_DURATION_MS;
+  return Math.max(0, Math.min(1, left));
 }
 
 function _summaryRelpath(s) { return `${s._dir}/${s._filename}`; }
@@ -391,6 +401,7 @@ function _newStateScratch() {
     win_elapsed_secs: 0,
     progress_bar_cur_size: 0, progress_bar_size: 0,
     score_bar_value: 0, score_bar_max: 10,
+    session_time_left: 0,
     shake_amplitude: 0, shake_duration: 0,
     sound_effects_volume: 0, background_music_volume: 0, fog_enabled: false,
     fog_thickness_base: 0, firefly_count: 0,
@@ -658,6 +669,7 @@ function writeGameStateControl(state) {
   v.setUint32(base + o.progress_bar_cur_size, state.progress_bar_cur_size ?? 0, true);
   v.setUint32(base + o.score_bar_value, state.score_bar_value ?? 0, true);
   v.setUint32(base + o.score_bar_max, state.score_bar_max ?? 10, true);
+  v.setUint32(base + o.session_time_left, state.session_time_left ?? 0, true);
   v.setUint32(base + o.shake_amplitude, state.shake_amplitude ?? 0, true);
   v.setUint32(base + o.shake_duration, state.shake_duration ?? 0, true);
   v.setUint32(base + o.sound_effects_volume, state.sound_effects_volume ?? 0, true);
@@ -1366,6 +1378,9 @@ function handleInit(state) {
   // pyramid (empty scene). The game draws its own black loading + 3/2/1
   // countdown screen during this wait, so nothing extra is shown here.
   if (!state.is_scene_ready) return;
+  // The game's loading countdown is over: the session clock (and the
+  // MAX_SESSION_DURATION cap it shares an anchor with) starts here.
+  if (sessionStartMs === null) sessionStartMs = Date.now();
 
   console.log("[FSM] INIT → issuing toggle_blank + toggle_stop_rendering");
 
@@ -1398,6 +1413,7 @@ function handleInit(state) {
   scoreBarValue = Math.max(0, Math.min(scoreBarValue, sbMax));
   trialState.score_bar_value = scoreBarValue;
   trialState.score_bar_max = sbMax;
+  trialState.session_time_left = floatToU32Bits(_sessionTimeLeftFrac());
   trialState.shake_amplitude = floatToU32Bits(level.fixed.shake_amplitude ?? 0.5);
   trialState.shake_duration = floatToU32Bits(level.fixed.shake_duration ?? 1.0);
   setSceneConfig(trialState, level);
@@ -1784,6 +1800,7 @@ function controllerLoop() {
   scoreBarValue = Math.max(0, Math.min(scoreBarValue, sbMaxLoop));
   state.score_bar_value = scoreBarValue;
   state.score_bar_max = sbMaxLoop;
+  state.session_time_left = floatToU32Bits(_sessionTimeLeftFrac());
   state.shake_amplitude = floatToU32Bits(currentLevel().fixed.shake_amplitude ?? 0.5);
   state.shake_duration = floatToU32Bits(currentLevel().fixed.shake_duration ?? 1.0);
   setSceneConfig(state, currentLevel());

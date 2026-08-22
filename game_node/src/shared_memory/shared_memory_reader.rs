@@ -168,6 +168,7 @@ pub fn sync_live_state_from_shm(
     let gs = &shm.game_structure_control;
     local_game_struct.0.score_bar_value = gs.score_bar_value.load(Ordering::Relaxed);
     local_game_struct.0.score_bar_max = gs.score_bar_max.load(Ordering::Relaxed);
+    local_game_struct.0.session_time_left = gs.session_time_left.load(Ordering::Relaxed);
     local_game_struct.0.shake_amplitude = gs.shake_amplitude.load(Ordering::Relaxed);
     local_game_struct.0.shake_duration = gs.shake_duration.load(Ordering::Relaxed);
 }

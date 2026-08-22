@@ -2,11 +2,13 @@ use bevy::prelude::*;
 use shared::constants::game_constants::{
     UI_REFERENCE_HEIGHT,
     PROGRESS_BAR_DOTS_SIZE, PROGRESS_BAR_MAX_SIZE, PROGRESS_BAR_WRAP_AROUND_SIZE,
+    SESSION_CLOCK_RADIUS_PX,
 };
 use crate::utils::objects::{
     ScoreBarUI, UIEntity, ScoreBarChain, ScoreBarDot, ScoreBarRoot,
-    LeftScoreBarRoot, LeftScoreBarFill, GameStateLocal,
+    LeftScoreBarRoot, LeftScoreBarFill, GameStateLocal, SessionClock, BlankScreen,
 };
+use std::f32::consts::TAU;
 use shared::constants::pyramid_constants::{LIGHT_RED, LIGHT_GREEN};
 
 const LEFT_SCORE_BAR_WIDTH_PX: f32 = 24.0;
@@ -165,6 +167,78 @@ pub fn update_left_score_bar(
         }
         if bg.0 != target_color {
             *bg = BackgroundColor(target_color);
+        }
+    }
+}
+
+// ── Session clock ──────────────────────────────────────────────────────────
+// A disc centered at the top of the screen, shown only during the black
+// screen between trials — never while the player is manipulating the object.
+// The time already spent is a dark wedge that grows clockwise from noon; what
+// is left stays pale. Drawn as a conic gradient with two hard stops, so there
+// is no mesh and no shader: only the two stop angles move each frame.
+const SESSION_CLOCK_MARGIN_PX: f32 = 16.0;
+const SESSION_CLOCK_LEFT: Color = Color::srgba(1.0, 1.0, 1.0, 0.30);
+const SESSION_CLOCK_SPENT: Color = Color::srgba(0.0, 0.0, 0.0, 0.45);
+
+/// Conic gradient for a clock that has `spent_angle` radians swept off.
+fn session_clock_gradient(spent_angle: f32) -> Gradient {
+    Gradient::Conic(ConicGradient::new(
+        UiPosition::CENTER,
+        vec![
+            AngularColorStop::new(SESSION_CLOCK_SPENT, 0.0),
+            AngularColorStop::new(SESSION_CLOCK_SPENT, spent_angle),
+            AngularColorStop::new(SESSION_CLOCK_LEFT, spent_angle),
+            AngularColorStop::new(SESSION_CLOCK_LEFT, TAU),
+        ],
+    ))
+}
+
+pub fn spawn_session_clock(mut commands: Commands) {
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            // Horizontally centered: the left edge sits at 50% of the screen,
+            // pulled back by one radius. Both are px scaled by the same
+            // `UiScale`, so it stays centered at every resolution.
+            left: Val::Percent(50.0),
+            margin: UiRect::left(Val::Px(-SESSION_CLOCK_RADIUS_PX)),
+            top: Val::Px(SESSION_CLOCK_MARGIN_PX),
+            width: Val::Px(SESSION_CLOCK_RADIUS_PX * 2.0),
+            height: Val::Px(SESSION_CLOCK_RADIUS_PX * 2.0),
+            border_radius: BorderRadius::MAX,
+            display: Display::None,
+            ..default()
+        },
+        // The blank screen is at 1000; the clock has to sit on top of it.
+        GlobalZIndex(1001),
+        BackgroundGradient(vec![session_clock_gradient(0.0)]),
+        SessionClock,
+    ));
+}
+
+/// Redraws the clock from `session_time_left` (fraction of the session left,
+/// pushed by the controller every tick). Only visible while the between-trial
+/// black screen is up; a negative fraction hides it entirely.
+pub fn update_session_clock(
+    local_game_struct: Res<GameStateLocal>,
+    blank_query: Query<(), With<BlankScreen>>,
+    mut query: Query<(&mut Node, &mut BackgroundGradient), With<SessionClock>>,
+) {
+    let left = f32::from_bits(local_game_struct.0.session_time_left);
+    let in_break = !blank_query.is_empty();
+    let desired_display = if left < 0.0 || !in_break { Display::None } else { Display::Flex };
+    for (mut node, mut gradient) in query.iter_mut() {
+        if node.display != desired_display {
+            node.display = desired_display;
+        }
+        if desired_display == Display::None {
+            continue;
+        }
+        let spent_angle = (1.0 - left.clamp(0.0, 1.0)) * TAU;
+        let next = session_clock_gradient(spent_angle);
+        if gradient.0.first() != Some(&next) {
+            gradient.0 = vec![next];
         }
     }
 }

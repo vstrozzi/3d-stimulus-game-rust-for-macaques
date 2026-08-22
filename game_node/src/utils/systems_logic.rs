@@ -5,7 +5,7 @@ use bevy::window::PrimaryWindow;
 use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local, sync_live_state_from_shm};
 use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local, stage_render_sample, commit_render_sample};
 use crate::utils::camera::{spawn_persistent_camera, handle_camera_shake, setup_fixed_resolution, on_window_resized};
-use crate::utils::ui::{spawn_score_bar_pool, spawn_left_score_bar, update_left_score_bar, update_ui_scale};
+use crate::utils::ui::{spawn_score_bar_pool, spawn_left_score_bar, update_left_score_bar, spawn_session_clock, update_session_clock, update_ui_scale};
 use crate::utils::game_functions::{
     handle_door_animation,
     update_faint_aligned_door,
@@ -46,6 +46,7 @@ impl Plugin for SystemsLogicPlugin {
                     spawn_warmup_scene,
                     spawn_score_bar_pool,
                     spawn_left_score_bar,
+                    spawn_session_clock,
                 ).chain())
             // Shared memory
             .add_systems(
@@ -89,6 +90,7 @@ impl Plugin for SystemsLogicPlugin {
                     handle_camera_shake,
                     update_score_bar,
                     update_left_score_bar,
+                    update_session_clock,
                     ).chain(),
             )
             // Post Update

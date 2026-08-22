@@ -175,6 +175,9 @@ macro_rules! shared_game_state {
             pub score_bar_value: $U32,
             pub score_bar_max: $U32,
 
+            /// Fraction of the session still left (1.0 = full, 0.0 = over),
+            pub session_time_left: $U32,
+
             // Camera shake (per-level config: strength + duration in seconds).
             pub shake_amplitude: $U32,
             pub shake_duration: $U32,
@@ -325,6 +328,7 @@ impl SharedGameState {
 
             score_bar_value: AtomicU32::new(constants::game_constants::SCORE_BAR_DEFAULT_MAX / 2),
             score_bar_max: AtomicU32::new(constants::game_constants::SCORE_BAR_DEFAULT_MAX),
+            session_time_left: AtomicU32::new(1.0f32.to_bits()),
 
             shake_amplitude: AtomicU32::new(constants::game_constants::SHAKE_AMPLITUDE_DEFAULT.to_bits()),
             shake_duration: AtomicU32::new(constants::game_constants::SHAKE_DURATION_DEFAULT.to_bits()),
@@ -396,6 +400,7 @@ impl SharedGameState {
         self.progress_bar_size.store(other.progress_bar_size.load(Ordering::Relaxed), Ordering::Relaxed);
         self.score_bar_value.store(other.score_bar_value.load(Ordering::Relaxed), Ordering::Relaxed);
         self.score_bar_max.store(other.score_bar_max.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.session_time_left.store(other.session_time_left.load(Ordering::Relaxed), Ordering::Relaxed);
         self.shake_amplitude.store(other.shake_amplitude.load(Ordering::Relaxed), Ordering::Relaxed);
         self.shake_duration.store(other.shake_duration.load(Ordering::Relaxed), Ordering::Relaxed);
         self.sound_effects_volume.store(other.sound_effects_volume.load(Ordering::Relaxed), Ordering::Relaxed);
@@ -507,6 +512,7 @@ impl SharedGameState {
             progress_bar_cur_size: self.progress_bar_cur_size.load(Ordering::Relaxed),
             score_bar_value: self.score_bar_value.load(Ordering::Relaxed),
             score_bar_max: self.score_bar_max.load(Ordering::Relaxed),
+            session_time_left: self.session_time_left.load(Ordering::Relaxed),
             shake_amplitude: self.shake_amplitude.load(Ordering::Relaxed),
             shake_duration: self.shake_duration.load(Ordering::Relaxed),
             sound_effects_volume: self.sound_effects_volume.load(Ordering::Relaxed),
@@ -569,6 +575,7 @@ impl SharedGameState {
         self.progress_bar_cur_size.store(state.progress_bar_cur_size, Ordering::Relaxed);
         self.score_bar_value.store(state.score_bar_value, Ordering::Relaxed);
         self.score_bar_max.store(state.score_bar_max, Ordering::Relaxed);
+        self.session_time_left.store(state.session_time_left, Ordering::Relaxed);
         self.shake_amplitude.store(state.shake_amplitude, Ordering::Relaxed);
         self.shake_duration.store(state.shake_duration, Ordering::Relaxed);
         self.sound_effects_volume.store(state.sound_effects_volume, Ordering::Relaxed);

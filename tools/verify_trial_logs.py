@@ -66,6 +66,7 @@ class FrameRecord:
     is_animating: bool = False
     win_elapsed_secs: float = 0.0
     render_frame_number: int = 0
+    check_input_event_elapsed_secs: float | None = None
     # Commands_sent flags surfaced for the actions-over-time raster.
     # toggle_blank and toggle_stop_rendering are merged into a single channel
     # because the FSM always fires them together at trial boundaries.
@@ -187,6 +188,11 @@ def _parse_trial_dict(d: dict, label: str, platform: str) -> TrialInfo:
             is_animating=bool(sr.get("is_animating", False)),
             win_elapsed_secs=float(sr.get("win_elapsed_secs", 0.0)),
             render_frame_number=int(sr.get("render_frame_number", 0)),
+            check_input_event_elapsed_secs=(
+                entry.get("check_input_event_elapsed_secs")
+                if isinstance(entry, dict)
+                else None
+            ),
             cmd_rotate_left=bool(cs.get("rotate_left", False)),
             cmd_rotate_right=bool(cs.get("rotate_right", False)),
             cmd_check=bool(cs.get("check", False)),
@@ -465,7 +471,7 @@ def plot_trial(trial: TrialInfo, stats: TrialStats, out_dir: Path):
     ax_fps.grid(True, alpha=0.3)
 
     # ── [0,2] Presentation Δt distribution ───────────────────────────────────
-    # Real flip-time intervals reconstructed from `present_elapsed_secs`.
+    # Software present-marker intervals reconstructed from `present_elapsed_secs`.
     ax_hist = axes[0, 2]
     present = [f.present_elapsed_secs for f in trial.frames]
     rfn = [f.render_frame_number for f in trial.frames]

@@ -1,0 +1,8 @@
+# Interactive run-analysis notebook
+jupyterlab>=4.2
+ipywidgets>=7.8
+nbformat>=5.10
+numpy>=1.26
+pandas>=2.2
+plotly>=5.24
+

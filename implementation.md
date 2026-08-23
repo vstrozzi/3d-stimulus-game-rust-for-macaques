@@ -40,7 +40,7 @@ monkey_3d_game/
 │           ├── ui.rs               UI scaling
 │           ├── debug_functions.rs  photodiode marker, debug overlays
 │           ├── objects.rs          shared components & resources
-│           └── systems_logic.rs    plugin schedule wiring (Startup/FixedUpdate/Update)
+│           └── systems_logic.rs    plugin schedule wiring (Startup through Last)
 ├── controller_python/
 │   ├── controller.py           native controller (FSM driving the experiment)
 │   ├── monitor.py              live SHM monitor (prints g_dt / r_dt / gaps)
@@ -116,9 +116,10 @@ fields as atomics. It has three sub-structs:
   read by the controller. Snapshot of the latest state.
 - `game_structure_control` (`SharedGameState`) — written by the controller
   to push the next trial config; read by the game on reset.
-- `frame_ring_buffer` — 8-slot ring of full `SharedGameState` entries the
-  game pushes every `FixedUpdate` so the controller can drain frames it
-  missed between polls. Overflow at >8 ticks behind is detectable.
+- `frame_ring_buffer` — 8-slot ring of full `SharedGameState` entries. A
+  state is pushed only after the render world reports the matching wgpu
+  `present()` call, so the controller can drain completed submissions it
+  missed between polls. Overflow at >8 completed entries behind is detectable.
 
 Fields are encoded as `AtomicU32`/`AtomicU64`/`AtomicBool`; floats are
 stored as `f32::to_bits()` and re-read with `f32::from_bits()`.
@@ -126,12 +127,12 @@ stored as `f32::to_bits()` and re-read with `f32::from_bits()`.
 ### Notable fields
 | Field | Owner | Notes |
 |---|---|---|
-| `frame_number` | game (FixedUpdate) | Game-logic tick. **Paused when `stop_rendering`**. Resets to 0 on reset. |
-| `elapsed_secs` | game (FixedUpdate) | Game-logic time. Paused when `stop_rendering`. Resets to 0 on reset. |
-| `render_frame_number` | game (Update→First) | Vsync-aligned frame count. **Always increments** regardless of `stop_rendering`. Committed in next frame's `First`. |
-| `render_elapsed_secs` | game (Update→First) | Game-logic clock (same domain as `elapsed_secs`) sampled when the frame was submitted in `Update`. Committed in next frame's `First`. |
-| `present_elapsed_secs` | game (`First`) | **Real wall-clock seconds since app start**, sampled at the start of the *next* frame after this one was rendered. Because Bevy's main loop is back-pressured by `present()` under `PresentMode::Fifo`, this stamp ≈ vsync time at which the frame was latched by the compositor. Per-frame deltas reconstruct the actual frame interval. The cross-platform analogue of `Screen('Flip')`'s return value. |
-| `photodiode_white` | game (Update→First) | Photodiode square visible+white when the frame was rendered. Committed in next frame's `First`. |
+| `frame_number` | game (`PostUpdate`) | Monotonic main-loop tick. It continues while `stop_rendering`; controllers rebase it to zero per logged trial. |
+| `elapsed_secs` | game (`PostUpdate`) | Round/gameplay time accumulated from `time.delta()`. Pauses while `stop_rendering`; reset to zero for a round. |
+| `render_frame_number` | game (`Last`→render world) | Monotonic ID assigned to the finished state snapshot extracted with a render submission. Controllers rebase it per logged trial. |
+| `render_elapsed_secs` | game (`Last`) | Round clock sampled into the exact state snapshot carrying `render_frame_number`. |
+| `present_elapsed_secs` | render world→game (`Render`→`First`) | Monotonic seconds since Bevy startup, captured immediately after Bevy calls wgpu `SurfaceTexture::present()` and paired back to the exact snapshot by `render_frame_number`. It is a portable software submission/presentation marker, **not measured photon onset**: compositor queueing and scanout remain. |
+| `photodiode_white` | game (`Last`) | Final visible+white state of the calibration square for the snapshot carrying the same render ID. |
 | `is_animating` | game | Set during door animation; verifier uses this to exclude pauses from drift. |
 | `is_rendering_stopped` | game | Mirror of `GameConditions.stop_rendering`. |
 | `is_scene_ready` | game | Set true once textures + warmup complete. |
@@ -164,7 +165,8 @@ rotations are seeded with `GRID_RANDOM_ROTATION_SEED = 0xDEC0_DEAD`
 - `SystemsLogicPlugin` (`game_node/src/utils/systems_logic.rs`) wires
   every game system.
 - `StateEmitterPlugin` (`game_node/src/shared_memory/shared_memory_writer.rs`)
-  registers `FrameCounterResource` and `RenderFrameCounterResource`.
+  registers the counters, state queue, render-world ID extraction, and
+  presentation-completion channel.
 
 ### Schedules
 ```
@@ -185,15 +187,14 @@ PreUpdate:      read_shared_memory_commands       (chained)
                                                     session_time_left,
                                                     correct_streak, shake_*)
 
-First:          commit_render_sample         (writes prev frame's staged
-                                              sample to SHM, stamped with
-                                              real-wallclock `now` —
-                                              ≈ vsync of the prior flip)
+First:          commit_render_sample         (drains render-world markers;
+                                              stamps and ring-pushes each
+                                              exact matching snapshot)
 
 Update:         update_ui_scale
                 tick_warmup
                 check_scene_ready
-                stage_render_sample
+                flash_photodiode             (DebugFunctionsPlugin)
                 handle_reset_command         (chained)
                 handle_check_alignment
                 handle_blank_screen
@@ -212,9 +213,16 @@ Update:         update_ui_scale
                 update_ambient_motes         (streak-driven ambient swarm)
 
 PostUpdate:     clear_pending_commands       (chained)
-                increment_timing             (paused if stop_rendering)
+                increment_timing             (counter always ticks;
+                                              elapsed clock can pause)
                 update_shared_memory_local
-                write_shared_memory_game_state
+                write_shared_memory_game_state (latest live atomics only)
+
+Last:           stage_render_sample          (finished state + final
+                                              photodiode value + render ID)
+
+Render world:   render_system / wgpu present
+                mark_frame_presented         (same extracted render ID)
 ```
 
 > **Single vsync schedule.** Every system above runs at the display
@@ -223,62 +231,57 @@ PostUpdate:     clear_pending_commands       (chained)
 > the migration log. `WinitSettings::continuous()` keeps the `Update`
 > schedule firing each vsync even without input.
 
-### Why staging matters (the `Screen('Flip')` analogue)
+### Why ID pairing matters
 
-For psychophysics we want the per-frame timestamp to mean "when did this
-frame's photons appear on screen", not "when did the game submit this
-frame for rendering". The two differ by the GPU + compositor + scanout
-pipeline (~1–37 ms, dominated by one vsync of compositor latency under
-Fifo).
+wgpu exposes a call that schedules a swapchain image for presentation; it
+does not expose a portable timestamp for compositor latch, scanout, or
+photon onset. The most defensible software measurement in this stack is
+therefore an `Instant::now()` immediately after `SurfaceTexture::present()`.
+The photodiode is the independent measurement of physical onset.
 
-Under `PresentMode::Fifo`, `surface.present()` queues the rendered image
-for the next vsync. The main thread blocks until a fresh swapchain image
-becomes available — which happens *at that vsync*, the moment the
-compositor latches the previous frame. So sampling `Instant::now()` at
-the very top of the following frame's `First` schedule yields a
-timestamp ≈ vsync-of-previous-flip. This is the closest software-only
-analogue to Psychtoolbox's `Screen('Flip')` return value.
+The old implementation stamped the previous frame at the next main-world
+`First`. That relied on assumed back-pressure and could pair a timestamp
+with mid-`Update` or next-frame state, especially with native pipelined
+rendering. The current implementation pairs explicitly by ID:
 
 The implementation:
 
-1. **`stage_render_sample`** runs in `Update` of frame *N*. It increments
-   `RenderFrameCounterResource`, samples the photodiode state and
-   `round_start`-relative submit time, and stashes everything in the
-   `StagedRenderSample` resource. It does **not** write to SHM.
-2. The frame is rendered and presented at end of frame *N*.
-3. **`commit_render_sample`** runs in `First` of frame *N+1*. It samples
-   `Time<Real>::elapsed_secs()` — wall-clock seconds since app start —
-   and atomically writes all four fields (`render_frame_number`,
-   `render_elapsed_secs`, `present_elapsed_secs`, `photodiode_white`)
-   into SHM. The row now consistently describes frame *N* with a
-   `present_elapsed_secs` matching frame *N*'s actual flip.
+1. **`stage_render_sample`** runs in `Last` for main-world frame *N*. It
+   increments a process-wide render ID, copies the finished
+   `SharedGameStateLocal`, and samples the final photodiode color. The ID is
+   extracted with the render world.
+2. Bevy's render system submits the frame and calls wgpu `present()`.
+   **`mark_frame_presented`** immediately records `(ID, Instant)` using the
+   same Rust path on native and WASM.
+3. **`commit_render_sample`** drains completions in a later main-world
+   `First`, finds the snapshot with that exact ID, fills the existing
+   `present_elapsed_secs`, and pushes that snapshot to the ring. It never
+   combines kinematics from one ID with timing from another.
 
-The `PreUpdate` ↔ `PostUpdate` round-trip preserves these fields through
-the per-frame loop (local reads SHM in `PreUpdate`, writes back in
-`PostUpdate`).
+The delay from this marker to light emission is not assumed constant by the
+software. Calibrate/validate it with the alternating square and photodiode.
+Relevant API semantics: wgpu's `present()` schedules the surface texture for
+presentation; browser animation-frame timestamps describe callback/rendering
+timelines rather than physical scanout.
 
-Residual error: ~0–1 ms on native (Fifo back-pressure jitter), ~0–1 ms
-on web (rAF callback scheduling). Both are constant offsets to the true
-photon time that the photodiode absorbs during calibration.
-
-> Note: on web the `requestAnimationFrame` argument is microseconds away
-> from `Time<Real>::elapsed()` measured at `First`, because winit-wasm
-> drives Bevy's main loop *from inside* the rAF callback. A single
-> `First`-schedule sample therefore covers both platforms cleanly — no
-> separate JS bridge needed.
+Timing references: [wgpu `SurfaceTexture::present()`](https://docs.rs/wgpu/latest/wgpu/struct.SurfaceTexture.html),
+[wgpu FIFO queue semantics](https://docs.rs/wgpu-types/latest/wgpu_types/enum.PresentMode.html),
+[MDN `Event.timeStamp`](https://developer.mozilla.org/en-US/docs/Web/API/Event/timeStamp),
+[MDN `performance.timeOrigin`](https://developer.mozilla.org/en-US/docs/Web/API/Performance/timeOrigin),
+[Linux evdev timestamps](https://kernel.org/doc/html/latest/input/input.html), and
+[Linux `EVIOCSCLOCKID`](https://github.com/torvalds/linux/blob/master/include/uapi/linux/input.h).
 
 ### Frame counters and round_start lifecycle
 
 | Counter | Where it ticks | Pauses on `stop_rendering`? | Resets on `handle_reset_command`? |
 |---|---|---|---|
-| `FrameCounterResource` (`frame_number`) | `PostUpdate::increment_timing` | **Yes** (early return) | Yes (= 0) |
-| `RenderFrameCounterResource` (`render_frame_number`) | `Update::stage_render_sample` | No | Yes (= 0) |
+| `FrameCounterResource` (`frame_number`) | `PostUpdate::increment_timing` | No (increment precedes early return) | No |
+| `RenderFrameCounterResource` (`render_frame_number`) | `Last::stage_render_sample` | No | No |
 | `RoundStartTimestamp` (→ `elapsed_secs`) | `PostUpdate::increment_timing` (accumulates `time.delta()`) | Yes | Reset to `Some(Duration::ZERO)` in `setup_round` |
 
-Net result: on the first visible frame of a trial, `frame_number = 0`
-and `elapsed_secs ≈ 0`. `render_frame_number` ticks throughout to keep
-the warmup loop alive even if the controller toggles `stop_rendering`
-early (but see §15 — warmup currently reads the *paused* counter).
+Both counters are raw process-wide IDs. The controllers record a per-trial
+zero and export rebased values, while `elapsed_secs` begins near zero for the
+round. Warmup uses the monotonic render counter.
 
 ### Warmup scene
 `game_node/src/utils/warmup.rs` spawns a sub-pixel (scale 0.001) scene
@@ -325,11 +328,12 @@ Key invariants and recent fixes:
 Per-trial JSON containing one entry per game frame seen by the
 controller. Fields include `frame_number`, `render_frame_number`,
 `present_elapsed_secs`, `photodiode_white`, `is_animating`, plus
-state copies of the control fields. `elapsed_secs` /
-`render_elapsed_secs` are SHM-only (used by FSM, not logged). Web logs are bundled into a session ZIP grouped by
-level; filename = `{session_name}_{YYYY-MM-DD_HH-MM-SS}.zip`. Session
-name is captured on the landing page (`index.html`) and persisted in
-`localStorage.session_name`; empty name → `unknown`.
+state copies of the control fields. Each row also has `commands_sent` and
+nullable `check_input_event_elapsed_secs`; the latter is populated only on
+the dispatch row for a human space/tap check and uses the controller's
+monotonic clock. `session_info.app_start_unix_ns` maps that controller-clock
+zero to Unix time. It is deliberately controller metadata, not a new SHM
+state field. `elapsed_secs` / `render_elapsed_secs` remain SHM-only.
 
 ---
 
@@ -369,14 +373,17 @@ Browser editor for trial JSONs. Notes:
 │                         │       │    game logic, rotation,  │
 │                         │       │    animation, rendering   │
 │                         │       │                           │
-│                         │  SHM  │  First (vsync, next tick) │
-│  Reads game state  ◀────────────│    commit render sample   │
-│  Logs trial data        │       │    (present_elapsed_secs) │
+│                         │  SHM  │  First                    │
+│  Reads completed  ◀─────────────│    ID-match completion    │
+│  state + logs           │       │    + ring push            │
 │                         │       │                           │
 │                         │       │  PostUpdate (vsync)       │
 │                         │       │    elapsed_secs+=delta    │
 │                         │       │    frame_number++         │
-│                         │       │    write SHM + ring push  │
+│                         │       │    write latest live SHM  │
+│                         │       │                           │
+│                         │       │  Last: snapshot + ID      │
+│                         │       │  Render: present + marker │
 └─────────────────────────┘       └───────────────────────────┘
                                            │
                                     GPU pipeline → Compositor → Scanout → Photons
@@ -395,20 +402,18 @@ described has been removed.
 
 | Field                  | Where written                  | Pauses on `stop_rendering`? |
 |------------------------|--------------------------------|-----------------------------|
-| `frame_number`         | `PostUpdate::increment_timing` | **Yes** (early return)      |
+| `frame_number`         | `PostUpdate::increment_timing` | No                          |
 | `elapsed_secs`         | `PostUpdate::increment_timing` | **Yes**                     |
-| `render_frame_number`  | `Update::stage_render_sample`  | No                          |
-| `render_elapsed_secs`  | `Update::stage_render_sample`  | No                          |
-| `present_elapsed_secs` | `First::commit_render_sample`  | No                          |
-| `photodiode_white`     | `First::commit_render_sample`  | No                          |
+| `render_frame_number`  | `Last::stage_render_sample`    | No                          |
+| `render_elapsed_secs`  | `Last::stage_render_sample`    | Follows paused round clock  |
+| `present_elapsed_secs` | render marker + `First` commit | No                          |
+| `photodiode_white`     | `Last::stage_render_sample`    | No                          |
 
-`frame_number` and `render_frame_number` therefore share the same vsync
-tick rate; the only behavioural difference is that `frame_number` and
-`elapsed_secs` are pause-aware (skipped while `stop_rendering = true` or
-during door animations that flip that flag), giving the controller a
-clean "active game time" stream. Both pairs are kept in SHM and in trial
-logs for back-compat — verifier code that previously consumed only
-`frame_number`/`elapsed_secs` keeps working.
+Both counters normally advance once per main/render iteration and remain
+monotonic across resets. They are identifiers, not proof that every display
+refresh was delivered. `elapsed_secs` is the pause-aware gameplay clock.
+Both counter fields remain in SHM/logs for compatibility and are rebased by
+the controllers per trial.
 
 ### Refresh-rate independence
 Because the loop is vsync-driven, the per-tick cadence equals the
@@ -418,11 +423,10 @@ should be wall-clock-stable across displays must multiply by
 
 - **Door animations** use `time.elapsed()` ✓
 - **`elapsed_secs` accumulation** uses `time.delta()` ✓
-- **Camera rotation / zoom** apply per-tick increments ✗
-  ([shared_memory_reader.rs:75](game_node/src/shared_memory/shared_memory_reader.rs#L75-L98)
-  adds `camera_speed_rotate`/`CAMERA_3D_SPEED_ZOOM` without a `delta`
-  multiplier). At 120 Hz the monkey rotates at 2× the intended speed.
-  Tracked as an open issue in §15.
+- **Camera rotation / zoom** use `movement_scale =
+  clamp(delta / (1/60), 0, 2)` in `shared_memory_reader.rs` ✓. This preserves
+  the configured 60-Hz feel, compensates up to two missed frame intervals,
+  and caps a long freeze so the object cannot jump arbitrarily far.
 
 ### Refresh rate: OS-reported vs measured
 The hardcoded `REFRESH_RATE_HZ` constant has been removed. Both
@@ -434,10 +438,16 @@ controllers now record two independent values per session:
   returns `None` if `xrandr` is missing or the output doesn't parse).
   Web: `screen.refreshRate` (Chrome 121+; `null` elsewhere — no
   fallback).
-- **`timing_health.refresh_rate_hz_measured`** — `1 / mean(Δpresent_elapsed_secs)`
-  over the frames actually logged in this level. Used as a sanity check
-  against the OS value; mismatches flag VRR sessions or dropped frames
-  rather than telling you the "true" rate.
+- **`timing_health.refresh_rate_hz_measured`** — `1 /
+  median(Δpresent_elapsed_secs)`. Deltas are formed inside each trial and
+  then pooled; no synthetic interval crosses a reset boundary.
+
+Existing summary keys are preserved: `render_gaps` now counts within-trial
+intervals above `1.5 × trial median`; `freeze_events` counts runs of intervals
+above `3 × trial median`; and `drift_max_s` is the maximum absolute departure
+from each trial's median-cadence timeline. Mean/std are still reported for
+distribution description. Lag-1 Δt autocorrelation is derived in the analysis
+notebook rather than expanding the production log schema.
 
 The two should agree to <0.5 Hz on a healthy Fifo session.
 
@@ -461,27 +471,31 @@ The two should agree to <0.5 Hz on a healthy Fifo session.
 | Display scanout (top) | ~0.1 ms | ~0.5 ms |
 | **Total** | **~1–20 ms** | **~45 ms** |
 
-This latency is nearly constant for a given hardware setup; the
-photodiode measures it as a fixed `T_offset`.
+Do not assume this latency is constant: compositor depth, VRR, scanout,
+browser scheduling, and thermal throttling can change it. The photodiode
+measures actual light onset and lets the software marker's offset and
+variability be estimated.
 
 ---
 
 ## 10. Photodiode Calibration
 
 ### Setup
-1. Place photodiode on top-right corner over the 50×50 px square.
+1. Place the photodiode on the top-left corner over the 50×50 px square.
 2. Connect to DAQ / scope with ≤0.1 ms resolution.
 3. Press **B** in the game to enable the calibration square.
 
 ### Protocol
 1. Let it run several seconds; the square alternates W/B every render frame.
-2. Record sensor transitions `T_sensor[i]` and log timestamps
-   `render_elapsed_secs[i]` + `photodiode_white[i]`.
+2. Record sensor transitions `T_sensor[i]` and the matched logged
+   `present_elapsed_secs[i]` + `photodiode_white[i]`.
 3. Align W→B transitions: `T_offset = T_sensor − T_game`.
 4. Verify `T_offset` is stable (±0.5 ms across ≥100 transitions).
 
 ### Applying
-`T_display = render_elapsed_secs + T_offset`.
+`T_display = present_elapsed_secs + T_offset` after mapping the DAQ and game
+clocks into the same time domain. For critical analyses, the DAQ transition
+itself is the authoritative onset; this equation is a calibrated estimate.
 
 ### Expected values
 | Setup | Typical T_offset |
@@ -524,15 +538,16 @@ restores stable 60 Hz.
 ## 12. Ring Buffer & Polling
 
 - 8-slot ring of full `SharedGameState`. Game pushes one entry per
-  rendered frame (`PostUpdate::write_shared_memory_game_state`).
+  render-world completion (`First::commit_render_sample`), after matching
+  the completion ID to its finished `Last` snapshot.
   Controller drains via `read_game_state_since()`.
 - Overflow detectable: `current_head - last_head > 8`.
 - **Snapshot read** (`read_game_state`) gives the latest fields; the
   ring is the only way to recover frames the controller polled past.
 
-What the monitor cannot capture: actual display onset (photodiode
-only), compositor frame drops, inter-poll render frames (aliasing),
-sub-frame timing.
+What the monitor cannot capture: actual display onset (photodiode only),
+whether the compositor displayed every submitted image, scanout position, or
+sub-frame optical timing.
 
 ---
 
@@ -544,7 +559,7 @@ clock. Since the migration to a single vsync-driven schedule (§4, §8),
 the drift definition is simpler than it used to be. Remaining causes:
 
 1. **Intentional pauses** (`stop_rendering`, door animations) where
-   `elapsed_secs` / `frame_number` are paused by design but the
+   `elapsed_secs` is paused by design but the monotonic frame counters and
    controller wall-clock keeps ticking. The verifier excludes these via
    the `is_animating` flag — see
    `tools/verify_trial_logs.py::_active_drift_series()`.
@@ -585,12 +600,18 @@ the drift definition is simpler than it used to be. Remaining causes:
 - **Warmup scene** (`game_node/src/utils/warmup.rs`) pre-compiles GPU
   pipelines + uploads textures during Startup. `check_scene_ready` is
   now gated on `WarmupState.complete`.
-- **`increment_timing` now pauses both `frame_number` and `elapsed_secs`
-  when `stop_rendering` is true.** First visible frame of each trial
-  has `frame_number = 0`, `elapsed_secs ≈ 0`.
-- **`increment_render_frame_counter`** runs in `Update` and writes
-  `render_frame_number` / `render_elapsed_secs` / `photodiode_white`
-  every render frame.
+- **Counter semantics corrected.** `frame_number` and
+  `render_frame_number` are process-wide monotonic IDs and are only rebased
+  in exported trials. Only `elapsed_secs` pauses on `stop_rendering`.
+- **Render-state/timing pairing.** `Last` captures a complete state plus
+  photodiode value and ID; the render world marks the same ID immediately
+  after wgpu `present()`; `First` commits the matched row to the ring.
+- **Timing-health summaries corrected without changing keys.** Intervals are
+  per-trial, refresh uses the median, and gap/freeze/drift fields are real.
+- **Human check timestamp added outside SHM.** The nullable
+  `check_input_event_elapsed_secs` sits beside `commands_sent`; web uses the
+  DOM event timestamp and native requests `CLOCK_MONOTONIC` from evdev with
+  `EVIOCSCLOCKID`.
 - **Web controller**: replaced `setInterval(1ms)` with `rAF` loop.
 - **Web logs**: download as ZIP grouped by level, session name from
   landing page, JSZip vendored at `vendor/jszip.min.js` (CDN+SRI failed).
@@ -660,13 +681,14 @@ the drift definition is simpler than it used to be. Remaining causes:
   the visual gain. The main environment spotlight is intentionally separate:
   it casts shadows natively but disables them on WASM through
   `lighting_constants::SHADOWS_ENABLED`.
-- **FixedUpdate ordering changed** (commit bc13967): `handle_check_alignment`
-  moved up to run right after `handle_reset_command`, and
-  `handle_animation_door_command` moved to run after `handle_door_animation`.
-  Schedule diagram in §4 has been updated. Rationale: the win/animation
-  command must be issued from the same tick that detects alignment, and
-  door-animation state must be visible before the door-animation command
-  is processed.
+- **Update ordering:** `handle_check_alignment` runs just after reset;
+  `handle_animation_door_command` runs immediately **before**
+  `handle_door_animation`, so a newly received command initializes animation
+  state and the animation system can consume it in the same tick.
+- **Reset drains cue state:** active sound entities are despawned and
+  `animation_start_time`, `animate_all`, and `phase_sound_played` are cleared.
+  The hint cue now loads the intended `hint_sound.ogg` rather than the longer
+  `audio_earthquake.ogg`.
 
 ### Controller logic
 - **Single-green branch no longer gated on `nrAttempts < suggestionThreshold`**
@@ -745,8 +767,8 @@ the drift definition is simpler than it used to be. Remaining causes:
   (no fallback to measurement). The measured value lives separately in
   `timing_health.refresh_rate_hz_measured` as a sanity check.
 - **`frame_number` + `render_frame_number` both retained in SHM and trial
-  logs** for downstream compatibility. They differ only in pause
-  semantics (frame_number pauses on `stop_rendering` / `is_animating`).
+  logs** for downstream compatibility. Both raw counters are process-wide
+  and monotonic; controllers rebase both in each trial.
 - **`WinitSettings::continuous()`** in [lib.rs](game_node/src/lib.rs) keeps
   `Update` firing each vsync even without input. The former
   `force_redraw_every_frame` system was removed because changing the Bevy
@@ -1158,12 +1180,9 @@ from the wasm).
    startup on native, where the original stall was less severe.
    Consider `#[cfg(target_arch = "wasm32")]`-gating the spawn — not
    urgent.
-3. **`render_frame_number` reset semantics.** It is zeroed in
-   `handle_reset_command`. Verify the controller's re-sync handles
-   this — there can be a brief window where the controller sees the
-   previous trial's render_frame_number in the snapshot before
-   `reset` propagates. Current behavior is acceptable because the ring
-   buffer is what's logged, but worth noting.
+3. **No portable photon timestamp from wgpu.** The render-world marker is
+   captured after `present()`, which schedules presentation but does not prove
+   compositor latch or light emission. Keep the photodiode for critical runs.
 4. **Trial-0 still shows residual drift in some sessions**, mostly from
    browser vsync alignment on the first few frames. Not blocking.
 5. **The "Pay attention to the object's details" instruction is web-only.**
@@ -1171,16 +1190,10 @@ from the wasm).
    [controller_main.js](controller_main.js); `controller_python/controller.py`
    has no equivalent line, so a native session does not show it. Mirror it if
    native sessions should read the same instructions.
-6. **Camera rotation and zoom are per-tick, not per-second.**
-   [shared_memory_reader.rs:75-98](game_node/src/shared_memory/shared_memory_reader.rs#L75-L98)
-   increments `pending.rotation`/`pending.zoom` by `camera_speed_rotate`
-   / `CAMERA_3D_SPEED_ZOOM` on every read tick, without multiplying by
-   `time.delta_secs()`. Since the schedule migration (§4) all systems
-   tick at the display refresh rate, so on a 120 Hz monitor the camera
-   rotates at 2× the intended angular velocity. Door animations and
-   `elapsed_secs` are unaffected (both use `time.elapsed()` /
-   `time.delta()`). Fix: multiply both increments by
-   `time.delta_secs()` and rescale the speed constants accordingly.
+6. **Software/physical clock alignment is calibration-dependent.** The
+   controller input event, Bevy present marker, and external DAQ have separate
+   clock origins. `app_start_unix_ns` maps the controller event clock; the
+   photodiode/DAQ protocol must establish the presentation-to-light mapping.
 
 ---
 
@@ -1196,12 +1209,14 @@ from the wasm).
 ### Software
 - [ ] Native build for timing-critical sessions.
 - [ ] No other GPU-heavy apps running.
-- [ ] `render_frame_number` has no gaps during the experimental block.
+- [ ] Within-trial `Δpresent` has no unexpected >1.5×-median outliers and no
+      >3×-median freeze events during the experimental block.
 - [ ] Calibration at session start AND end; `T_offset` std-dev <0.5 ms.
 - [ ] Controller never writes `READ_ONLY_FIELDS`.
 
 ### Analysis
-- [ ] Use `render_elapsed_secs + T_offset` for onset, never `elapsed_secs`.
+- [ ] Use the photodiode transition as authoritative onset; if a calibrated
+      software estimate is required, use matched `present_elapsed_secs + T_offset`.
 - [ ] Exclude trials with render gaps, anomalous `r_dt`, or
   >1 ms `T_offset` drift.
 - [ ] Align using the alternating W/B photodiode pattern, not absolute
@@ -1238,22 +1253,22 @@ difference between the two pairs is the pause behavior under
 Timeline:     ──── Render frames (vsync) ────────────────────────────
                   │         │         │         │
                   ▼         ▼         ▼         ▼
-  render_frame:   1         2         3         4    (never paused; 0 on reset)
-  render_elapsed: 0.000     .017      .033      .050 (round_start.delta sum, frame N)
-  present_elapsed:0.017     .033      .050      .067 (Time::<Real>::now at frame N+1's First)
-  photodiode:     W         B         W         B    (alternating; sampled at frame N)
+  render_frame:   8121      8122      8123      8124 (process-wide ID; log rebases)
+  render_elapsed: 0.000     .017      .033      .050 (round clock sampled in Last)
+  present_elapsed:8.417     8.434     8.451     8.468 (after matching wgpu present)
+  photodiode:     W         B         W         B    (final state sampled in Last)
 
-  frame_number:   1         2         3         4    (paused while stop_rendering/animating)
-  elapsed_secs:  0.000     .017      .033      .050 (paused with frame_number)
+  frame_number:   8150      8151      8152      8153 (process-wide; log rebases)
+  elapsed_secs:  0.000     .017      .033      .050 (pauses on stop_rendering)
 
   T_offset:    ◄──────────────────────────────────▶  (constant, photodiode-measured)
 ```
 
-`render_elapsed_secs + T_offset` ⇒ actual display-onset time with
-sub-1 ms accuracy when §16 assumptions hold. For per-trial analysis,
-`present_elapsed_secs` deltas yield the real frame interval (1 / measured
-refresh rate; see `timing_health.refresh_rate_hz_measured` in level
-summaries).
+The external photodiode transition is the actual display-onset measurement.
+`present_elapsed_secs + T_offset` is a calibrated software estimate whose
+accuracy must be demonstrated on the apparatus. Within-trial
+`present_elapsed_secs` deltas measure software presentation-marker pacing;
+they do not prove that every submitted image reached the eye.
 
 ---
 

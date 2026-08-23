@@ -1,48 +1,100 @@
-//! This module collects game state and writes it to atomic shared memory
+//! Collect game state and pair each snapshot with the matching wgpu present marker.
 
-use bevy::{prelude::*};
-use crate::shared_memory::shared_memory_reader::{SharedMemResource};
-use crate::utils::objects::{BaseDoor, RoundStartTimestamp, GameStateLocal, GameConditions, BlankScreen};
+use std::{
+    collections::VecDeque,
+    sync::{mpsc, Mutex},
+};
 
-// Pause-aware game-logic tick counter. Ticked once per rendered frame in
-// `PostUpdate::increment_timing`, but skipped while `stop_rendering` is true.
-// Kept as a separate counter from `RenderFrameCounterResource` so the SHM
-// `frame_number` field carries the "active game time" tick index that the
-// controller relies on for trial timeout / FSM bookkeeping.
+use bevy::{
+    platform::time::Instant,
+    prelude::*,
+    render::{
+        extract_resource::{ExtractResource, ExtractResourcePlugin},
+        renderer::render_system,
+        Render, RenderApp, RenderSystems,
+    },
+};
+
+use crate::shared_memory::shared_memory_reader::{PendingCommands, SharedMemResource};
+use crate::utils::objects::{
+    BaseDoor, BlankScreen, GameConditions, GameStateLocal, PhotodiodeMarker,
+    RoundStartTimestamp,
+};
+
+// Main-loop tick counter. It is monotonic for the lifetime of the process,
+// including while visual rendering is stopped; controllers rebase it per trial.
 #[derive(Resource, Default)]
 pub struct FrameCounterResource(pub u64);
 
-// Render-frame counter. Ticked unconditionally in `Update::stage_render_sample`
-// once per vsync; never pauses on `stop_rendering`. Drives the
-// `render_frame_number` SHM field used for photodiode / timing analysis.
+// ID assigned to the final main-world state extracted for a render submission.
 #[derive(Resource, Default)]
 pub struct RenderFrameCounterResource(pub u64);
 
-/// Holds the per-render-frame data sampled in `Update` but not yet committed
-/// to SHM. Committed in the *next* frame's `First` schedule, so the
-/// `present_elapsed_secs` stamp captured at that point reflects the moment
-/// this frame's photons actually appeared on screen (vsync of the prior
-/// `present()` call, back-pressured by `PresentMode::Fifo`).
+/// The render ID extracted from the main world alongside the frame it names.
+#[derive(Resource, Clone, Copy, Default, ExtractResource)]
+pub struct CurrentRenderFrameId(pub u64);
+
+/// Final state snapshots waiting for their matching render-world marker.
 #[derive(Resource, Default)]
-pub struct StagedRenderSample {
-    pub pending: Option<StagedFrame>,
+pub struct StagedRenderSamples {
+    pub pending: VecDeque<StagedFrame>,
 }
 
 #[derive(Clone, Copy)]
 pub struct StagedFrame {
     pub render_frame_number: u64,
-    pub render_elapsed_secs_bits: u32,
-    pub photodiode_white: bool,
+    pub state: shared::SharedGameStateLocal,
 }
 
-// Update the shared memory game state after every game loop update
+/// A reset starts a new trial. Discard older snapshots so a delayed render
+/// completion cannot be written into the new trial's ring sequence.
+pub fn discard_staged_samples_on_reset(
+    pending_commands: Res<PendingCommands>,
+    mut staged: ResMut<StagedRenderSamples>,
+) {
+    if pending_commands.reset {
+        staged.pending.clear();
+    }
+}
+
+#[derive(Clone, Copy)]
+struct PresentedFrame {
+    render_frame_number: u64,
+    marked_at: Instant,
+}
+
+#[derive(Resource)]
+struct PresentationSender(mpsc::Sender<PresentedFrame>);
+
+#[derive(Resource)]
+pub(crate) struct PresentationReceiver(Mutex<mpsc::Receiver<PresentedFrame>>);
+
+/// Installs the same state/presentation pairing path on native and WASM.
 pub struct StateEmitterPlugin;
 
 impl Plugin for StateEmitterPlugin {
     fn build(&self, app: &mut App) {
+        let (sender, receiver) = mpsc::channel();
+
         app.init_resource::<FrameCounterResource>()
-           .init_resource::<RenderFrameCounterResource>()
-           .init_resource::<StagedRenderSample>();
+            .init_resource::<RenderFrameCounterResource>()
+            .init_resource::<CurrentRenderFrameId>()
+            .init_resource::<StagedRenderSamples>()
+            .insert_resource(PresentationReceiver(Mutex::new(receiver)))
+            .add_plugins(ExtractResourcePlugin::<CurrentRenderFrameId>::default());
+
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app
+                .insert_resource(PresentationSender(sender))
+                .add_systems(
+                    Render,
+                    mark_frame_presented
+                        .after(render_system)
+                        .in_set(RenderSystems::Render),
+                );
+        } else {
+            warn!("RenderApp unavailable; presentation timing will not be recorded");
+        }
     }
 }
 
@@ -53,7 +105,7 @@ pub fn increment_timing(
     mut round_start: ResMut<RoundStartTimestamp>,
     game_conditions: Res<GameConditions>,
 ) {
-    // Increment the frames regardless
+    // This is a main-loop counter, not a proof that the display refreshed.
     counter.0 += 1;
     
     if game_conditions.stop_rendering {
@@ -108,56 +160,108 @@ pub fn update_shared_memory_local(
     }
 }
 
-/// Sample render-frame data in `Update` and stash it for commit at the next
-/// `First` tick. We do not write to SHM here: the matching
-/// `present_elapsed_secs` (real wall-clock time of the actual flip) is only
-/// available after `present()` returns and the next frame begins.
+/// Capture the finished main-world state in `Last`. The ID resource is then
+/// extracted with the render submission. Sampling here also guarantees that
+/// the photodiode value reflects the completed `Update` schedule.
 pub fn stage_render_sample(
     mut counter: ResMut<RenderFrameCounterResource>,
-    mut staged: ResMut<StagedRenderSample>,
+    mut current_render_id: ResMut<CurrentRenderFrameId>,
+    mut staged: ResMut<StagedRenderSamples>,
+    game_state_local: Res<GameStateLocal>,
     round_start: Res<RoundStartTimestamp>,
-    photodiode_query: Query<(&Visibility, &BackgroundColor), With<crate::utils::objects::PhotodiodeMarker>>,
+    photodiode_query: Query<(&Visibility, &BackgroundColor), With<PhotodiodeMarker>>,
 ) {
     counter.0 += 1;
-    let render_secs_bits = round_start.0
+    current_render_id.0 = counter.0;
+
+    let mut state = game_state_local.0;
+    state.render_frame_number = counter.0;
+    state.render_elapsed_secs = round_start.0
         .map(|t| t.as_secs_f32().to_bits())
         .unwrap_or(0.0_f32.to_bits());
-    let is_white = photodiode_query.iter().any(|(vis, bg)| {
+    state.photodiode_white = photodiode_query.iter().any(|(vis, bg)| {
         *vis != Visibility::Hidden && bg.0 == Color::WHITE
     });
-    staged.pending = Some(StagedFrame {
+    // Filled only when the render world reports the matching submission.
+    state.present_elapsed_secs = 0.0_f32.to_bits();
+
+    staged.pending.push_back(StagedFrame {
         render_frame_number: counter.0,
-        render_elapsed_secs_bits: render_secs_bits,
-        photodiode_white: is_white,
+        state,
+    });
+    // Ordinarily native pipelining is only one frame deep and WASM is
+    // single-threaded. Bound this defensively if a surface stops completing.
+    const MAX_PENDING_SNAPSHOTS: usize = shared::RING_BUFFER_SIZE * 8;
+    while staged.pending.len() > MAX_PENDING_SNAPSHOTS {
+        staged.pending.pop_front();
+    }
+}
+
+/// Runs in the render world directly after Bevy calls wgpu `present()`.
+/// `present()` is the closest portable software marker available through
+/// wgpu; the compositor/display may make photons visible later.
+fn mark_frame_presented(
+    render_id: Option<Res<CurrentRenderFrameId>>,
+    sender: Res<PresentationSender>,
+) {
+    let Some(render_id) = render_id else { return };
+    if render_id.0 == 0 {
+        return;
+    }
+    let _ = sender.0.send(PresentedFrame {
+        render_frame_number: render_id.0,
+        marked_at: Instant::now(),
     });
 }
 
-/// Commit the previously staged render-frame sample to SHM, stamping it with
-/// the wall-clock time of *now* (Bevy's `First` schedule). Under
-/// `PresentMode::Fifo` the main loop is back-pressured by `present()`, so this
-/// stamp closely tracks the vsync at which the previous frame's pixels were
-/// latched by the compositor — i.e. the photon-onset time for that frame.
-///
-/// Constant compositor + scanout offset remains; the photodiode absorbs it.
-pub fn commit_render_sample(
-    mut staged: ResMut<StagedRenderSample>,
+/// Drain completed render submissions in `First` and commit each exact state
+/// snapshot to the ring. No state is mixed with a timestamp from another ID.
+pub(crate) fn commit_render_sample(
+    mut staged: ResMut<StagedRenderSamples>,
+    receiver: Res<PresentationReceiver>,
     shm_res: Option<Res<SharedMemResource>>,
     time_real: Res<Time<bevy::time::Real>>,
 ) {
     use std::sync::atomic::Ordering::Relaxed;
-    let Some(frame) = staged.pending.take() else { return };
     let Some(shm_res) = shm_res else { return };
     let shm = shm_res.0.get();
     let gs = &shm.game_structure_game;
+    let Ok(receiver) = receiver.0.lock() else { return };
 
-    // Wall-clock seconds since app start. Monotonic; the controller computes
-    // per-frame deltas against the previous row.
-    let present_secs = time_real.elapsed_secs();
+    while let Ok(presented) = receiver.try_recv() {
+        while staged
+            .pending
+            .front()
+            .is_some_and(|frame| frame.render_frame_number < presented.render_frame_number)
+        {
+            staged.pending.pop_front();
+        }
+        let Some(mut frame) = staged.pending.pop_front() else { continue };
+        if frame.render_frame_number != presented.render_frame_number {
+            // A completion from before a trial reset has no matching snapshot.
+            staged.pending.push_front(frame);
+            continue;
+        }
 
-    gs.render_frame_number.store(frame.render_frame_number, Relaxed);
-    gs.render_elapsed_secs.store(frame.render_elapsed_secs_bits, Relaxed);
-    gs.present_elapsed_secs.store(present_secs.to_bits(), Relaxed);
-    gs.photodiode_white.store(frame.photodiode_white, Relaxed);
+        let present_secs = presented
+            .marked_at
+            .saturating_duration_since(time_real.startup())
+            .as_secs_f32();
+        frame.state.present_elapsed_secs = present_secs.to_bits();
+
+        // Keep the live atomics useful without briefly replacing current game
+        // state with an older pipelined snapshot.
+        gs.render_frame_number
+            .store(frame.state.render_frame_number, Relaxed);
+        gs.render_elapsed_secs
+            .store(frame.state.render_elapsed_secs, Relaxed);
+        gs.present_elapsed_secs
+            .store(frame.state.present_elapsed_secs, Relaxed);
+        gs.photodiode_white
+            .store(frame.state.photodiode_white, Relaxed);
+
+        shm.frame_ring_buffer.push(&frame.state);
+    }
 }
 
 /// Write shared memory from the local game state to shared memory to be read by controller
@@ -191,6 +295,4 @@ pub fn write_shared_memory_game_state(
     // Update based on current values (now preserving staged fields)
     gs_game.write_from_local(&game_state_local.0);
 
-    // Also push into the ring buffer so the controller can catch skipped frames
-    shm.frame_ring_buffer.push(&game_state_local.0);
 }

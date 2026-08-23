@@ -1,5 +1,6 @@
 import atexit
 import datetime
+import fcntl
 import json
 import math
 import os
@@ -7,6 +8,7 @@ import random
 import re
 import signal
 import subprocess
+import struct
 import sys
 import tempfile
 import threading
@@ -86,6 +88,29 @@ def _find_keyboard_device():
             return dev
     return None
 
+
+def _set_evdev_monotonic_clock(device):
+    """Request CLOCK_MONOTONIC timestamps from the Linux input driver."""
+    # linux/input.h: EVIOCSCLOCKID = _IOW('E', 0xa0, int)
+    ioc_write = 1
+    evio_set_clock_id = (
+        (ioc_write << 30)
+        | (struct.calcsize("i") << 16)
+        | (ord("E") << 8)
+        | 0xA0
+    )
+    try:
+        fcntl.ioctl(
+            device.fd,
+            evio_set_clock_id,
+            struct.pack("i", time.CLOCK_MONOTONIC),
+        )
+        return True
+    except OSError as exc:
+        print(f"[INPUT] EVIOCSCLOCKID(CLOCK_MONOTONIC) unavailable: {exc}; "
+              "using controller receive time")
+        return False
+
 PARTICIPANT_NAME = "native"
 LOG_ROOT = "./out/logs"
 
@@ -132,6 +157,7 @@ def _empty_frame_row():
     return {
         "state_read": {k: None for k in _LOGGED_STATE_FIELDS_LIST},
         "commands_sent": {k: False for k in _CMD_KEYS},
+        "check_input_event_elapsed_secs": None,
     }
 
 # Evenly-spaced start orientations (one per door of the hexagonal base)
@@ -339,6 +365,12 @@ assert [s.name for s in TrialProceeding] == list(monkey_shared.PROCEEDING_VALUES
 
 class MonkeyGameController:
     def __init__(self):
+        # Sample both clock domains together. Input rows store seconds on the
+        # monotonic controller clock; app_start_unix_ns maps its zero to Unix.
+        self._controller_monotonic_start = time.monotonic()
+        self._controller_unix_start_ns = time.time_ns()
+        self._input_event_lock = threading.Lock()
+        self._pending_check_input_event_elapsed_secs = None
         self.pressed_keys = set()
 
         # Shared-memory handle
@@ -388,7 +420,7 @@ class MonkeyGameController:
         # Level configuration
         self.levels, paradigm_name = load_levels()
         self.session_info = {
-            "app_start_unix_ns": time.time_ns(),
+            "app_start_unix_ns": self._controller_unix_start_ns,
             "platform": "native",
             "os": sys.platform,
             "refresh_rate_hz": _query_display_refresh_rate_hz(),
@@ -490,6 +522,7 @@ class MonkeyGameController:
             print("  - Or pin a device with:  MONKEY_KEYBOARD_PATH=/dev/input/eventN")
             sys.exit(1)
         print(f"Keyboard listener: {self._kbd_device.path}  ({self._kbd_device.name})")
+        self._input_events_are_monotonic = _set_evdev_monotonic_clock(self._kbd_device)
         threading.Thread(target=self._input_loop, daemon=True).start()
 
     # Level/chain helpers
@@ -715,6 +748,12 @@ class MonkeyGameController:
     LOGGED_STATE_FIELDS = set(monkey_shared.LOGGED_STATE_FIELDS)
 
     def log_frame(self, state_read, commands_sent):
+        check_input_event_elapsed_secs = None
+        if commands_sent and commands_sent.get("check", False):
+            with self._input_event_lock:
+                check_input_event_elapsed_secs = self._pending_check_input_event_elapsed_secs
+                self._pending_check_input_event_elapsed_secs = None
+
         raw_fn = int(state_read.get("frame_number", self.current_frame))
         raw_rfn = int(state_read.get("render_frame_number", 0))
 
@@ -742,6 +781,7 @@ class MonkeyGameController:
 
         # Mutate the preallocated row in place — no allocations during the trial.
         row = self.frame_log[logged_fn]
+        row["check_input_event_elapsed_secs"] = check_input_event_elapsed_secs
         sr = row["state_read"]
         for k in _LOGGED_STATE_FIELDS_LIST:
             sr[k] = state_read.get(k)
@@ -855,39 +895,66 @@ class MonkeyGameController:
             print(f"[LOG] Could not patch prev summary {prev_path}: {e}")
 
     def _compute_timing_health(self):
-        present = []
+        def median(values):
+            if not values:
+                return 0.0
+            ordered = sorted(values)
+            mid = len(ordered) // 2
+            if len(ordered) % 2:
+                return ordered[mid]
+            return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+        # Never make a synthetic delta across a trial/reset boundary.
+        deltas = []
         render_gaps = 0
         freezes = 0
-        last_rfn = None
+        drift_max_s = 0.0
         for trial in self.current_level_summary["trials_runs"]:
             frames = trial.get("_frames_for_health") or []
+            present = []
             for f in frames:
                 p = f.get("present_elapsed_secs")
-                if p is not None:
-                    present.append(p)
-                rfn = f.get("render_frame_number")
-                if last_rfn is not None and rfn is not None and rfn - last_rfn > 1:
-                    render_gaps += rfn - last_rfn - 1
-                if rfn is not None:
-                    last_rfn = rfn
-        deltas = [present[i] - present[i - 1] for i in range(1, len(present))
-                  if present[i] - present[i - 1] > 0]
+                if isinstance(p, (int, float)) and math.isfinite(p) and p > 0:
+                    present.append(float(p))
+
+            trial_deltas = [present[i] - present[i - 1]
+                            for i in range(1, len(present))
+                            if present[i] - present[i - 1] > 0]
+            if not trial_deltas:
+                continue
+
+            trial_median = median(trial_deltas)
+            deltas.extend(trial_deltas)
+            render_gaps += sum(dt > 1.5 * trial_median for dt in trial_deltas)
+
+            in_freeze = False
+            for dt in trial_deltas:
+                frozen = dt > 3.0 * trial_median
+                if frozen and not in_freeze:
+                    freezes += 1
+                in_freeze = frozen
+
+            for i, timestamp in enumerate(present):
+                drift = abs((timestamp - present[0]) - i * trial_median)
+                drift_max_s = max(drift_max_s, drift)
+
         if deltas:
             mean = sum(deltas) / len(deltas)
             std = math.sqrt(sum((d - mean) ** 2 for d in deltas) / len(deltas))
         else:
             mean = std = 0.0
-        # Sanity-check value: 1 / mean(Δpresent) from the frames we actually
+        # Sanity-check value: 1 / median(Δpresent) from frames we actually
         # logged. Useful for catching VRR / dropped-frame mismatches against
         # the OS-reported `session_info.refresh_rate_hz` — not authoritative.
-        refresh_hz_measured = (1.0 / mean) if mean > 0 else None
+        pooled_median = median(deltas)
+        refresh_hz_measured = (1.0 / pooled_median) if pooled_median > 0 else None
         return {
             "present_dt_mean_ms": round(mean * 1000, 3),
             "present_dt_std_ms":  round(std  * 1000, 3),
             "refresh_rate_hz_measured": round(refresh_hz_measured, 3) if refresh_hz_measured is not None else None,
             "render_gaps": render_gaps,
             "freeze_events": freezes,
-            "drift_max_s": 0.0,
+            "drift_max_s": round(drift_max_s, 6),
         }
 
     def _finalize_level_run_safe(self, status):
@@ -958,6 +1025,7 @@ class MonkeyGameController:
             frames_compact[str(i)] = {
                 "state_read": dict(r["state_read"]),
                 "commands_sent": dict(r["commands_sent"]),
+                "check_input_event_elapsed_secs": r["check_input_event_elapsed_secs"],
             }
             frames_for_health.append({
                 "present_elapsed_secs": r["state_read"].get("present_elapsed_secs"),
@@ -1172,18 +1240,16 @@ class MonkeyGameController:
         # contents past frame_log_len are never read.
         self.frame_log_len = 0
         self._frame_log_overflow_warned = False
+        with self._input_event_lock:
+            self._pending_check_input_event_elapsed_secs = None
         self._frame_zero = None
         self._render_frame_zero = None
         self.win_event = None
         self._time_win_expired = False
 
-        # Re-sync frame tracking with the game's fresh counter.
-        # `handle_reset_command` on the game side zeros `frame_number` (and
-        # `elapsed_secs`) via setup_round. Without this re-sync, the
-        # controller's `self.current_frame` and `last_write_head` still point
-        # at pre-reset ring-buffer slots, which causes a brief window of
-        # stale states to be observed and any FSM logic gated on
-        # `current_frame` continuity to misbehave. Drop them.
+        # Re-sync at the trial boundary. Raw frame IDs stay monotonic, while
+        # elapsed_secs resets and the exported counters are rebased from the
+        # first completed snapshot. Drop pre-reset ring positions.
         self.current_frame = -1
         self.last_write_head = self.shm_wrapper.frame_write_head()
 
@@ -1452,6 +1518,12 @@ class MonkeyGameController:
 
                 if ev.code == ecodes.KEY_SPACE:
                     if is_press and ev.code not in self.pressed_keys:
+                        if self._input_events_are_monotonic:
+                            event_elapsed = ev.timestamp() - self._controller_monotonic_start
+                        else:
+                            event_elapsed = time.monotonic() - self._controller_monotonic_start
+                        with self._input_event_lock:
+                            self._pending_check_input_event_elapsed_secs = max(0.0, event_elapsed)
                         self.triggers["check"] = True
                         self.pressed_keys.add(ev.code)
                     elif is_release:

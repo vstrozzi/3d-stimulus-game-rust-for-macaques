@@ -33,10 +33,7 @@ state writes) runs *once per rendered frame*, locked to the display refresh via
 * **One timeline.** Logic and rendering can't drift apart, so no judder from a
   fixed step landing between two frames; the transform you simulate is the one
   you display.
-* **Back-pressure = free timestamp.** Under Fifo the main loop blocks on
-  `present()` until the next vsync, so sampling the clock at the top of the next
-  frame yields a near-exact flip time — a software `Screen('Flip')`, sub-ms after
-  photodiode calibration (the constant display latency `T_offset`).
+* **Explicit state/present pairing.** The finished state gets a render ID in   `Last`; the render world returns that ID with a monotonic marker immediately  after wgpu `present()`. The exact snapshot and marker are then logged   together. This measures software presentation pacing, not photon onset;   compositor/scanout delay remains and the photodiode is necessary.
 * **Refresh-rate independent.** The loop ticks at 60/120/144 Hz / VRR; anything
   wall-clock-stable scales by `Δt`. The measured rate is logged per session as a
   sanity check. See `implementation.md §8`.

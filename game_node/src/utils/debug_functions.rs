@@ -55,7 +55,7 @@ fn visualize_lights(
     }
 }
 
-/// Spawn the photodiode square (hidden by default) in the top-right corner.
+/// Spawn the photodiode square (hidden by default) in the top-left corner.
 fn setup_photodiode(mut commands: Commands) {
     commands.spawn((
         Node {

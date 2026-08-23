@@ -27,20 +27,25 @@ pub fn handle_reset_command(
     round_start: ResMut<RoundStartTimestamp>,
     mut door_win_entities: ResMut<DoorWinEntities>,
     backdrops: Query<(&Backdrop, &MeshMaterial3d<StandardMaterial>)>,
-    time: Res<Time>,
 ) {
 
     if !pending.reset {
         return;
     }
 
-    // Reset commands received
-    local_game_struct.0.render_frame_number = 0;
-    local_game_struct.0.frame_number = 0;
+    // Stop any cue from the prior round before its entities are despawned.
+    for entity in door_win_entities.active_sounds.drain(..) {
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.despawn();
+        }
+    }
 
-    // Clear animation state to avoid stale entity references after despawn
+    // Clear animation state to avoid stale entity references after despawn.
     door_win_entities.winning_light = None;
     door_win_entities.winning_emissive = None;
+    door_win_entities.animation_start_time = None;
+    door_win_entities.animate_all = false;
+    door_win_entities.phase_sound_played = false;
 
     // Clear is_animating flag in SHM
     local_game_struct.0.is_animating = false;
@@ -64,7 +69,6 @@ pub fn handle_reset_command(
     local_game_struct,
     door_win_entities,
     backdrops,
-    time,
     );
 
 }

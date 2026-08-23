@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use crate::shared_memory::shared_memory_reader::{clear_pending_commands, init_shared_memory_system, read_shared_memory_commands, read_shared_memory_game_state_local, sync_live_state_from_shm};
-use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local, stage_render_sample, commit_render_sample};
+use crate::shared_memory::shared_memory_writer::{write_shared_memory_game_state, increment_timing, update_shared_memory_local, stage_render_sample, commit_render_sample, discard_staged_samples_on_reset};
 use crate::utils::camera::{spawn_persistent_camera, handle_camera_shake, setup_fixed_resolution, on_window_resized};
 use crate::utils::ui::{spawn_score_bar_pool, spawn_left_score_bar, update_left_score_bar, spawn_session_clock, update_session_clock, update_ui_scale};
 use crate::utils::game_functions::{
@@ -58,17 +58,14 @@ impl Plugin for SystemsLogicPlugin {
             // runs the black 3-2-1 countdown before flipping `is_scene_ready`.
             .add_systems(Update, check_scene_ready)
             .add_systems(Update, update_background_music_volume)
-            // Commit the previous render frame's sample at the very top of
-            // the new frame (in `First`). 
+            // Commit render-world completion markers at the start of the main
+            // frame. Each marker carries the ID of its exact state snapshot.
             .add_systems(First, commit_render_sample)
-            // Stage current render frame's data (counter, render submit time,
-            // photodiode). The matching `present_elapsed_secs` is filled in
-            // at the next frame's `First`.
-            .add_systems(Update, stage_render_sample)
             // Command driven
             .add_systems(
                 Update,
                 (
+                    discard_staged_samples_on_reset,
                     handle_reset_command,
                     handle_check_alignment,
                     handle_blank_screen,
@@ -92,7 +89,10 @@ impl Plugin for SystemsLogicPlugin {
                 increment_timing,
                 update_shared_memory_local,
                 write_shared_memory_game_state).chain()
-            );
+            )
+            // Snapshot only after all Update/PostUpdate state and photodiode
+            // changes are finished. Extraction carries this ID to RenderApp.
+            .add_systems(Last, stage_render_sample);
 
         // Native: switch to exclusive fullscreen at a capped, aspect-matched
         // video mode so the whole pipeline runs at ~1080p (web stays on the

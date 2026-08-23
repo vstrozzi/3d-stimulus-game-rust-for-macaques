@@ -8,9 +8,11 @@ use bevy::window::{Monitor, MonitorSelection, PrimaryMonitor, VideoModeSelection
 use bevy::camera::RenderTarget;
 use crate::shared_memory::shared_memory_reader::PendingCommands;
 use crate::utils::objects::{
-    CameraShakeState, FixedFullscreenActive, GameStateLocal, PersistentCamera,
-    RenderBackdrop, RenderTargetImage, UpscaleCamera,
+    CameraShakeState, GameStateLocal, PersistentCamera, RenderBackdrop,
+    RenderTargetImage, UpscaleCamera,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use crate::utils::objects::FixedFullscreenActive;
 use shared::constants::render_constants::{
     FIXED_RENDER_HEIGHT, FIXED_RENDER_WIDTH, RENDER_AT_FIXED_RESOLUTION,
 };

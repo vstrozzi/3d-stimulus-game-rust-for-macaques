@@ -133,9 +133,10 @@ impl Texture {
 /// It contains all the information relating to the current game state (i.e. the game is a deterministic state).
 /// It is updated every Game tick by the game and whenever needed by the Controller.
 macro_rules! shared_game_state {
-    ($name:ident, $U32:ty, $U64:ty, $B:ty) => {
+    ($(#[$extra_meta:meta])* $name:ident, $U32:ty, $U64:ty, $B:ty) => {
         #[repr(C)]
         #[derive(Debug)]
+        $(#[$extra_meta])*
         pub struct $name {
             // Fixed trials fields
             pub base_radius: $U32,
@@ -208,7 +209,8 @@ macro_rules! shared_game_state {
             pub render_frame_number: $U64,
             pub elapsed_secs: $U32,
             pub render_elapsed_secs: $U32,
-            /// Time at which this frame's pixels actually became visible on screen
+            /// Monotonic software marker captured after wgpu `present()` for this frame.
+            /// A compositor/scanout delay remains; a photodiode measures physical onset.
             pub present_elapsed_secs: $U32,
             pub photodiode_white: $B,
             pub camera_radius: $U32,
@@ -233,7 +235,7 @@ macro_rules! shared_game_state {
 // Atomic version (shared memory)
 shared_game_state!(SharedGameState, AtomicU32, AtomicU64, AtomicBool);
 // Not atomic version (local use in game logic systems)
-shared_game_state!(SharedGameStateLocal, u32, u64, bool);
+shared_game_state!(#[derive(Clone, Copy)] SharedGameStateLocal, u32, u64, bool);
 
 impl SharedGameState {
     pub const fn new() -> Self {
@@ -674,7 +676,8 @@ impl Default for SharedGameState {
 
 /// Ring buffer of recent frame states.  Each slot is a full `SharedGameState`
 /// so that all existing read/write helpers work unchanged.  The game writes one
-/// entry per fixed tick via `push`, advancing `write_head` monotonically.
+/// entry per matched render completion via `push`, advancing `write_head`
+/// monotonically.
 /// The controller drains unseen entries to backfill any frames missed during
 /// polling gaps.
 #[repr(C)]

@@ -85,7 +85,6 @@ pub fn setup_round(
     mut local_game_struct: ResMut<GameStateLocal>,
     mut door_win_entities: ResMut<DoorWinEntities>,
     backdrops: Query<(&Backdrop, &MeshMaterial3d<StandardMaterial>)>,
-    time: Res<Time>,
 ) {
     let Some(shm_res) = shm_res else {
         error!("Shared Memory not initialized in setup_round");
@@ -122,7 +121,9 @@ pub fn setup_round(
 
     door_win_entities.winning_light = winning_light;
     door_win_entities.winning_emissive = winning_emissive;
-    door_win_entities.animation_start_time = Some(time.elapsed());
+    // A reset creates a ready, non-animating round. The start time is set only
+    // when an animation command is actually received.
+    door_win_entities.animation_start_time = None;
 
 }
 

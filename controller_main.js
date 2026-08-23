@@ -54,7 +54,12 @@ let DEFAULT_BACKGROUND_TEXTURE = 0;   // from Rust; back-wall texture of a level
 let MAX_SESSION_DURATION_MS = 0;      // derived; cap in milliseconds (used by the loop)
 let MAX_TRIAL_FRAMES = 0;             // derived; per-trial frame-log capacity (session cap × 120 Hz)
 
-const APP_START_UNIX_NS = Date.now() * 1_000_000;
+// Sample the controller's monotonic and Unix clocks together. Input-event
+// timestamps below use this controller clock, independent of Bevy's clock.
+const APP_START_PERFORMANCE_MS = performance.now();
+const APP_START_UNIX_NS = Math.round(
+  (performance.timeOrigin + APP_START_PERFORMANCE_MS) * 1_000_000
+);
 
 const TRIALS_PATH = "./trials_config/trials/trials.jsonl";
 
@@ -166,6 +171,9 @@ let frameZero = null;
 let renderFrameZero = null;
 let winEvent = null;
 let trialRunCounter = 0;
+// Timestamp of the most recent human check event, consumed by the exact row
+// on which `check` is dispatched to the game.
+let pendingCheckInputEventElapsedSecs = null;
 
 // Per-level-run tracking — mirrors controller.py
 let levelRunCounter = 0;
@@ -1073,7 +1081,7 @@ function _emptyFrameRow() {
   }
   const commands_sent = {};
   for (let i = 0; i < CMD_KEYS.length; i++) commands_sent[CMD_KEYS[i]] = false;
-  return { state_read, commands_sent };
+  return { state_read, commands_sent, check_input_event_elapsed_secs: null };
 }
 
 /** One-time allocation of the per-level scratch frame-log buffer. Called
@@ -1131,6 +1139,12 @@ function resyncSeq() {
 let _frameLogOverflowWarned = false;
 
 function logFrame(stateRead, commandsSent) {
+  let checkInputEventElapsedSecs = null;
+  if (commandsSent?.check && pendingCheckInputEventElapsedSecs !== null) {
+    checkInputEventElapsedSecs = pendingCheckInputEventElapsedSecs;
+    pendingCheckInputEventElapsedSecs = null;
+  }
+
   const rawFn = Number(stateRead?.frame_number ?? currentFrame);
   const rawRfn = Number(stateRead?.render_frame_number ?? 0);
 
@@ -1159,6 +1173,7 @@ function logFrame(stateRead, commandsSent) {
 
   // Mutate the preallocated row in place — no allocations.
   const row = frameLog[loggedFn];
+  row.check_input_event_elapsed_secs = checkInputEventElapsedSecs;
   const sr = row.state_read;
   for (let i = 0; i < LOGGED_STATE_FIELDS_LIST.length; i++) {
     const k = LOGGED_STATE_FIELDS_LIST[i];
@@ -1290,38 +1305,65 @@ function _startLevelRunIfNeeded() {
 }
 
 function _computeTimingHealth(summary) {
-  const present = [];
-  let renderGaps = 0;
-  let lastRfn = null;
-  for (const t of summary.trials_runs) {
-    for (const fr of (t._frames_for_health || [])) {
-      if (fr.present_elapsed_secs != null) present.push(fr.present_elapsed_secs);
-      const rfn = fr.render_frame_number;
-      if (lastRfn !== null && rfn != null && rfn - lastRfn > 1) renderGaps += rfn - lastRfn - 1;
-      if (rfn != null) lastRfn = rfn;
-    }
-  }
+  const median = values => {
+    if (values.length === 0) return 0;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  };
+
+  // Compute intervals independently inside every trial. Joining absolute
+  // timestamps across resets creates an interval which no displayed frame had.
   const deltas = [];
-  for (let i = 1; i < present.length; i++) {
-    const d = present[i] - present[i - 1];
-    if (d > 0) deltas.push(d);
+  let renderGaps = 0;
+  let freezeEvents = 0;
+  let driftMaxS = 0;
+  for (const t of summary.trials_runs) {
+    const present = [];
+    for (const fr of (t._frames_for_health || [])) {
+      const value = Number(fr.present_elapsed_secs);
+      if (Number.isFinite(value) && value > 0) present.push(value);
+    }
+    const trialDeltas = [];
+    for (let i = 1; i < present.length; i++) {
+      const dt = present[i] - present[i - 1];
+      if (dt > 0) trialDeltas.push(dt);
+    }
+    if (trialDeltas.length === 0) continue;
+
+    const trialMedian = median(trialDeltas);
+    deltas.push(...trialDeltas);
+    renderGaps += trialDeltas.filter(dt => dt > 1.5 * trialMedian).length;
+
+    let inFreeze = false;
+    for (const dt of trialDeltas) {
+      const frozen = dt > 3.0 * trialMedian;
+      if (frozen && !inFreeze) freezeEvents += 1;
+      inFreeze = frozen;
+    }
+
+    for (let i = 0; i < present.length; i++) {
+      const drift = Math.abs((present[i] - present[0]) - i * trialMedian);
+      if (drift > driftMaxS) driftMaxS = drift;
+    }
   }
   let mean = 0, std = 0;
   if (deltas.length > 0) {
     mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
     std = Math.sqrt(deltas.reduce((s, d) => s + (d - mean) ** 2, 0) / deltas.length);
   }
-  // Sanity-check value from observed present-time deltas. Cross-check
+  // Sanity-check value from the median observed present-time delta. Cross-check
   // against the browser-reported `session_info.refresh_rate_hz` to catch
   // VRR / dropped-frame mismatches — not the authoritative reading.
-  const refreshHzMeasured = mean > 0 ? 1.0 / mean : null;
+  const pooledMedian = median(deltas);
+  const refreshHzMeasured = pooledMedian > 0 ? 1.0 / pooledMedian : null;
   return {
     present_dt_mean_ms: Math.round(mean * 1e6) / 1e3,
     present_dt_std_ms:  Math.round(std  * 1e6) / 1e3,
     refresh_rate_hz_measured: refreshHzMeasured !== null ? Math.round(refreshHzMeasured * 1e3) / 1e3 : null,
     render_gaps: renderGaps,
-    freeze_events: 0,
-    drift_max_s: 0.0,
+    freeze_events: freezeEvents,
+    drift_max_s: Math.round(driftMaxS * 1e6) / 1e6,
   };
 }
 
@@ -1401,6 +1443,7 @@ function saveTrialLog(outcome) {
     framesCompact[String(i)] = {
       state_read: { ...r.state_read },
       commands_sent: { ...r.commands_sent },
+      check_input_event_elapsed_secs: r.check_input_event_elapsed_secs,
     };
     framesForHealth[i] = {
       present_elapsed_secs: r.state_read.present_elapsed_secs ?? null,
@@ -1572,6 +1615,7 @@ function handleInit(state) {
   trialStartTime = Date.now();
   frameLogLen = 0;
   _frameLogOverflowWarned = false;
+  pendingCheckInputEventElapsedSecs = null;
   frameZero = null;
   renderFrameZero = null;
   winEvent = null;
@@ -1622,13 +1666,9 @@ function handleWaitingForStart(state) {
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
     if (sessionStartMs === null) sessionStartMs = Date.now();
-    // Re-sync frame tracking: the reset we just shipped will re-zero the
-    // game's frame_number on the next tick. Anchoring frameZero now to the
-    // pre-reset state.frame_number causes every post-reset frame to compute
-    // a negative loggedFn and either get dropped or written out of order —
-    // that's the "two timelines" diagonal the inPlay gate above only
-    // partially mitigates. Drop the start-frame log; the catchup loop will
-    // anchor frameZero to the actually-zeroed counter on the next tick.
+    // Re-sync at the trial boundary. Raw game/render IDs stay monotonic, but
+    // the log rebases from the first completed post-reset snapshot. Drop the
+    // start-frame log and all pre-reset ring positions.
     currentFrame = -1;
     lastWriteHead = readU64(new DataView(memory.buffer, pointers.ringWriteHead), 0);
     frameZero = null;
@@ -1887,8 +1927,8 @@ function controllerLoop() {
   // while the trial is actually in flight. Before PLAYING, the game is
   // pushing ring-buffer entries with frame_number ticking but elapsed_secs
   // frozen at 0 (stop_rendering is on during loading/blank-screen). Logging
-  // those, then later having handleWaitingForStart's reset re-zero
-  // frame_number, produces a "two timelines" artefact in the trial log.
+  // those across a later reset mixes two round states into one rebased trial
+  // and produces a "two timelines" artefact in the log.
   const inPlay =
     fsmState === FSM.PLAYING ||
     fsmState === FSM.WAITING_ANIMATION_START ||
@@ -1914,7 +1954,7 @@ function controllerLoop() {
   // PERF: this used to run every rAF (60×/s) and was a primary source of
   // browser-side allocation churn → GC pauses showing as 100–200 ms
   // hitches in safari_ipad / native_chrome traces. See
-  // documentation_performance.md §F4. Re-enable behind a DEBUG flag only.
+  // Keep per-frame DOM writes disabled; re-enable behind a DEBUG flag only.
   // console.log(`[DEBUG] elapsed_secs=${state.elapsed_secs}, nrAttempts=${nrAttempts}, retroThreshold=${flatTrial().elapsed_time_to_retroceed}`);
 
 
@@ -2139,6 +2179,16 @@ async function acquireWakeLock() {
   catch (_) { /* OS refused (low battery, etc.) — silent */ }
 }
 
+/** Convert a DOM event's hardware/dispatch timestamp to seconds since this
+ * controller module started. Modern browsers use performance.timeOrigin;
+ * the epoch-millisecond branch keeps older WebKit values compatible. */
+function inputEventElapsedSecs(event) {
+  let eventPerformanceMs = Number(event.timeStamp);
+  if (!Number.isFinite(eventPerformanceMs)) eventPerformanceMs = performance.now();
+  if (eventPerformanceMs > 1e12) eventPerformanceMs -= performance.timeOrigin;
+  return Math.max(0, (eventPerformanceMs - APP_START_PERFORMANCE_MS) / 1000);
+}
+
 function setupInput() {
   // ── Screen Wake Lock ───────────────────────────────────────────────────
   // Prevents the OS from dimming the screen or throttling CPU/GPU during
@@ -2212,6 +2262,7 @@ function setupInput() {
         const dx = Math.abs(ct.clientX - swipe.startX);
         const dy = Math.abs(ct.clientY - swipe.startY);
         if (elapsed < SWIPE.tapMaxTime && dx < SWIPE.tapMaxMove && dy < SWIPE.tapMaxMove) {
+          pendingCheckInputEventElapsedSecs = inputEventElapsedSecs(e);
           triggers.check = true;
           console.log("Tap → check alignment");
         }
@@ -2289,6 +2340,7 @@ function setupInput() {
         break;
       case "Space":
         if (!pressedKeys.has("Space")) {
+          pendingCheckInputEventElapsedSecs = inputEventElapsedSecs(e);
           triggers.check = true;
         }
         handled = true;

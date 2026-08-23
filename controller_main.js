@@ -73,11 +73,11 @@ const LANG = (() => {
 const TEXT_EN = {
   loading: "Downloading textures…",
   instructions:
-    "Left arrow: rotate the object to the left<br>" +
-    "Right arrow: rotate the object to the right<br>" +
-    "Press spacebar: interact and select<br><br>" +
-    "Press the screen or press spacebar to start\n" +
-    "Pay attention to the object's details",
+    "\u2190 Left arrow: rotate the object to the left<br>" +
+    "\u2192 Right arrow: rotate the object to the right<br>" +
+    "\u2423 Spacebar: interact with the object<br><br>" +
+    "Tap the screen or press the spacebar \u2423 to start<br><br><br>" +
+    "Hint: pay attention to the object's details",
   press: "Press the screen<br>or press space bar",
   savedTitle: "All data saved",
   savedText: "You can close this tab.",
@@ -87,11 +87,11 @@ const TEXT_EN = {
 const TEXT_DE = {
   loading: "Texturen werden geladen…",
   instructions:
-    "Pfeiltaste links: Objekt nach links drehen<br>" +
-    "Pfeiltaste rechts: Objekt nach rechts drehen<br>" +
-    "Leertaste: interagieren und eine Ansicht auswählen<br><br>" +
-    "Bildschirm berühren oder Leertaste drücken, um zu starten\n" +
-    "Achte auf die Details des Objekts",
+    "\u2190 Pfeiltaste links: Objekt nach links drehen<br>" +
+    "\u2192 Pfeiltaste rechts: Objekt nach rechts drehen<br>" +
+    "\u2423 Leertaste: mit dem Objekt interagieren<br><br>" +
+    "Bildschirm berühren oder Leertaste \u2423 drücken, um zu starten<br><br><br>" +
+    "Hinweis: Achten Sie auf die Details des Objekts",
   press: "Bildschirm berühren<br>oder Leertaste drücken",
   savedTitle: "Alle Daten gespeichert",
   savedText: "Sie können diesen Tab schließen.",

@@ -60,6 +60,20 @@
     line-height: 1.8;
   }
   .instructions li { margin: 0.15rem 0; }
+  .instructions h2 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin: 1.1rem 0 0.35rem;
+  }
+  .instructions h2:first-child { margin-top: 0; }
+  .instructions .hint {
+    margin: 2.2rem 0 0;
+    font-style: italic;
+    opacity: 0.85;
+  }
   .start-btn {
     padding: 0.8rem 2.4rem;
     font-size: 1.05em;
@@ -428,16 +442,31 @@
 
     <!-- Revealed (name locked) once Continue is pressed -->
     <div class="instructions" id="instructions" hidden>
-      <span data-i18n="hint">←&nbsp;&nbsp;→&nbsp;&nbsp;look around&nbsp;&nbsp;·&nbsp;&nbsp;press / tap to interact</span>
+
+      <h2 data-i18n="h_game">The game</h2>
       <ul>
-        <li data-i18n="li1">Do not exit fullscreen during the game</li>
-        <li data-i18n="li2">Play on your main monitor — not an external / attached display</li>
-        <li data-i18n="li3">Keep the app and browser tab as minimal as possible</li>
-        <li data-i18n="li4">The session lasts at most 20 minutes (it may end sooner)</li>
-        <li data-i18n="li_clock">Between trials the screen goes black and a clock at the top shows the time left</li>
-        <li data-i18n="li5">Your data is saved automatically after every trial</li>
-        <li data-i18n="li6">Please wait for the textures to finish downloading</li>
+        <li data-i18n="g1">You will be presented with a rotatable object in a room</li>
       </ul>
+
+      <h2 data-i18n="h_controls">Controls</h2>
+      <ul>
+        <li data-i18n="c1">← → : rotate the object using the arrow keys</li>
+        <li data-i18n="c2">␣ : press the spacebar (or tap the screen) to interact with the object</li>
+      </ul>
+
+      <h2 data-i18n="h_rules">General rules</h2>
+      <ul>
+        <li data-i18n="r1">The textures take a moment to download. After that, a countdown from 3 starts before the game begins</li>
+        <li data-i18n="r2">Do not exit fullscreen during the game</li>
+        <li data-i18n="r3">Play on your main monitor — not on an external / attached display</li>
+        <li data-i18n="r4">Close all other apps and browser tabs</li>
+        <li data-i18n="r5">The session lasts at most 20 minutes (it may end sooner)</li>
+        <li data-i18n="r6">Between levels the screen goes black and a clock at the top shows the time left in the session</li>
+        <li data-i18n="r7">Your data is saved automatically after every trial</li>
+      </ul>
+
+      <p class="hint" data-i18n="hint">Hint: pay attention to the object's details</p>
+
     </div>
     <button class="start-btn" id="instr-play" type="button" data-i18n="play" hidden>Play</button>
   </div>
@@ -669,14 +698,25 @@
   const I18N_DE = {
     name_ph: 'Ihr Name',
     continue: 'Weiter',
-    hint: '\u2190\u00a0\u00a0\u2192\u00a0\u00a0umsehen\u00a0\u00a0\u00b7\u00a0\u00a0dr\u00fccken / tippen zum Interagieren',
-    li1: 'Verlassen Sie w\u00e4hrend des Spiels nicht den Vollbildmodus',
-    li2: 'Spielen Sie auf Ihrem Hauptbildschirm \u2014 nicht auf einem externen Monitor',
-    li3: 'Halten Sie andere Apps und Browser-Tabs geschlossen',
-    li4: 'Die Sitzung dauert h\u00f6chstens 20 Minuten (sie kann fr\u00fcher enden)',
-    li_clock: 'Zwischen den Durchg\u00e4ngen wird der Bildschirm schwarz und eine Uhr oben zeigt die verbleibende Zeit',
-    li5: 'Ihre Daten werden nach jedem Durchgang automatisch gespeichert',
-    li6: 'Bitte warten Sie, bis die Texturen vollst\u00e4ndig geladen sind',
+
+    h_game: 'Das Spiel',
+    g1: 'Ihnen wird ein drehbares Objekt in einem Raum gezeigt',
+
+    h_controls: 'Steuerung',
+    c1: '\u2190 \u2192 : Drehen Sie das Objekt mit den Pfeiltasten',
+    c2: '\u2423 : Dr\u00fccken Sie die Leertaste (oder tippen Sie auf den Bildschirm), um mit dem Objekt zu interagieren',
+
+    h_rules: 'Allgemeine Regeln',
+    r1: 'Das Laden der Texturen dauert einen Moment. Danach startet ein Countdown von 3, bevor das Spiel beginnt',
+    r2: 'Verlassen Sie w\u00e4hrend des Spiels nicht den Vollbildmodus',
+    r3: 'Spielen Sie auf Ihrem Hauptbildschirm \u2014 nicht auf einem externen Monitor',
+    r4: 'Schlie\u00dfen Sie alle anderen Apps und Browser-Tabs',
+    r5: 'Die Sitzung dauert h\u00f6chstens 20 Minuten (sie kann fr\u00fcher enden)',
+    r6: 'Zwischen den Leveln wird der Bildschirm schwarz und eine Uhr oben zeigt die verbleibende Zeit der Sitzung',
+    r7: 'Ihre Daten werden nach jedem Durchgang automatisch gespeichert',
+
+    hint: 'Hinweis: Achten Sie auf die Details des Objekts',
+
     play: 'Spielen',
     play_again: 'Erneut dr\u00fccken zum Starten',
   };

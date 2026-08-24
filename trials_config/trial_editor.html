@@ -241,11 +241,351 @@
   }
   .num-sm { width: 56px; }
   .num-xs { width: 44px; }
-  select.tex-sel { flex: 1; font-size: 11px; padding: 2px 4px; min-width: 0; }
   .tex-wrap { display: flex; align-items: center; gap: 4px; width: 100%; }
-  .tex-thumb {
-    width: 24px; height: 24px; border-radius: 3px; border: 1px solid var(--border);
-    object-fit: cover; flex-shrink: 0; background: var(--surface2);
+  .tex-picker-btn {
+    flex: 1; min-width: 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 5px;
+    padding: 3px 6px;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: var(--surface2); color: var(--text);
+    font: inherit; font-size: 11px; cursor: pointer;
+  }
+  .tex-picker-btn:hover, .tex-picker-btn[aria-expanded=true] { border-color: var(--accent); }
+  .tex-picker-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .texture-popover {
+    position: fixed; z-index: 1000;
+    width: min(330px, calc(100vw - 20px));
+    padding: 8px;
+    border: 1px solid var(--accent); border-radius: 8px;
+    background: #242437;
+    box-shadow: 0 12px 35px rgba(0,0,0,.55);
+  }
+  .texture-popover[hidden] { display: none; }
+  .texture-hover-preview {
+    --hover-image: none; --hover-tint: #fff; --hover-opacity: 1;
+    position: relative;
+    height: 132px;
+    display: flex; align-items: flex-end;
+    padding: 8px;
+    overflow: hidden;
+    border-radius: 6px;
+    background-color: #ddd;
+    background-image:
+      linear-gradient(45deg, #aaa 25%, transparent 25%),
+      linear-gradient(-45deg, #aaa 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #aaa 75%),
+      linear-gradient(-45deg, transparent 75%, #aaa 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    color: #fff; font-size: 11px; font-weight: 700;
+    text-shadow: 0 1px 3px #000;
+  }
+  .texture-hover-preview::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-color: var(--hover-tint);
+    background-image: var(--hover-image);
+    background-blend-mode: multiply;
+    background-position: center;
+    background-size: cover;
+    opacity: var(--hover-opacity);
+  }
+  .texture-hover-preview::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,.72), transparent 62%);
+    pointer-events: none;
+  }
+  .texture-hover-preview > span { position: relative; z-index: 1; }
+  .texture-choice-list {
+    max-height: 245px; margin-top: 7px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .texture-choice {
+    width: 100%; padding: 5px 7px;
+    border: 0; border-radius: 4px;
+    background: transparent; color: var(--text);
+    text-align: left; font-size: 11px; cursor: pointer;
+  }
+  .texture-choice:hover, .texture-choice:focus { outline: none; background: var(--accent-dim); }
+  .texture-choice.active { color: #fff; background: var(--accent); }
+  .tex-cube {
+    --tex-preview: none;
+    position: relative; width: 30px; height: 30px; flex: 0 0 30px;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,.45));
+  }
+  .tex-cube-face {
+    position: absolute; inset: 0;
+    overflow: hidden;
+    background-color: #ddd;
+    background-image:
+      linear-gradient(45deg, #aaa 25%, transparent 25%),
+      linear-gradient(-45deg, #aaa 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #aaa 75%),
+      linear-gradient(-45deg, transparent 75%, #aaa 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+  }
+  .tex-cube-face::before {
+    content: ""; position: absolute; inset: 0;
+    background-color: var(--tex-tint, #fff);
+    background-image: var(--tex-preview);
+    background-blend-mode: multiply;
+    background-size: cover;
+    background-position: center;
+    opacity: var(--tex-opacity, 1);
+  }
+  .tex-cube-top {
+    clip-path: polygon(50% 0, 100% 25%, 50% 50%, 0 25%);
+    filter: brightness(1.18);
+  }
+  .tex-cube-left {
+    clip-path: polygon(0 25%, 50% 50%, 50% 100%, 0 75%);
+    filter: brightness(.72);
+  }
+  .tex-cube-right {
+    clip-path: polygon(50% 50%, 100% 25%, 100% 75%, 50% 100%);
+    filter: brightness(.92);
+  }
+  .tex-cube::after {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(30deg, transparent 48%, rgba(255,255,255,.24) 50%, transparent 52%);
+    clip-path: polygon(49% 49%, 51% 49%, 51% 100%, 49% 100%);
+  }
+
+  /* ── Per-object approximate 3D previews ── */
+  .approx-preview-grid {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .approx-preview-card {
+    --scene-background-image: none;
+    --scene-background-tint: #fff;
+    --scene-platform-image: none;
+    --scene-platform-tint: #fff;
+    --wood-image: none;
+    --lid-image: none;
+    position: relative;
+    height: 310px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background-color: var(--scene-background-tint);
+    background-image:
+      linear-gradient(to bottom, rgba(12,12,24,.08), rgba(12,12,24,.55)),
+      var(--scene-background-image);
+    background-blend-mode: normal, multiply;
+    background-position: center, center;
+    background-size: auto, 145px 145px;
+    background-repeat: no-repeat, repeat;
+    isolation: isolate;
+  }
+  .approx-preview-card::after {
+    content: "";
+    position: absolute; inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    box-shadow: inset 0 0 48px rgba(0,0,0,.45);
+  }
+  .preview-caption {
+    position: absolute; top: 9px; left: 11px; z-index: 6;
+    padding: 3px 7px;
+    border-radius: 4px;
+    background: rgba(20,20,32,.72);
+    color: rgba(255,255,255,.84);
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .45px;
+    backdrop-filter: blur(3px);
+  }
+  .preview-interaction-status {
+    position: absolute; top: 9px; right: 11px; z-index: 6;
+    padding: 3px 7px;
+    border-radius: 4px;
+    background: rgba(20,20,32,.72);
+    color: rgba(255,255,255,.72);
+    font-size: 9px; font-weight: 600;
+    pointer-events: none;
+    backdrop-filter: blur(3px);
+  }
+  .preview-platform {
+    position: absolute;
+    z-index: 0;
+    left: -15%; right: -15%; bottom: -37%; height: 68%;
+    background-color: var(--scene-platform-tint);
+    background-image: var(--scene-platform-image);
+    background-blend-mode: multiply;
+    background-position: center;
+    background-size: 105px 105px;
+    background-repeat: repeat;
+    transform: perspective(420px) rotateX(58deg);
+    transform-origin: center top;
+    box-shadow: 0 -12px 28px rgba(0,0,0,.2);
+  }
+  .preview-scene {
+    position: absolute; inset: 30px 0 0;
+    z-index: 2;
+    perspective: 700px;
+    touch-action: none;
+    cursor: grab;
+    user-select: none;
+  }
+  .preview-scene.is-dragging { cursor: grabbing; }
+  .preview-drag-rotator {
+    --drag-x: -18deg;
+    --drag-y: -18deg;
+    position: absolute;
+    left: 50%; top: 16px;
+    width: 224px; height: 244px;
+    transform: translateX(-50%) rotateX(var(--drag-x)) rotateY(var(--drag-y));
+    transform-style: preserve-3d;
+  }
+  .preview-auto-rotator {
+    position: absolute; inset: 0;
+    transform-style: preserve-3d;
+    animation: approximate-preview-spin 10s linear infinite;
+    animation-delay: calc(var(--preview-index, 0) * -1.15s);
+    will-change: transform;
+  }
+  .preview-scene.is-dragging .preview-auto-rotator,
+  .approx-preview-card.preview-paused .preview-auto-rotator { animation-play-state: paused; }
+  .preview-model { position: absolute; inset: 0; transform-style: preserve-3d; }
+  .preview-prism {
+    position: absolute;
+    left: 50%; top: 19px;
+    width: 108px; height: 108px;
+    transform: translateX(-50%);
+    transform-style: preserve-3d;
+  }
+  .preview-prism-face {
+    --face-image: none;
+    --face-tint: #fff;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    backface-visibility: hidden;
+    background-color: var(--face-tint);
+    background-image:
+      linear-gradient(105deg, rgba(255,255,255,.24), transparent 43%, rgba(0,0,0,.24)),
+      var(--face-image);
+    background-blend-mode: soft-light, multiply;
+    background-size: cover;
+    background-position: center;
+    opacity: var(--face-opacity, 1);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: inset 0 0 12px rgba(0,0,0,.18);
+  }
+  .preview-prism-face:nth-child(1) { transform: rotateY(0deg) translateZ(31px); }
+  .preview-prism-face:nth-child(2) { transform: rotateY(120deg) translateZ(31px); filter: brightness(.84); }
+  .preview-prism-face:nth-child(3) { transform: rotateY(240deg) translateZ(31px); filter: brightness(.68); }
+  .preview-top-lid {
+    position: absolute;
+    left: 50%; top: -47px;
+    width: 108px; height: 94px;
+    transform: translateX(-50%) translateZ(-15.5px) rotateX(90deg);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+    background-color: #fff;
+    background-image:
+      linear-gradient(105deg, rgba(255,255,255,.2), transparent 48%, rgba(0,0,0,.18)),
+      var(--lid-image);
+    background-blend-mode: soft-light, multiply;
+    background-position: center;
+    background-size: cover;
+    border: 1px solid rgba(255,255,255,.18);
+    opacity: 1;
+  }
+  .preview-wood-base {
+    position: absolute;
+    left: 50%; top: 127px;
+    width: 250px; height: 250px;
+    transform: translate(-50%, -50%) rotateX(90deg);
+    transform-style: preserve-3d;
+  }
+  .preview-wood-base-bottom,
+  .preview-wood-base-top {
+    position: absolute; inset: 0;
+    /* Regular hexagon. Its alternating side centres line up with the three
+       prism-face normals, matching create_top_lid_mesh() in the game. */
+    clip-path: polygon(100% 50%, 75% 93.301%, 25% 93.301%, 0 50%, 25% 6.699%, 75% 6.699%);
+    background-color: #8b6747;
+    background-image: var(--wood-image);
+    background-blend-mode: multiply;
+    background-position: center;
+    background-size: 92px 92px;
+  }
+  .preview-wood-base-bottom { transform: translateZ(-8px); filter: brightness(.45); }
+  .preview-wood-base-top {
+    transform: translateZ(1px);
+    box-shadow: inset 0 0 13px rgba(0,0,0,.32);
+    filter: drop-shadow(0 9px 7px rgba(0,0,0,.42));
+  }
+  .preview-reward-marker {
+    position: absolute;
+    left: 50%; top: 131px;
+    width: 20px; height: 20px;
+    transform:
+      translate(-50%, -50%)
+      rotateY(var(--reward-rotation))
+      translateZ(108.25px);
+    clip-path: polygon(50% 0, 97.55% 34.55%, 79.39% 90.45%, 20.61% 90.45%, 2.45% 34.55%);
+    backface-visibility: hidden;
+    background: #ffcc00;
+    border: 1px solid rgba(255,255,255,.85);
+    box-shadow:
+      inset 0 0 5px rgba(255,255,255,.75),
+      0 0 8px 2px rgba(255,204,0,.85);
+  }
+  .preview-reward-marker::after {
+    content: "";
+    position: absolute; inset: 4px;
+    border-radius: 50%;
+    background: rgba(255,255,255,.72);
+  }
+  .preview-face-label {
+    position: absolute;
+    left: 50%; bottom: 5px;
+    transform: translateX(-50%);
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(0,0,0,.45);
+    color: rgba(255,255,255,.88);
+    font-size: 8px; font-weight: 800;
+  }
+  .preview-decorations {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .preview-decoration {
+    --decoration-image: none;
+    --decoration-tint: #fff;
+    position: absolute;
+    width: 1.25em;
+    overflow: hidden;
+    color: var(--decoration-tint);
+    background-color: var(--decoration-tint);
+    background-image: var(--decoration-image);
+    background-blend-mode: multiply;
+    background-position: center;
+    background-size: cover;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: var(--decoration-size, 13px);
+    line-height: 1;
+    text-align: center;
+    transform: translate(-50%, -50%) rotate(var(--decoration-rotation, 0deg));
+    opacity: var(--decoration-opacity, 1);
+    filter: drop-shadow(0 1px 1px rgba(0,0,0,.5));
+  }
+  @keyframes approximate-preview-spin {
+    from { transform: rotateY(0deg); }
+    to { transform: rotateY(360deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .preview-auto-rotator { animation: none; transform: rotateY(25deg); }
   }
 
   /* ── Color input ── */
@@ -331,6 +671,7 @@
 
   @media (max-width: 900px) {
     .fixed-grid { grid-template-columns: repeat(2, 1fr); }
+    .approx-preview-grid { grid-template-columns: 1fr; }
   }
 
  /* ── Triangular Compass Styles ── */
@@ -409,13 +750,13 @@
 // shared/src/web.rs via wasm-bindgen. Same source as controller_main.js,
 // so renaming a Texture variant in Rust automatically updates the editor.
 //
-// Texture previews load from game_node/assets/textures/{name}-JPG/bevy_ready/color.png
+// Texture previews load from lightweight 128px WebP files in each bevy_ready/ folder.
 // Serve over HTTP for previews to work:  python -m http.server 8000
 
 import init, {
   editor_constants,
   controller_constants,
-} from "../game_node/pkg/game_node.js";
+} from "../game_node/pkg/game_node.js?v=20260824-color-mask";
 
 // Populated on init() — used throughout the editor.
 let TEXTURES = null;          // enum Texture variants, by repr
@@ -514,16 +855,16 @@ function defaultLevel(nObjects = 2) {
       // Keeping it -1 makes that obvious in saved JSONL files.
       start_orient: -1,
       start_trial: 0,
-      // -1 = controller picks at random; otherwise chain index 0..N-1.
+      // -1 = controller picks at random; otherwise object index 0..N-1.
       start_object: -1,
-      // If true, completed chains are dropped from the shuffle bag at refill.
+      // If true, completed objects are dropped from the shuffle bag at refill.
       remove_completed_chains: false,
       // -1 = controller draws a fresh entropy seed at level start (and logs
       // the resolved value); any other int → that exact seed.
       random_seed: -1,
-      // If false, the controller writes progress_bar_size = 0 every frame,
-      // which hides the dots column game-side without changing chain logic.
-      score_bar_max: 10,
+      // Legacy key: only 0 (hide) versus non-zero (show) is used now.
+      // The visible control is therefore a Show/Hide selector.
+      score_bar_max: 1,
       shake_amplitude: 0.5,
       shake_duration: 1.0,
       sound_effects_volume: SCENE_DEFAULTS.sound_effects_volume,
@@ -601,20 +942,26 @@ function enforceLevel(lv) {
   if (f.camera_y == null) f.camera_y = CAMERA_DEFAULTS.default_y;
   if (f.camera_speed_rotate == null) f.camera_speed_rotate = CAMERA_DEFAULTS.speed_rotate;
   if (f.camera_rotation_sense == null) f.camera_rotation_sense = CAMERA_DEFAULTS.rotation_sense;
+  f.camera_radius = Math.max(0.1, Number(f.camera_radius) || CAMERA_DEFAULTS.initial_radius);
+  f.camera_y = Number.isFinite(Number(f.camera_y)) ? Number(f.camera_y) : CAMERA_DEFAULTS.default_y;
+  f.camera_speed_rotate = Math.max(0, Number(f.camera_speed_rotate) || 0);
+  f.camera_rotation_sense = Number(f.camera_rotation_sense) === -1 ? -1 : 1;
   delete f.pr_switching_chain;
-  // Retired with the trial-dot column: the left bar now shows level
-  // position and the top chain shows levels. Stripped on import so
-  // re-saving an old file drops it.
+  // Retired UI flag. The bottom trial-progress bar is controlled by
+  // score_bar_max, and the top row always shows level progress.
   delete f.show_progress_bar;
   if (f.start_object == null) f.start_object = -1;
-  if (f.start_object >= 0) f.start_object = Math.min(f.start_object, lv.objects.length - 1);
+  f.start_object = Math.trunc(Number(f.start_object));
+  if (!Number.isFinite(f.start_object) || f.start_object < 0) f.start_object = -1;
+  else f.start_object = Math.min(f.start_object, lv.objects.length - 1);
   if (f.remove_completed_chains == null) f.remove_completed_chains = false;
   f.remove_completed_chains = !!f.remove_completed_chains;
   if (f.random_seed == null) f.random_seed = -1;
   f.random_seed = Math.trunc(f.random_seed);
   if (!Number.isFinite(f.random_seed)) f.random_seed = -1;
-  if (f.score_bar_max == null) f.score_bar_max = 10;
-  f.score_bar_max = Math.max(0, Math.round(f.score_bar_max));
+  f.random_seed = f.random_seed < 0 ? -1 : Math.min(f.random_seed, 2147483647);
+  if (f.score_bar_max == null) f.score_bar_max = 1;
+  f.score_bar_max = Number(f.score_bar_max) === 0 ? 0 : 1;
   if (f.shake_amplitude == null) f.shake_amplitude = 0.5;
   if (f.shake_duration == null) f.shake_duration = 1.0;
   f.shake_amplitude = Math.max(0, f.shake_amplitude);
@@ -638,8 +985,8 @@ function enforceLevel(lv) {
   // existed, so older files look unchanged.
   if (f.platform_texture == null) f.platform_texture = SCENE_DEFAULTS.platform_texture;
   if (f.background_texture == null) f.background_texture = SCENE_DEFAULTS.background_texture;
-  f.platform_texture = Math.max(0, Math.round(f.platform_texture));
-  f.background_texture = Math.max(0, Math.round(f.background_texture));
+  f.platform_texture = Math.max(0, Math.min(TEXTURES.length - 1, Math.round(f.platform_texture)));
+  f.background_texture = Math.max(0, Math.min(TEXTURES.length - 1, Math.round(f.background_texture)));
   if (!Array.isArray(f.platform_color_mask) || f.platform_color_mask.length !== 4) f.platform_color_mask = [0, 0, 0, 0];
   if (!Array.isArray(f.background_color_mask) || f.background_color_mask.length !== 4) f.background_color_mask = [0, 0, 0, 0];
   // Pyramid / animation / lighting — backfill so files saved before these were
@@ -648,12 +995,21 @@ function enforceLevel(lv) {
   if (f.base_radius == null) f.base_radius = PYRAMID_DEFAULTS.base_radius;
   if (f.height == null) f.height = PYRAMID_DEFAULTS.height;
   if (f.cosine_alignment_threshold == null) f.cosine_alignment_threshold = GAME_DEFAULTS.cosine_alignment_to_win;
+  f.base_radius = Math.max(0.01, Number(f.base_radius) || PYRAMID_DEFAULTS.base_radius);
+  f.height = Math.max(0.01, Number(f.height) || PYRAMID_DEFAULTS.height);
+  f.cosine_alignment_threshold = Math.max(0, Math.min(1, Number(f.cosine_alignment_threshold) || 0));
   if (f.door_anim_fade_out == null) f.door_anim_fade_out = PYRAMID_DEFAULTS.door_anim_fade_out;
   if (f.door_anim_stay_open == null) f.door_anim_stay_open = PYRAMID_DEFAULTS.door_anim_stay_open;
   if (f.door_anim_fade_in == null) f.door_anim_fade_in = PYRAMID_DEFAULTS.door_anim_fade_in;
   if (f.main_spotlight_intensity == null) f.main_spotlight_intensity = LIGHTING_DEFAULTS.spotlight_intensity;
   if (f.ambient_brightness == null) f.ambient_brightness = LIGHTING_DEFAULTS.ambient_intensity;
   if (f.max_spotlight_intensity == null) f.max_spotlight_intensity = LIGHTING_DEFAULTS.max_spotlight_intensity;
+  f.door_anim_fade_out = Math.max(0, Number(f.door_anim_fade_out) || 0);
+  f.door_anim_stay_open = Math.max(0, Number(f.door_anim_stay_open) || 0);
+  f.door_anim_fade_in = Math.max(0, Number(f.door_anim_fade_in) || 0);
+  f.main_spotlight_intensity = Math.max(0, Number(f.main_spotlight_intensity) || 0);
+  f.ambient_brightness = Math.max(0, Number(f.ambient_brightness) || 0);
+  f.max_spotlight_intensity = Math.max(0, Number(f.max_spotlight_intensity) || 0);
   for (const t of (lv.trials || [])) {
     if (t.nr_attempts_to_win == null) t.nr_attempts_to_win = 3;
     if (t.nr_attempts_suggestion == null) t.nr_attempts_suggestion = 3;
@@ -661,8 +1017,14 @@ function enforceLevel(lv) {
     if (t.elapsed_time_to_win == null) t.elapsed_time_to_win = 4.0;
     if (t.elapsed_time_to_retroceed == null) t.elapsed_time_to_retroceed = 10.0;
     if (t.show_all == null) t.show_all = false;
+    t.nr_attempts_to_win = Math.max(0, Math.round(Number(t.nr_attempts_to_win) || 0));
+    t.nr_attempts_suggestion = Math.max(0, Math.round(Number(t.nr_attempts_suggestion) || 0));
+    t.nr_attempts_to_retroceed = Math.max(0, Math.round(Number(t.nr_attempts_to_retroceed) || 0));
+    t.elapsed_time_to_win = Math.max(0, Number(t.elapsed_time_to_win) || 0);
+    t.elapsed_time_to_retroceed = Math.max(0, Number(t.elapsed_time_to_retroceed) || 0);
+    t.show_all = !!t.show_all;
   }
-  f.start_trial = Math.min(f.start_trial, Math.max(0, lv.trials.length - 1));
+  f.start_trial = Math.max(0, Math.min(Math.round(Number(f.start_trial) || 0), Math.max(0, lv.trials.length - 1)));
 
   let firstSharedIdx = -1;
   for (let i = 0; i < lv.objects.length; i++) {
@@ -671,6 +1033,18 @@ function enforceLevel(lv) {
     // Backfill per-face fields added in later schema versions.
     if (!Array.isArray(obj.decorations_rotation)) {
       obj.decorations_rotation = repeat(EDITOR_DEFAULT_DECORATION_ROTATION, N_FACES);
+    }
+    obj.target_door = Math.max(0, Math.min(N_DOORS - 1, Math.round(Number(obj.target_door) || 0)));
+    for (const fi of FACE_INDICES) {
+      obj.textures[fi] = Math.max(0, Math.min(TEXTURES.length - 1, Math.round(Number(obj.textures[fi]) || 0)));
+      obj.decorations_texture[fi] = Math.max(0, Math.min(TEXTURES.length - 1, Math.round(Number(obj.decorations_texture[fi]) || 0)));
+      obj.decorations_seeds[fi] = Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.round(Number(obj.decorations_seeds[fi]) || 0)));
+      obj.decorations_count[fi] = Math.max(0, Math.round(Number(obj.decorations_count[fi]) || 0));
+      obj.decorations_size[fi] = Math.max(0, Number(obj.decorations_size[fi]) || 0);
+      obj.decorations_thickness[fi] = Math.max(0, Number(obj.decorations_thickness[fi]) || 0);
+      obj.decorations_shape[fi] = Math.max(0, Math.min(SHAPES.length - 1, Math.round(Number(obj.decorations_shape[fi]) || 0)));
+      const rotation = Math.round(Number(obj.decorations_rotation[fi]) || 0);
+      obj.decorations_rotation[fi] = rotation < 0 ? -1 : rotation % 360;
     }
 
     // _type is now persisted in the JSONL. For older files without it, fall
@@ -754,26 +1128,505 @@ function hexToRgba(hex, a) {
     parseInt(hex.slice(1, 3), 16) / 255,
     parseInt(hex.slice(3, 5), 16) / 255,
     parseInt(hex.slice(5, 7), 16) / 255,
-    parseFloat(a),
+    Math.max(0, Math.min(1, parseFloat(a) || 0)),
   ];
 }
 
-function texThumbUrl(idx) {
-  return `${TEXTURE_ASSET_BASE}/${TEXTURES[idx]}-JPG/bevy_ready/color.png`;
+function texThumbUrl(idx, tintable = false) {
+  const map = tintable ? 'preview_tintable.webp' : 'preview.webp';
+  return `${TEXTURE_ASSET_BASE}/${TEXTURES[idx]}-JPG/bevy_ready/${map}`;
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, Number(value) || 0));
+}
+
+function rgbCss(rgb) {
+  return `rgb(${rgb.slice(0, 3).map(v => Math.round(clamp01(v) * 255)).join(', ')})`;
+}
+
+function colorMaskTint(mask) {
+  const strength = clamp01(mask?.[3]);
+  return rgbCss([0, 1, 2].map(i => 1 + (clamp01(mask?.[i]) - 1) * strength));
+}
+
+/** Mirror the material color calculation used by Bevy for this selector.
+ *  Alpha is mask strength for every editable color: 0 keeps the source texture
+ *  color, while 1 multiplies it fully by the selected RGB. */
+function texturePreviewSpec(id, textureIndex) {
+  if (id === 'bdPlatformTex' || id === 'bdBackgroundTex') {
+    const mask = id === 'bdPlatformTex'
+      ? levels[sel].fixed.platform_color_mask
+      : levels[sel].fixed.background_color_mask;
+    return { url: texThumbUrl(textureIndex), tint: colorMaskTint(mask), opacity: 1 };
+  }
+
+  const match = id.match(/^c(\d+)f(\d+)(ft|dt)$/);
+  if (match) {
+    const object = levels[sel].objects[+match[1]];
+    const faceIndex = +match[2];
+    const color = match[3] === 'ft'
+      ? object.colors[faceIndex]
+      : object.decorations_color[faceIndex];
+    return {
+      url: texThumbUrl(textureIndex, true),
+      tint: colorMaskTint(color),
+      opacity: 1,
+    };
+  }
+
+  return { url: texThumbUrl(textureIndex), tint: '#fff', opacity: 1 };
 }
 
 function texSelectHtml(id, val) {
-  const opts = TEXTURES.map((t, i) =>
-    `<option value="${i}"${i === val ? ' selected' : ''}>${i}: ${t}</option>`
-  ).join('');
+  const preview = texturePreviewSpec(id, val);
   return `<span class="tex-wrap">
-    <img class="tex-thumb" src="${texThumbUrl(val)}" alt="" onerror="this.style.display='none'">
-    <select class="tex-sel" data-id="${id}">${opts}</select>
+    <span class="tex-cube" style="--tex-preview:url('${preview.url}');--tex-tint:${preview.tint};--tex-opacity:${preview.opacity}"
+          role="img" aria-label="Selected texture: ${TEXTURES[val]}" title="${TEXTURES[val]}">
+      <span class="tex-cube-face tex-cube-top"></span>
+      <span class="tex-cube-face tex-cube-left"></span>
+      <span class="tex-cube-face tex-cube-right"></span>
+    </span>
+    <button type="button" class="tex-picker-btn" data-id="${id}" data-value="${val}"
+            aria-haspopup="listbox" aria-expanded="false"
+            title="Open the texture list. Hover a texture to preview it.">
+      <span class="tex-picker-label">${val}: ${TEXTURES[val]}</span><span aria-hidden="true">▾</span>
+    </button>
   </span>`;
 }
 
+function updateTextureCube(textureId) {
+  const button = document.querySelector(`.tex-picker-btn[data-id="${textureId}"]`);
+  const cube = button?.closest('.tex-wrap')?.querySelector('.tex-cube');
+  if (!button || !cube) return;
+  const textureIndex = +button.dataset.value;
+  const preview = texturePreviewSpec(textureId, textureIndex);
+  cube.style.setProperty('--tex-preview', `url("${preview.url}")`);
+  cube.style.setProperty('--tex-tint', preview.tint);
+  cube.style.setProperty('--tex-opacity', preview.opacity);
+  cube.title = TEXTURES[textureIndex];
+  cube.setAttribute('aria-label', `Selected texture: ${TEXTURES[textureIndex]}`);
+  button.querySelector('.tex-picker-label').textContent = `${textureIndex}: ${TEXTURES[textureIndex]}`;
+}
+
+let texturePickerPopover = null;
+
+function setTexturePopoverPreview(textureId, textureIndex) {
+  if (!texturePickerPopover) return;
+  const preview = texturePreviewSpec(textureId, textureIndex);
+  const swatch = texturePickerPopover.querySelector('.texture-hover-preview');
+  texturePickerPopover.dataset.previewIndex = textureIndex;
+  swatch.style.setProperty('--hover-image', `url("${preview.url}")`);
+  swatch.style.setProperty('--hover-tint', preview.tint);
+  swatch.style.setProperty('--hover-opacity', preview.opacity);
+  swatch.querySelector('span').textContent = `${textureIndex}: ${TEXTURES[textureIndex]}`;
+}
+
+function closeTexturePicker() {
+  if (!texturePickerPopover || texturePickerPopover.hidden) return;
+  const textureId = texturePickerPopover.dataset.textureId;
+  document.querySelector(`.tex-picker-btn[data-id="${textureId}"]`)?.setAttribute('aria-expanded', 'false');
+  texturePickerPopover.hidden = true;
+  texturePickerPopover.dataset.textureId = '';
+  texturePickerPopover.dataset.previewIndex = '';
+}
+
+function ensureTexturePickerPopover() {
+  if (texturePickerPopover) return texturePickerPopover;
+  texturePickerPopover = document.createElement('div');
+  texturePickerPopover.className = 'texture-popover';
+  texturePickerPopover.hidden = true;
+  texturePickerPopover.innerHTML = `
+    <div class="texture-hover-preview"><span></span></div>
+    <div class="texture-choice-list" role="listbox"></div>`;
+  document.body.appendChild(texturePickerPopover);
+
+  texturePickerPopover.addEventListener('pointerover', event => {
+    const choice = event.target.closest('[data-texture-choice]');
+    if (choice) setTexturePopoverPreview(texturePickerPopover.dataset.textureId, +choice.dataset.textureChoice);
+  });
+  texturePickerPopover.addEventListener('focusin', event => {
+    const choice = event.target.closest('[data-texture-choice]');
+    if (choice) setTexturePopoverPreview(texturePickerPopover.dataset.textureId, +choice.dataset.textureChoice);
+  });
+  texturePickerPopover.addEventListener('click', event => {
+    const choice = event.target.closest('[data-texture-choice]');
+    if (!choice) return;
+    const textureId = texturePickerPopover.dataset.textureId;
+    const textureIndex = +choice.dataset.textureChoice;
+    applyTexture(textureId, textureIndex);
+    const currentButton = document.querySelector(`.tex-picker-btn[data-id="${textureId}"]`);
+    if (currentButton) currentButton.dataset.value = textureIndex;
+    updateRenderedMaterial(textureId);
+    closeTexturePicker();
+  });
+  texturePickerPopover.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeTexturePicker();
+  });
+  document.addEventListener('pointerdown', event => {
+    if (!texturePickerPopover.hidden
+        && !texturePickerPopover.contains(event.target)
+        && !event.target.closest('.tex-picker-btn')) closeTexturePicker();
+  });
+  window.addEventListener('resize', closeTexturePicker);
+  document.getElementById('editorPanel').addEventListener('scroll', closeTexturePicker);
+  return texturePickerPopover;
+}
+
+function openTexturePicker(button) {
+  const popover = ensureTexturePickerPopover();
+  const textureId = button.dataset.id;
+  if (!popover.hidden && popover.dataset.textureId === textureId) {
+    closeTexturePicker();
+    return;
+  }
+  const selected = +button.dataset.value;
+  document.querySelectorAll('.tex-picker-btn[aria-expanded=true]').forEach(other => {
+    if (other !== button) other.setAttribute('aria-expanded', 'false');
+  });
+  popover.dataset.textureId = textureId;
+  popover.querySelector('.texture-choice-list').innerHTML = TEXTURES.map((texture, index) =>
+    `<button type="button" class="texture-choice${index === selected ? ' active' : ''}"
+      data-texture-choice="${index}" role="option" aria-selected="${index === selected}">${index}: ${texture}</button>`
+  ).join('');
+  popover.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  setTexturePopoverPreview(textureId, selected);
+
+  const rect = button.getBoundingClientRect();
+  const popRect = popover.getBoundingClientRect();
+  const left = Math.max(10, Math.min(rect.left, window.innerWidth - popRect.width - 10));
+  const below = rect.bottom + 5;
+  const top = below + popRect.height <= window.innerHeight - 10
+    ? below
+    : Math.max(10, rect.top - popRect.height - 5);
+  popover.style.left = `${left}px`;
+  popover.style.top = `${top}px`;
+  popover.querySelector('.texture-choice.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+function textureIdForColorId(colorId) {
+  if (colorId === 'bdPlatformMask') return 'bdPlatformTex';
+  if (colorId === 'bdBackgroundMask') return 'bdBackgroundTex';
+  const match = colorId.match(/^(c\d+f\d+)(fc|dc)$/);
+  if (!match) return null;
+  return `${match[1]}${match[2] === 'fc' ? 'ft' : 'dt'}`;
+}
+
+function seededRandom(seed) {
+  let state = Math.trunc(Number(seed) || 1) >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function gridDecorationPoints(count) {
+  if (count <= 0) return [];
+  if (count === 1) return [{ x: 50, y: 50 }];
+
+  const columns = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / columns);
+  const candidates = [];
+  for (let row = 0; row < rows; row++) {
+    const y = rows === 1 ? 50 : 17 + (row / (rows - 1)) * 66;
+    for (let column = 0; column < columns; column++) {
+      const x = columns === 1 ? 50 : 15 + (column / (columns - 1)) * 70;
+      candidates.push({ x, y });
+    }
+  }
+
+  // Pick the most widely separated subset when the last square-grid row is
+  // incomplete, keeping the preview balanced around the whole face.
+  let bestA = 0, bestB = 1, bestDistance = -1;
+  for (let a = 0; a < candidates.length; a++) {
+    for (let b = a + 1; b < candidates.length; b++) {
+      const distance = (candidates[a].x - candidates[b].x) ** 2
+        + (candidates[a].y - candidates[b].y) ** 2;
+      if (distance > bestDistance) [bestA, bestB, bestDistance] = [a, b, distance];
+    }
+  }
+  const selected = [candidates[bestA], candidates[bestB]];
+  const remaining = candidates.filter((_, i) => i !== bestA && i !== bestB);
+  while (selected.length < count && remaining.length) {
+    let bestIndex = 0, bestNearest = -1;
+    remaining.forEach((candidate, index) => {
+      const nearest = Math.min(...selected.map(point =>
+        (candidate.x - point.x) ** 2 + (candidate.y - point.y) ** 2));
+      if (nearest > bestNearest) [bestIndex, bestNearest] = [index, nearest];
+    });
+    selected.push(remaining.splice(bestIndex, 1)[0]);
+  }
+  return selected;
+}
+
+function randomDecorationPoints(count, seed) {
+  if (count <= 0) return [];
+  const random = seededRandom(seed);
+  const candidates = Array.from({ length: Math.max(60, count * 8) }, () => ({
+    x: 14 + random() * 72,
+    y: 16 + random() * 68,
+  }));
+  const centre = { x: 50, y: 50 };
+  let first = 0, firstDistance = Infinity;
+  candidates.forEach((candidate, index) => {
+    const distance = (candidate.x - centre.x) ** 2 + (candidate.y - centre.y) ** 2;
+    if (distance < firstDistance) [first, firstDistance] = [index, distance];
+  });
+  const selected = [candidates.splice(first, 1)[0]];
+  while (selected.length < count && candidates.length) {
+    let bestIndex = 0, bestNearest = -1;
+    candidates.forEach((candidate, index) => {
+      const nearest = Math.min(...selected.map(point =>
+        (candidate.x - point.x) ** 2 + (candidate.y - point.y) ** 2));
+      if (nearest > bestNearest) [bestIndex, bestNearest] = [index, nearest];
+    });
+    selected.push(candidates.splice(bestIndex, 1)[0]);
+  }
+  return selected;
+}
+
+function renderPreviewDecorations(obj, ci, fi) {
+  const configuredCount = Math.max(0, Math.round(Number(obj.decorations_count[fi]) || 0));
+  const count = Math.min(30, configuredCount);
+  if (!count) return '';
+  const spec = texturePreviewSpec(`c${ci}f${fi}dt`, obj.decorations_texture[fi]);
+  const glyph = SHAPE_ICONS[obj.decorations_shape[fi]] || SHAPE_ICONS[0];
+  const rotation = Number(obj.decorations_rotation[fi]);
+  const seed = Math.max(0, Math.trunc(Number(obj.decorations_seeds[fi]) || 0));
+  const points = seed === 0
+    ? gridDecorationPoints(count)
+    : randomDecorationPoints(count, seed);
+  const rotationRandom = seededRandom(seed || (ci + 1) * 1009 + fi * 9176);
+  const size = Math.max(7, Math.min(25, 7 + (Number(obj.decorations_size[fi]) || 0) * 28));
+  const marks = points.map(point => {
+    const markRotation = rotation < 0 ? Math.round(rotationRandom() * 360) : (rotation || 0);
+    return `<span class="preview-decoration"
+      style="left:${point.x.toFixed(1)}%;top:${point.y.toFixed(1)}%;--decoration-size:${size.toFixed(1)}px;--decoration-rotation:${markRotation}deg;--decoration-image:url('${spec.url}');--decoration-tint:${spec.tint};--decoration-opacity:${spec.opacity}">${glyph}</span>`;
+  }).join('');
+  const sampleNote = configuredCount > count ? `; showing ${count} of ${configuredCount}` : '';
+  const layout = seed === 0 ? 'uniform grid' : `seeded random layout ${seed}`;
+  return `<span class="preview-decorations" title="${layout}${sampleNote}">${marks}</span>`;
+}
+
+function renderPreviewReward(targetDoor) {
+  const door = Math.max(0, Math.min(N_DOORS - 1, Math.round(Number(targetDoor) || 0)));
+  // spawn_pyramid_base() places door i at the midpoint of the two vertices
+  // starting at orientation + 90°. The preview prism includes the game's 30°
+  // orientation offset, giving side-centre angles 150°, 210°, …, 90°.
+  const doorAngle = door * (360 / N_DOORS) + 150;
+  const markerRotation = 90 - doorAngle;
+  return `<span class="preview-reward-marker" data-preview-reward-door="${door}"
+    style="--reward-rotation:${markerRotation}deg"
+    title="Reward target · door ${door}" aria-label="Reward target on door ${door}"></span>`;
+}
+
+function renderObjectPreview(obj, ci) {
+  const faces = FACE_INDICES.map(fi => {
+    const spec = texturePreviewSpec(`c${ci}f${fi}ft`, obj.textures[fi]);
+    return `<span class="preview-prism-face" data-preview-face="${ci}:${fi}"
+      style="--face-image:url('${spec.url}');--face-tint:${spec.tint};--face-opacity:${spec.opacity}"
+      title="Object ${ci}, face D${fi}: ${TEXTURES[obj.textures[fi]]}">
+      ${renderPreviewDecorations(obj, ci, fi)}
+      <span class="preview-face-label">D${fi}</span>
+    </span>`;
+  }).join('');
+
+  const background = texturePreviewSpec('bdBackgroundTex', levels[sel].fixed.background_texture);
+  const platform = texturePreviewSpec('bdPlatformTex', levels[sel].fixed.platform_texture);
+  const woodIndex = Math.max(0, TEXTURES.indexOf('Wood035_1K'));
+  const woodUrl = texThumbUrl(woodIndex);
+  const lidIndex = Math.max(0, TEXTURES.indexOf('Metal061B_1K'));
+  const lidUrl = texThumbUrl(lidIndex, true);
+  return `<div class="approx-preview-card"
+    style="--scene-background-image:url('${background.url}');--scene-background-tint:${background.tint};--scene-platform-image:url('${platform.url}');--scene-platform-tint:${platform.tint};--wood-image:url('${woodUrl}');--lid-image:url('${lidUrl}')">
+    <span class="preview-caption">Approximate preview · Object ${ci}</span>
+    <span class="preview-interaction-status">Drag · double-click to pause</span>
+    <span class="preview-platform"></span>
+    <div class="preview-scene" data-preview-scene data-preview-key="${sel}:${ci}"
+         tabindex="0" aria-label="Interactive approximate preview for object ${ci}">
+      <div class="preview-drag-rotator">
+        <div class="preview-auto-rotator" style="--preview-index:${ci}">
+          <div class="preview-model">
+            <div class="preview-wood-base" title="Six-sided Wood035 base">
+              <span class="preview-wood-base-bottom"></span>
+              <span class="preview-wood-base-top"></span>
+            </div>
+            ${renderPreviewReward(obj.target_door)}
+            <div class="preview-prism">
+              ${faces}
+              <span class="preview-top-lid" title="Opaque Metal061B lid"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderLevelObjectPreview(level) {
+  return `<div class="approx-preview-grid" role="group" aria-label="Approximate previews for level ${sel}">
+    ${level.objects.map(renderObjectPreview).join('')}
+  </div>`;
+}
+
+const approximatePreviewStates = new Map();
+
+function bindApproximatePreviewInteractions(root = document) {
+  root.querySelectorAll('[data-preview-scene]:not([data-preview-bound])').forEach(scene => {
+    scene.dataset.previewBound = 'true';
+    const card = scene.closest('.approx-preview-card');
+    const rotator = scene.querySelector('.preview-drag-rotator');
+    const status = card.querySelector('.preview-interaction-status');
+    const key = scene.dataset.previewKey;
+    const state = approximatePreviewStates.get(key) || { yaw: -18, pitch: -18, paused: false };
+    approximatePreviewStates.set(key, state);
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    const applyState = () => {
+      rotator.style.setProperty('--drag-x', `${state.pitch}deg`);
+      rotator.style.setProperty('--drag-y', `${state.yaw}deg`);
+      card.classList.toggle('preview-paused', state.paused);
+      status.textContent = state.paused
+        ? 'Paused · double-click to rotate'
+        : 'Drag · double-click to pause';
+    };
+    const togglePaused = () => {
+      state.paused = !state.paused;
+      applyState();
+    };
+    const finishDrag = event => {
+      if (!dragging) return;
+      dragging = false;
+      scene.classList.remove('is-dragging');
+      try { scene.releasePointerCapture(event.pointerId); } catch {}
+    };
+
+    scene.addEventListener('pointerdown', event => {
+      if (event.pointerType === 'mouse' && event.button !== 0) return;
+      dragging = true;
+      lastX = event.clientX;
+      lastY = event.clientY;
+      scene.classList.add('is-dragging');
+      scene.setPointerCapture(event.pointerId);
+    });
+    scene.addEventListener('pointermove', event => {
+      if (!dragging) return;
+      state.yaw += (event.clientX - lastX) * 0.65;
+      state.pitch = Math.max(-35, Math.min(28, state.pitch - (event.clientY - lastY) * 0.45));
+      lastX = event.clientX;
+      lastY = event.clientY;
+      applyState();
+    });
+    scene.addEventListener('pointerup', finishDrag);
+    scene.addEventListener('pointercancel', finishDrag);
+    scene.addEventListener('dblclick', event => {
+      event.preventDefault();
+      togglePaused();
+    });
+    scene.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        togglePaused();
+      }
+    });
+    applyState();
+  });
+}
+
+function refreshLevelObjectPreview() {
+  const host = document.getElementById('levelObjectPreviewHost');
+  if (host && levels[sel]) {
+    host.innerHTML = renderLevelObjectPreview(levels[sel]);
+    bindApproximatePreviewInteractions(host);
+  }
+}
+
+/** Update material-dependent preview elements without replacing the preview
+ *  cards. This preserves their drag angle and avoids restarting texture loads. */
+function updateRenderedMaterial(textureId) {
+  updateTextureCube(textureId);
+
+  const faceMatch = textureId.match(/^c(\d+)f(\d+)(ft|dt)$/);
+  if (faceMatch) {
+    const ci = +faceMatch[1];
+    const fi = +faceMatch[2];
+    const type = faceMatch[3];
+    const obj = levels[sel].objects[ci];
+    const textureIndex = type === 'ft' ? obj.textures[fi] : obj.decorations_texture[fi];
+    const spec = texturePreviewSpec(textureId, textureIndex);
+    const face = document.querySelector(`[data-preview-face="${ci}:${fi}"]`);
+
+    if (type === 'ft' && face) {
+      face.style.setProperty('--face-image', `url("${spec.url}")`);
+      face.style.setProperty('--face-tint', spec.tint);
+      face.style.setProperty('--face-opacity', spec.opacity);
+      face.title = `Object ${ci}, face D${fi}: ${TEXTURES[textureIndex]}`;
+    } else if (face) {
+      face.querySelectorAll('.preview-decoration').forEach(mark => {
+        mark.style.setProperty('--decoration-image', `url("${spec.url}")`);
+        mark.style.setProperty('--decoration-tint', spec.tint);
+        mark.style.setProperty('--decoration-opacity', spec.opacity);
+      });
+    }
+  } else if (BACKDROP_TEX_FIELDS[textureId]) {
+    const isPlatform = textureId === 'bdPlatformTex';
+    const textureIndex = isPlatform
+      ? levels[sel].fixed.platform_texture
+      : levels[sel].fixed.background_texture;
+    const spec = texturePreviewSpec(textureId, textureIndex);
+    const prefix = isPlatform ? '--scene-platform' : '--scene-background';
+    document.querySelectorAll('.approx-preview-card').forEach(card => {
+      card.style.setProperty(`${prefix}-image`, `url("${spec.url}")`);
+      card.style.setProperty(`${prefix}-tint`, spec.tint);
+    });
+  }
+
+  if (texturePickerPopover && !texturePickerPopover.hidden
+      && texturePickerPopover.dataset.textureId === textureId) {
+    const previewIndex = Number(texturePickerPopover.dataset.previewIndex);
+    if (Number.isInteger(previewIndex)) setTexturePopoverPreview(textureId, previewIndex);
+  }
+}
+
+/** Decoration layout edits only replace the marks on each face; the object and
+ *  its current rotation remain untouched. */
+function refreshRenderedDecorations() {
+  levels[sel].objects.forEach((obj, ci) => {
+    FACE_INDICES.forEach(fi => {
+      const face = document.querySelector(`[data-preview-face="${ci}:${fi}"]`);
+      if (!face) return;
+      face.querySelector('.preview-decorations')?.remove();
+      const decorations = renderPreviewDecorations(obj, ci, fi);
+      if (decorations) face.insertAdjacentHTML('afterbegin', decorations);
+    });
+  });
+}
+
+function syncRenderedPreviewMaterials() {
+  updateRenderedMaterial('bdPlatformTex');
+  updateRenderedMaterial('bdBackgroundTex');
+  levels[sel].objects.forEach((obj, ci) => {
+    FACE_INDICES.forEach(fi => {
+      updateRenderedMaterial(`c${ci}f${fi}ft`);
+      updateRenderedMaterial(`c${ci}f${fi}dt`);
+    });
+  });
+  refreshRenderedDecorations();
+}
+
 function colorInputHtml(id, rgba) {
-  return `<span class="color-wrap">
+  const help = id.endsWith('Mask')
+    ? 'RGB sets the mask color. Alpha sets its strength: 0 keeps the original texture; 1 applies the full color.'
+    : id.endsWith('fc')
+      ? 'RGB sets the face color mask. Alpha sets its strength: 0 keeps the original texture; 1 applies the full color.'
+      : 'RGB sets the decoration color mask. Alpha sets its strength: 0 keeps the original texture; 1 applies the full color.';
+  return `<span class="color-wrap" title="${help}">
     <input type="color" data-cid="${id}" value="${toHex(rgba)}">
     <input type="number" class="alpha-in" data-cid="${id}" value="${rgba[3].toFixed(2)}" min="0" max="1" step="0.01">
   </span>`;
@@ -782,7 +1635,7 @@ function colorInputHtml(id, rgba) {
 function shapeBtnsHtml(id, val) {
   return `<span class="shape-btns">
     ${SHAPES.map((s, i) =>
-      `<button class="shape-btn${i === val ? ' active' : ''}" data-sid="${id}" data-sv="${i}" title="${s}">${SHAPE_ICONS[i]}</button>`
+      `<button class="shape-btn${i === val ? ' active' : ''}" data-sid="${id}" data-sv="${i}" title="Decoration shape: ${s}">${SHAPE_ICONS[i]}</button>`
     ).join('')}
   </span>`;
 }
@@ -812,7 +1665,8 @@ function renderLevelList() {
 // ================================================================
 // Render — level editor
 // ================================================================
-function renderLevelEditor() {
+function renderLevelEditor(preserveObjectPreview = false) {
+  closeTexturePicker();
   const editor = document.getElementById('levelEditor');
   const placeholder = document.getElementById('placeholder');
   if (sel < 0 || sel >= levels.length) {
@@ -825,6 +1679,9 @@ function renderLevelEditor() {
 
   const lv = levels[sel];
   const N = lv.objects.length;
+  const preservedPreview = preserveObjectPreview
+    ? document.getElementById('levelObjectPreviewHost')
+    : null;
   editor.innerHTML = `
     <div class="section">
       <div class="sec-title" style="display:flex;align-items:center;gap:10px;">
@@ -840,9 +1697,10 @@ function renderLevelEditor() {
     <div class="section">
       <div class="sec-title">Background</div>
       ${renderBackdrop(lv.fixed)}
+      <div id="levelObjectPreviewHost">${renderLevelObjectPreview(lv)}</div>
     </div>
     <div class="section">
-      <div class="sec-title">Trials (shared across all chains · ${lv.trials.length} step${lv.trials.length !== 1 ? 's' : ''})</div>
+      <div class="sec-title">Trials (shared by all objects · ${lv.trials.length} step${lv.trials.length !== 1 ? 's' : ''})</div>
       ${renderTrials(lv.trials)}
     </div>
     <div class="section">
@@ -851,7 +1709,13 @@ function renderLevelEditor() {
     </div>
   `;
 
+  if (preservedPreview) {
+    document.getElementById('levelObjectPreviewHost')?.replaceWith(preservedPreview);
+  }
+
   attachEvents();
+  bindApproximatePreviewInteractions(editor);
+  if (preservedPreview) syncRenderedPreviewMaterials();
 }
 
 function renderObject(obj, ci, N) {
@@ -863,13 +1727,13 @@ function renderObject(obj, ci, N) {
   const isCustom = doorSelVal === 'custom';
 
   const doorSelect = `<span class="target-door-wrap">
-    <select class="door-sel" data-ci="${ci}">
+    <select class="door-sel" data-ci="${ci}" title="Type 1 and Type 2 apply the editor's shared-face rules. Custom leaves all three faces independent.">
       <option value="type1"${doorSelVal === 'type1' ? ' selected' : ''}>Type 1 (door ${EDITOR_TYPE1_DOOR})</option>
       <option value="type2"${doorSelVal === 'type2' ? ' selected' : ''}>Type 2 (door ${EDITOR_TYPE2_DOOR})</option>
       <option value="custom"${doorSelVal === 'custom' ? ' selected' : ''}>Custom…</option>
     </select>
     <span class="custom-door-label" style="display:${isCustom ? 'inline-flex' : 'none'}; align-items:center; gap:3px; font-size:11px; color:var(--text-dim);">
-      Door <input type="number" class="door-custom-in" data-ci="${ci}" min="0" max="${N_DOORS - 1}" value="${td}">
+      Door <input type="number" class="door-custom-in" data-ci="${ci}" min="0" max="${N_DOORS - 1}" value="${td}" title="Target door index from 0 to ${N_DOORS - 1}.">
     </span>
     <span class="obj-ctrl-btns">
       ${ci > 0 ? `<button data-omove="${ci}" data-dir="-1" title="Move Up">↑</button>` : ''}
@@ -887,18 +1751,18 @@ function renderObject(obj, ci, N) {
     <div class="face-table-wrap">
       <table class="face-table">
         <thead><tr>
-          <th>Face</th>
-          <th>Face Color</th>
-          <th>Door</th>
-          <th>Face Texture</th>
-          <th title="Seed for the Poisson-disk random placement. Set to 0 for a deterministic uniform-grid layout (max spacing in every direction, horizontal split preferred — e.g. n=1 center, n=2 halves, n=4 quadrants).">Seed <span style="color:var(--accent);font-weight:700;" title="0 = deterministic grid (max-spacing) layout">(0 = grid)</span></th>
-          <th>Count</th>
-          <th>Size</th>
-          <th>Thick</th>
-          <th>Shape</th>
-          <th title="Rotation in degrees around the face normal. 'Rand' picks a random rotation per decoration. Multiples of 360 are equivalent to 0.">Rot°</th>
-          <th>Dec Texture</th>
-          <th>Dec Color</th>
+          <th title="Face D0, D1, or D2.">Face</th>
+          <th title="Face color mask. Alpha 0 keeps the original texture; alpha 1 applies the selected RGB fully.">Face color</th>
+          <th title="Top view of the object. The yellow dot marks this object's target door.">Target door</th>
+          <th title="Material shown on this face.">Face texture</th>
+          <th title="0 places decorations on an even grid. A positive seed gives repeatable random positions.">Seed <span style="color:var(--accent);font-weight:700;" title="0 uses an even grid.">(0 = grid)</span></th>
+          <th title="Number of decorations on this face. 0 shows none.">Count</th>
+          <th title="Size of each decoration in game units.">Size</th>
+          <th title="Distance the decoration stands out from the face. 0 is flat.">Depth</th>
+          <th title="Shape of each decoration.">Shape</th>
+          <th title="Fixed angle from 0 to 359 degrees. Rand gives every decoration its own angle.">Rotation</th>
+          <th title="Material shown on the decorations.">Decoration texture</th>
+          <th title="Decoration color mask. Alpha 0 keeps the original texture; alpha 1 applies the selected RGB fully.">Decoration color</th>
         </tr></thead>
         <tbody>
           ${FACE_INDICES.map(fi => renderFaceRow(obj, ci, fi)).join('')}
@@ -960,10 +1824,10 @@ function renderFaceRow(obj, ci, fi) {
     <td>${doorIndicator}</td>
 
     <td>${texSelectHtml(`${p}ft`, obj.textures[fi])}</td>
-    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_seeds" value="${obj.decorations_seeds[fi]}" min="0" step="1" inputmode="numeric" pattern="\\d*" title="Seed for random Poisson-disk placement. Seed = 0 ⇒ deterministic uniform-grid layout (max spacing, horizontal split preferred)."></td>
-    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_count" value="${obj.decorations_count[fi]}"></td>
-    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_size" value="${obj.decorations_size[fi]}"></td>
-    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_thickness" value="${obj.decorations_thickness[fi]}"></td>
+    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_seeds" value="${obj.decorations_seeds[fi]}" min="0" max="9007199254740991" step="1" inputmode="numeric" pattern="\\d*" title="0 uses an even grid. A positive seed gives repeatable random positions."></td>
+    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_count" value="${obj.decorations_count[fi]}" min="0" step="1" title="Number of decorations. 0 shows none."></td>
+    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_size" value="${obj.decorations_size[fi]}" min="0" step="0.01" title="Decoration size in game units."></td>
+    <td><input type="number" class="num-xs face-in" data-chain="${ci}" data-face="${fi}" data-field="decorations_thickness" value="${obj.decorations_thickness[fi]}" min="0" step="0.01" title="How far the decoration stands out from the face. 0 is flat."></td>
     <td>${shapeBtnsHtml(`${p}sh`, obj.decorations_shape[fi])}</td>
     <td>${rotationInputHtml(ci, fi, obj.decorations_rotation[fi])}</td>
     <td>${texSelectHtml(`${p}dt`, obj.decorations_texture[fi])}</td>
@@ -979,9 +1843,10 @@ function renderFaceRow(obj, ci, fi) {
 function rotationInputHtml(ci, fi, val) {
   const isRandom = val < 0;
   return `<span class="rot-wrap" data-chain="${ci}" data-face="${fi}">
-    <button class="rot-rand-btn${isRandom ? ' active' : ''}" data-rrand="${ci}-${fi}" title="Random rotation per decoration">Rand</button>
+    <button class="rot-rand-btn${isRandom ? ' active' : ''}" data-rrand="${ci}-${fi}" title="Give every decoration a separate random angle.">Rand</button>
     <input type="number" class="num-xs rot-deg-in" data-rdeg="${ci}-${fi}"
            min="0" max="359" step="15" value="${isRandom ? 0 : val}"
+           title="Fixed decoration angle from 0 to 359 degrees."
            ${isRandom ? 'disabled' : ''}>
   </span>`;
 }
@@ -996,7 +1861,7 @@ function renderBackdrop(fixed) {
     <div class="trial-row">
       <span class="trial-field" title="${hint}"><strong>${label}</strong></span>
       <span class="trial-field"><span>Texture</span>${texSelectHtml(texId, texVal)}</span>
-      <span class="trial-field" title="Alpha is the mask strength: 0 = bare texture.">
+      <span class="trial-field" title="RGB sets the mask color. Alpha sets its strength: 0 keeps the original texture; 1 applies the full color.">
         <span>Color mask</span>${colorInputHtml(maskId, mask)}
       </span>
     </div>`;
@@ -1012,38 +1877,38 @@ function renderTrials(trials) {
   const rows = trials.map((t, ti) => `
     <div class="trial-row">
       <span class="trial-num">${ti}</span>
-      <span class="trial-field"><span>Win ≤</span>
-        <input type="number" class="num-xs trial-in" data-ti="${ti}" data-tf="nr_attempts_to_win" value="${t.nr_attempts_to_win}" min="1" step="1">
+      <span class="trial-field" title="A correct answer advances only if its attempt number and elapsed time are both within their Advance limits. 0 disables advancement by attempts."><span>Advance ≤</span>
+        <input type="number" class="num-xs trial-in" data-ti="${ti}" data-tf="nr_attempts_to_win" value="${t.nr_attempts_to_win}" min="0" step="1">
         <span>att</span>
       </span>
-      <span class="trial-field"><span>Suggest ≤</span>
+      <span class="trial-field" title="Failed checks up to this attempt number show a hint on the target door. 0 disables early hints."><span>Hint ≤</span>
         <input type="number" class="num-xs trial-in" data-ti="${ti}" data-tf="nr_attempts_suggestion" value="${t.nr_attempts_suggestion}" min="0" step="1">
         <span>att</span>
       </span>
-      <span class="trial-field"><span>Retro ></span>
-        <input type="number" class="num-xs trial-in" data-ti="${ti}" data-tf="nr_attempts_to_retroceed" value="${t.nr_attempts_to_retroceed}" min="1" step="1">
+      <span class="trial-field" title="A failed check moves back when its attempt number is greater than this value. 0 means the first failure."><span>Move back ></span>
+        <input type="number" class="num-xs trial-in" data-ti="${ti}" data-tf="nr_attempts_to_retroceed" value="${t.nr_attempts_to_retroceed}" min="0" step="1">
         <span>att</span>
       </span>
-      <span class="trial-field"><span>Win ≤</span>
+      <span class="trial-field" title="A correct answer advances only if elapsed time and its attempt number are both within their Advance limits. 0 seconds effectively disables advancement."><span>Advance ≤</span>
         <input type="number" class="num-sm trial-in" data-ti="${ti}" data-tf="elapsed_time_to_win" value="${t.elapsed_time_to_win}" min="0" step="0.5">
         <span>s</span>
       </span>
-      <span class="trial-field"><span>Retro ></span>
+      <span class="trial-field" title="If this time expires without a correct answer, the object moves back one trial step."><span>Move back ></span>
         <input type="number" class="num-sm trial-in" data-ti="${ti}" data-tf="elapsed_time_to_retroceed" value="${t.elapsed_time_to_retroceed}" min="0" step="0.5">
         <span>s</span>
       </span>
-      <span class="trial-field" title="Show wrong/right light on ALL doors instead of just the target one.">
-        <label><input type="checkbox" class="trial-in" data-ti="${ti}" data-tf="show_all" ${t.show_all ? 'checked' : ''}> show all red Retro</label>
+      <span class="trial-field" title="On the final failed attempt, light every base door red. Off lights only the target door red.">
+        <label><input type="checkbox" class="trial-in" data-ti="${ti}" data-tf="show_all" ${t.show_all ? 'checked' : ''}> all doors red on failure</label>
       </span>
       <span class="trial-btns">
-        ${ti > 0 ? `<button data-tmove="${ti}" data-dir="-1">↑</button>` : ''}
-        ${ti < trials.length - 1 ? `<button data-tmove="${ti}" data-dir="1">↓</button>` : ''}
-        <button class="del-btn" data-tdel="${ti}">✕</button>
+        ${ti > 0 ? `<button data-tmove="${ti}" data-dir="-1" title="Move this trial step up.">↑</button>` : ''}
+        ${ti < trials.length - 1 ? `<button data-tmove="${ti}" data-dir="1" title="Move this trial step down.">↓</button>` : ''}
+        <button class="del-btn" data-tdel="${ti}" title="Delete this trial step.">✕</button>
       </span>
     </div>
   `).join('');
   return `<div class="trials-list">${rows}
-    <button class="add-btn" id="addTrialBtn">+ Add Trial Step</button>
+    <button class="add-btn" id="addTrialBtn" title="Add a trial step after the current last step.">+ Add Trial Step</button>
   </div>`;
 }
 
@@ -1058,89 +1923,111 @@ function renderFixed(fixed, lv) {
     `${Math.round(k * stepDeg)}°`
   ).join(' · ');
 
-  const numRow = (label, field, val, step, min = '') =>
-    `<div class="fixed-row">
+  const help = {
+    camera_radius: 'Distance from the camera to the object. Larger values zoom out.',
+    camera_y: 'Camera height above the ground.',
+    camera_speed_rotate: 'Rotation speed while the player holds left or right.',
+    start_trial: 'Trial step assigned to every object when this level starts. 0 is the first step.',
+    base_radius: 'Radius of the three-sided object. The wooden base keeps its fixed game size.',
+    height: 'Height of the three-sided object.',
+    cosine_alignment_threshold: 'Required alignment for a correct answer. 1 requires an exact match; lower values allow more error.',
+    door_anim_fade_out: 'Seconds for the object to fade out after a check.',
+    door_anim_stay_open: 'Seconds the selected door remains visible.',
+    door_anim_fade_in: 'Seconds for the object to fade back in.',
+    shake_amplitude: 'Strength of the camera shake after a wrong answer. 0 disables shaking.',
+    shake_duration: 'Duration of the camera shake in seconds.',
+    main_spotlight_intensity: 'Brightness of the main light on the object.',
+    ambient_brightness: 'Brightness of the light that reaches every surface.',
+    max_spotlight_intensity: 'Maximum brightness of the door feedback light.',
+    sound_effects_volume: 'Volume of win and hint sounds. 0 mutes them; 1 uses the source volume.',
+    background_music_volume: 'Background music volume. 0 mutes it; values above 1 amplify it.',
+    fog_thickness_base: 'Distance over which fog reaches full strength. Larger values make the fog build more slowly.',
+    firefly_count: 'Number of glowing particles released after a correct answer. 0 disables them.',
+    firefly_size: 'Radius of each glowing particle in game units.',
+    firefly_expand_secs: 'Seconds for the particles to spread from the winning door.',
+  };
+  const numRow = (label, field, val, step, min = '', max = '') =>
+    `<div class="fixed-row" title="${help[field] || ''}">
       <label>${label}</label>
-      <input type="number" class="fixed-in" data-ff="${field}" value="${val}" step="${step}"${min !== '' ? ` min="${min}"` : ''}>
+      <input type="number" class="fixed-in" data-ff="${field}" value="${val}" step="${step}"${min !== '' ? ` min="${min}"` : ''}${max !== '' ? ` max="${max}"` : ''}>
     </div>`;
 
   return `<div class="fixed-grid">
     <div class="fixed-group">
       <div class="fixed-group-title">Camera</div>
-      ${numRow('camera_radius', 'camera_radius', fixed.camera_radius, '0.5', '0')}
-      ${numRow('camera_y', 'camera_y', fixed.camera_y, '0.1')}
-      ${numRow('camera_speed_rotate', 'camera_speed_rotate', fixed.camera_speed_rotate, '0.01', '0')}
-      <div class="fixed-row" title="Sense of camera rotation. +1 = default; -1 inverts left/right.">
-        <label>rotation_sense</label>
+      ${numRow('Distance', 'camera_radius', fixed.camera_radius, '0.5', '0.1')}
+      ${numRow('Height', 'camera_y', fixed.camera_y, '0.1')}
+      ${numRow('Rotation speed', 'camera_speed_rotate', fixed.camera_speed_rotate, '0.01', '0')}
+      <div class="fixed-row" title="Direction of the left and right controls.">
+        <label>Control direction</label>
         <select class="fixed-sel" data-ff="camera_rotation_sense">
-          <option value="1"${fixed.camera_rotation_sense === 1 ? ' selected' : ''}>+1 (default)</option>
-          <option value="-1"${fixed.camera_rotation_sense === -1 ? ' selected' : ''}>-1 (inverted)</option>
+          <option value="1"${fixed.camera_rotation_sense === 1 ? ' selected' : ''}>Normal</option>
+          <option value="-1"${fixed.camera_rotation_sense === -1 ? ' selected' : ''}>Reversed</option>
         </select>
       </div>
     </div>
     <div class="fixed-group">
       <div class="fixed-group-title">Trials</div>
-      ${numRow('start_trial', 'start_trial', fixed.start_trial || 0, '1', '0')}
-      <div class="fixed-row" title="Object the level starts on. Random = controller picks u.a.r.">
-        <label>start_object</label>
+      ${numRow('Start step', 'start_trial', fixed.start_trial || 0, '1', '0', Math.max(0, lv.trials.length - 1))}
+      <div class="fixed-row" title="First object shown in this level. Random uses the level's random seed.">
+        <label>First object</label>
         <select class="fixed-sel" data-ff="start_object">
           <option value="-1"${(fixed.start_object ?? -1) === -1 ? ' selected' : ''}>Random</option>
           ${lv.objects.map((_, i) => `<option value="${i}"${(fixed.start_object ?? -1) === i ? ' selected' : ''}>${i}</option>`).join('')}
         </select>
       </div>
-      <div class="fixed-row" title="Pseudo-random draw order: each cycle visits every chain once before any repeats. If checked, completed chains drop out of the bag.">
-        <label>remove_completed</label>
+      <div class="fixed-row" title="Stop selecting an object after it finishes every trial step.">
+        <label>Remove completed</label>
         <input type="checkbox" class="fixed-chk" data-ff="remove_completed_chains"${fixed.remove_completed_chains ? ' checked' : ''}>
       </div>
-      <div class="fixed-row" title="Seed for all controller randomness on this level (chain bag shuffle, start_object, start_orient). -1 = controller draws fresh entropy at level start (logged for replay); any other int → reproducible runs.">
-        <label>random_seed</label>
-        <input type="number" class="fixed-in" data-ff="random_seed" value="${fixed.random_seed ?? -1}" step="1">
+      <div class="fixed-row" title="Controls object order, random first object, and starting orientation. -1 makes a new seed; 0 or more repeats the same choices.">
+        <label>Random seed</label>
+        <input type="number" class="fixed-in" data-ff="random_seed" value="${fixed.random_seed ?? -1}" min="-1" max="2147483647" step="1">
       </div>
-      <div class="fixed-row" title="Left-side bar showing the mean trial position across objects in this level (full = level complete). 0 hides the bar; any other value shows it.">
-        <label>score_bar_max</label>
-        <input type="number" class="fixed-in" data-ff="score_bar_max" value="${fixed.score_bar_max ?? 10}" step="1" min="0">
+      <div class="fixed-row" title="Show the horizontal bar at the bottom. It displays average trial progress across all objects in this level.">
+        <label>Trial progress bar</label>
+        <select class="fixed-sel" data-ff="score_bar_max">
+          <option value="1"${(fixed.score_bar_max ?? 10) !== 0 ? ' selected' : ''}>Show</option>
+          <option value="0"${(fixed.score_bar_max ?? 10) === 0 ? ' selected' : ''}>Hide</option>
+        </select>
       </div>
-      <div class="fixed-row">
-        <label>start_orient</label>
+      <div class="fixed-row" title="The controller chooses one of these six angles at the start of each trial. This value is not edited directly.">
+        <label>Start orientation</label>
         <span class="orient-info">${orientDisplay}</span>
       </div>
     </div>
     <div class="fixed-group">
-      <div class="fixed-group-title">Pyramid</div>
-      ${numRow('base_radius', 'base_radius', fixed.base_radius, '0.1', '0')}
-      ${numRow('height', 'height', fixed.height, '0.1', '0')}
-      ${numRow('cos_threshold', 'cosine_alignment_threshold', fixed.cosine_alignment_threshold, '0.01', '0')}
+      <div class="fixed-group-title">Object</div>
+      ${numRow('Radius', 'base_radius', fixed.base_radius, '0.1', '0.01')}
+      ${numRow('Height', 'height', fixed.height, '0.1', '0.01')}
+      ${numRow('Win alignment', 'cosine_alignment_threshold', fixed.cosine_alignment_threshold, '0.01', '0', '1')}
     </div>
     <div class="fixed-group">
       <div class="fixed-group-title">Animation</div>
-      ${numRow('fade_out', 'door_anim_fade_out', fixed.door_anim_fade_out, '0.1', '0')}
-      ${numRow('stay_open', 'door_anim_stay_open', fixed.door_anim_stay_open, '0.1', '0')}
-      ${numRow('fade_in', 'door_anim_fade_in', fixed.door_anim_fade_in, '0.1', '0')}
-      ${numRow('shake_amp', 'shake_amplitude', fixed.shake_amplitude ?? 0.5, '0.1', '0')}
-      ${numRow('shake_dur', 'shake_duration', fixed.shake_duration ?? 1.0, '0.1', '0')}
+      ${numRow('Fade out', 'door_anim_fade_out', fixed.door_anim_fade_out, '0.1', '0')}
+      ${numRow('Stay open', 'door_anim_stay_open', fixed.door_anim_stay_open, '0.1', '0')}
+      ${numRow('Fade in', 'door_anim_fade_in', fixed.door_anim_fade_in, '0.1', '0')}
+      ${numRow('Shake strength', 'shake_amplitude', fixed.shake_amplitude ?? 0.5, '0.1', '0')}
+      ${numRow('Shake duration', 'shake_duration', fixed.shake_duration ?? 1.0, '0.1', '0')}
     </div>
     <div class="fixed-group">
       <div class="fixed-group-title">Lighting</div>
-      ${numRow('main_intensity', 'main_spotlight_intensity', fixed.main_spotlight_intensity, '1000000', '0')}
-      ${numRow('ambient', 'ambient_brightness', fixed.ambient_brightness, '10', '0')}
-      ${numRow('max_intensity', 'max_spotlight_intensity', fixed.max_spotlight_intensity, '1000000', '0')}
+      ${numRow('Main light', 'main_spotlight_intensity', fixed.main_spotlight_intensity, '1000000', '0')}
+      ${numRow('Ambient light', 'ambient_brightness', fixed.ambient_brightness, '10', '0')}
+      ${numRow('Door light', 'max_spotlight_intensity', fixed.max_spotlight_intensity, '1000000', '0')}
     </div>
     <div class="fixed-group">
       <div class="fixed-group-title">Scene / Audio</div>
-      <div class="fixed-row" title="Linear playback volume for one-shot win/hint sound effects. 1.0 = source level; 0 mutes.">
-        ${numRow('sfx_volume', 'sound_effects_volume', fixed.sound_effects_volume ?? 1.0, '0.05', '0')}
-      </div>
-      <div class="fixed-row" title="Linear playback volume for the looping background music. 0 mutes.">
-        ${numRow('music_volume', 'background_music_volume', fixed.background_music_volume ?? 0.20, '0.05', '0')}
-      </div>
-      <div class="fixed-row" title="Distance fog around the pyramid. Off pushes the fog onset past the wall so nothing is fogged.">
-        <label>fog_enabled</label>
+      ${numRow('Sound effects', 'sound_effects_volume', fixed.sound_effects_volume ?? 1.0, '0.05', '0')}
+      ${numRow('Music', 'background_music_volume', fixed.background_music_volume ?? 0.20, '0.05', '0')}
+      <div class="fixed-row" title="Add distance fog around the object.">
+        <label>Fog</label>
         <input type="checkbox" class="fixed-chk" data-ff="fog_enabled"${(fixed.fog_enabled ?? true) ? ' checked' : ''}>
       </div>
-      ${numRow('fog_thickness', 'fog_thickness_base', fixed.fog_thickness_base ?? 25.0, '1', '0')}
-      ${numRow('firefly_count', 'firefly_count', fixed.firefly_count ?? 10000, '100', '0')}
-      ${numRow('firefly_size', 'firefly_size', fixed.firefly_size ?? 0.013, '0.001', '0')}
-      ${numRow('firefly_expand_s', 'firefly_expand_secs', fixed.firefly_expand_secs ?? 1.5, '0.1', '0')}
+      ${numRow('Fog fade distance', 'fog_thickness_base', fixed.fog_thickness_base ?? 25.0, '1', '0')}
+      ${numRow('Firefly count', 'firefly_count', fixed.firefly_count ?? 10000, '100', '0')}
+      ${numRow('Firefly size', 'firefly_size', fixed.firefly_size ?? 0.013, '0.001', '0')}
+      ${numRow('Firefly spread time', 'firefly_expand_secs', fixed.firefly_expand_secs ?? 1.5, '0.1', '0')}
     </div>
   </div>`;
 }
@@ -1180,7 +2067,14 @@ function attachEvents() {
         }
       }
 
-      const v = field === 'decorations_seeds' ? Math.round(+e.target.value || 0) : +e.target.value;
+      let v = +e.target.value || 0;
+      if (field === 'decorations_seeds') {
+        v = Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.round(v)));
+      } else if (field === 'decorations_count') {
+        v = Math.max(0, Math.round(v));
+      } else if (field === 'decorations_size' || field === 'decorations_thickness') {
+        v = Math.max(0, v);
+      }
       levels[sel].objects[ci][field][fi] = v;
 
       const isType2 = obj._type === 'type2';
@@ -1204,6 +2098,7 @@ function attachEvents() {
         const el2 = document.querySelector(sel2);
         if (el2) el2.value = v;
       }
+      refreshRenderedDecorations();
     });
   });
 
@@ -1216,7 +2111,7 @@ function attachEvents() {
       const cur = obj.decorations_rotation[fi];
       const newVal = cur < 0 ? 0 : -1;          // toggle Random ↔ Fixed (0)
       applyRotation(ci, fi, newVal);
-      renderLevelEditor();
+      renderLevelEditor(true);
     });
   });
   editor.querySelectorAll('.rot-deg-in').forEach(el => {
@@ -1224,31 +2119,33 @@ function attachEvents() {
       const [ci, fi] = e.target.dataset.rdeg.split('-').map(Number);
       const obj = levels[sel].objects[ci];
       if (isLocked(obj, ci, fi)) return;
-      const v = Math.max(0, Math.round(+e.target.value || 0));
+      const v = Math.max(0, Math.round(+e.target.value || 0)) % 360;
       applyRotation(ci, fi, v);
+      refreshRenderedDecorations();
     });
   });
 
   // Color pickers — both the color and alpha inputs share a data-cid
   editor.querySelectorAll('input[type=color], input.alpha-in').forEach(el => {
-    el.addEventListener('input', () => applyColorFromId(el.dataset.cid));
+    el.addEventListener('input', () => {
+      const colorId = el.dataset.cid;
+      applyColorFromId(colorId);
+      const textureId = textureIdForColorId(colorId);
+      if (textureId) updateRenderedMaterial(textureId);
+    });
   });
 
-  // Texture selects
-  editor.querySelectorAll('.tex-sel').forEach(el => {
-    el.addEventListener('change', e => {
-      applyTexture(e.target.dataset.id, +e.target.value);
-      // Update thumbnail preview
-      const thumb = e.target.closest('.tex-wrap')?.querySelector('.tex-thumb');
-      if (thumb) { thumb.src = texThumbUrl(+e.target.value); thumb.style.display = ''; }
-    });
+  // Texture pickers. The floating list can preview an option on hover before
+  // committing it, which native <select>/<option> controls cannot expose.
+  editor.querySelectorAll('.tex-picker-btn').forEach(button => {
+    button.addEventListener('click', () => openTexturePicker(button));
   });
 
   // Shape buttons
   editor.querySelectorAll('.shape-btn').forEach(el => {
     el.addEventListener('click', e => {
       applyShape(e.target.dataset.sid, +e.target.dataset.sv);
-      renderLevelEditor();
+      renderLevelEditor(true);
     });
   });
 
@@ -1326,9 +2223,9 @@ function attachEvents() {
       if (boolFields.includes(field)) {
         levels[sel].trials[ti][field] = !!e.target.checked;
       } else if (intFields.includes(field)) {
-        levels[sel].trials[ti][field] = Math.round(+e.target.value);
+        levels[sel].trials[ti][field] = Math.max(0, Math.round(+e.target.value || 0));
       } else {
-        levels[sel].trials[ti][field] = +e.target.value;
+        levels[sel].trials[ti][field] = Math.max(0, +e.target.value || 0);
       }
     });
   });
@@ -1373,15 +2270,25 @@ function attachEvents() {
       if (field === 'start_trial') {
         val = Math.max(0, Math.min(Math.round(val), levels[sel].trials.length - 1));
         e.target.value = val;
-      } else if (field === 'score_bar_max') {
-        val = Math.max(0, Math.round(val));
-        e.target.value = val;
       } else if (field === 'random_seed') {
         if (!Number.isFinite(val)) val = -1;
         val = Math.trunc(val);
+        val = val < 0 ? -1 : Math.min(val, 2147483647);
         e.target.value = val;
       } else if (field === 'firefly_count') {
         val = Math.max(0, Math.round(val));
+        e.target.value = val;
+      } else if (field === 'cosine_alignment_threshold') {
+        val = Math.max(0, Math.min(1, val || 0));
+        e.target.value = val;
+      } else if (field === 'base_radius' || field === 'height') {
+        val = Math.max(0.01, val || 0.01);
+        e.target.value = val;
+      } else if (field === 'camera_radius') {
+        val = Math.max(0.1, val || 0.1);
+        e.target.value = val;
+      } else if (field !== 'camera_y') {
+        val = Math.max(0, val || 0);
         e.target.value = val;
       }
       levels[sel].fixed[field] = val;
@@ -1414,7 +2321,7 @@ function applyColorFromId(cid) {
   if (!rgbEl || !aEl) return;
   const rgba = hexToRgba(rgbEl.value, aEl.value);
   if (BACKDROP_MASK_FIELDS[cid]) { levels[sel].fixed[BACKDROP_MASK_FIELDS[cid]] = rgba; return; }
-  const m = cid.match(/^c(\d)f(\d)(fc|dc)$/);
+  const m = cid.match(/^c(\d+)f(\d+)(fc|dc)$/);
   if (!m) return;
   const [, ci, fi, type] = m.map((v, i) => i === 0 ? v : (i <= 2 ? +v : v));
   const obj = levels[sel].objects[ci];
@@ -1435,12 +2342,12 @@ function applyColorFromId(cid) {
     copyFace(obj, obj, 1, 2);
     needsRerender = true;
   }
-  if (needsRerender) renderLevelEditor();
+  if (needsRerender) renderLevelEditor(true);
 }
 
 function applyTexture(id, val) {
   if (BACKDROP_TEX_FIELDS[id]) { levels[sel].fixed[BACKDROP_TEX_FIELDS[id]] = val; return; }
-  const m = id.match(/^c(\d)f(\d)(ft|dt)$/);
+  const m = id.match(/^c(\d+)f(\d+)(ft|dt)$/);
   if (!m) return;
   const ci = +m[1], fi = +m[2], type = m[3];
   const obj = levels[sel].objects[ci];
@@ -1461,7 +2368,7 @@ function applyTexture(id, val) {
     copyFace(obj, obj, 1, 2);
     needsRerender = true;
   }
-  if (needsRerender) renderLevelEditor();
+  if (needsRerender) renderLevelEditor(true);
 }
 
 function applyRotation(ci, fi, val) {
@@ -1481,7 +2388,7 @@ function applyRotation(ci, fi, val) {
 }
 
 function applyShape(id, val) {
-  const m = id.match(/^c(\d)f(\d)sh$/);
+  const m = id.match(/^c(\d+)f(\d+)sh$/);
   if (!m) return;
   const ci = +m[1], fi = +m[2];
   const obj = levels[sel].objects[ci];
@@ -1493,15 +2400,11 @@ function applyShape(id, val) {
   const isType2 = obj._type === 'type2';
   const isCustom = obj._type === 'custom';
 
-  let needsRerender = false;
   if (fi === 0 && !isCustom) {
     pushFace0ToShared(ci);
-    needsRerender = true;
   } else if (fi === 1 && isType2) {
     copyFace(obj, obj, 1, 2);
-    needsRerender = true;
   }
-  if (needsRerender) renderLevelEditor();
 }
 
 // ================================================================
@@ -1603,8 +2506,25 @@ document.getElementById('levelList').addEventListener('click', e => {
 (async function bootstrap() {
   // 1. Load Rust-side constants (shapes, textures, defaults). Both
   //    init() and the two getter functions are pure — they don't start
-  //    Bevy. controller_main.js loads the same module.
-  await init();
+  //    Bevy. The production build keeps only the pre-compressed WASM, so
+  //    inflate it in-browser just like controller_main.js does.
+  const wasmUrl = new URL(
+    "../game_node/pkg/game_node_bg.wasm.gz?v=20260824-color-mask",
+    import.meta.url,
+  );
+  const wasmResponse = await fetch(wasmUrl);
+  if (!wasmResponse.ok) {
+    throw new Error(`Failed to download editor WASM (${wasmResponse.status})`);
+  }
+  if (!wasmResponse.body || typeof DecompressionStream === 'undefined') {
+    throw new Error('This browser cannot decompress the editor WASM package.');
+  }
+  const wasmBytes = await new Response(
+    wasmResponse.body.pipeThrough(new DecompressionStream('gzip')),
+  ).arrayBuffer();
+  await init({
+    module_or_path: wasmBytes,
+  });
   const ec = editor_constants();
   const cc = controller_constants();
 
@@ -1702,7 +2622,12 @@ document.getElementById('levelList').addEventListener('click', e => {
     console.log(`No ${TRIALS_FILENAME} found, starting empty.`, e);
   }
   renderAll();
-})();
+})().catch(error => {
+  console.error('Trial editor failed to start:', error);
+  const placeholder = document.getElementById('placeholder');
+  placeholder.style.display = '';
+  placeholder.textContent = `Failed to start the trial editor: ${error.message}`;
+});
 </script>
 </body>
 </html>

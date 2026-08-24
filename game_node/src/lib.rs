@@ -7,6 +7,9 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+use std::cell::RefCell;
+
 
 use bevy::{
     asset::AssetMetaCheck,
@@ -56,10 +59,42 @@ use crate::{
     },
     utils::{
         debug_functions::DebugFunctionsPlugin,
-        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions, PreloadedTextures, RenderTargetImage, FixedFullscreenActive},
+        objects::{DoorWinEntities, RoundStartTimestamp, GameStateLocal, GameConditions, PreloadedTextures, RenderTargetImage, FixedFullscreenActive, TexturePreloadManifest},
         systems_logic::SystemsLogicPlugin,
     },
 };
+
+#[cfg(target_arch = "wasm32")]
+thread_local! {
+    static WEB_REQUIRED_TEXTURE_INDICES: RefCell<Option<Vec<u32>>> = const { RefCell::new(None) };
+}
+
+/// Supply the complete set of texture indices referenced by the loaded trial
+/// configuration. This must be called by the web controller before
+/// `wasm_main()` starts Bevy.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn set_required_texture_indices(indices: Vec<u32>) {
+    WEB_REQUIRED_TEXTURE_INDICES.with(|required| {
+        *required.borrow_mut() = Some(indices);
+    });
+}
+
+fn texture_preload_manifest() -> TexturePreloadManifest {
+    #[cfg(target_arch = "wasm32")]
+    {
+        return WEB_REQUIRED_TEXTURE_INDICES.with(|required| {
+            required
+                .borrow()
+                .as_ref()
+                .map(|indices| TexturePreloadManifest::from_indices(indices.iter().copied()))
+                .unwrap_or_default()
+        });
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    TexturePreloadManifest::default()
+}
 
 /// Build the Bevy App with all plugins and resources.
 /// Shared between native (`main()`) and WASM (`wasm_main()`).
@@ -123,6 +158,7 @@ pub fn build_app() -> App {
     .insert_resource(GameConditions::default())
     .insert_resource(GameStateLocal::default())
     .insert_resource(PreloadedTextures::default())
+    .insert_resource(texture_preload_manifest())
     .insert_resource(crate::utils::warmup::WarmupState::default())
     .insert_resource(crate::utils::objects::CameraShakeState::default())
     .insert_resource(crate::utils::objects::LoadingCountdown::default())

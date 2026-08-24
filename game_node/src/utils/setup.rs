@@ -9,16 +9,20 @@ use bevy::render::render_resource::PrimitiveTopology;
 use shared::DecorationShape;
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
-use crate::utils::load_assets::{load_texture_set, natural_material_tiled};
+use crate::utils::load_assets::{color_mask_tint, natural_material_tiled};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::utils::load_assets::load_texture_set;
 use crate::utils::objects::PreloadedTextures;
 use shared::Texture;
 use shared::constants::{
-    backdrop_constants::{BACKGROUND_TEXTURE, BACKGROUND_TILE, PLATFORM_TEXTURE, PLATFORM_TILE},
+    backdrop_constants::{BACKGROUND_TILE, PLATFORM_TILE},
     lighting_constants::{
         GLOBAL_AMBIENT_LIGHT_INTENSITY, SHADOWS_ENABLED, SPOTLIGHT_LIGHT_INTENSITY,
     },
     object_constants::GROUND_Y,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use shared::constants::backdrop_constants::{BACKGROUND_TEXTURE, PLATFORM_TEXTURE};
 use crate::shared_memory::shared_memory_reader::SharedMemResource;
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid.
@@ -27,25 +31,36 @@ pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
     asset_server: Res<AssetServer>,
 ) {
     // Ground. Texture and tint are re-applied from the level config at every
     // trial reset (`apply_backdrops`); these are just the defaults.
-    let marble = load_texture_set(&asset_server, &PLATFORM_TEXTURE.asset_folder());
+    #[cfg(not(target_arch = "wasm32"))]
+    let platform_material = {
+        let texture = load_texture_set(&asset_server, &PLATFORM_TEXTURE.asset_folder());
+        natural_material_tiled(&texture, PLATFORM_TILE)
+    };
+    #[cfg(target_arch = "wasm32")]
+    let platform_material = StandardMaterial::default();
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 200.0))),
-        MeshMaterial3d(materials.add(StandardMaterial {
-            ..natural_material_tiled(&marble, PLATFORM_TILE)
-        })),
+        MeshMaterial3d(materials.add(platform_material)),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
         Backdrop::Platform,
     ));
 
     // Wall
-    let metal = load_texture_set(&asset_server, &BACKGROUND_TEXTURE.asset_folder());
+    #[cfg(not(target_arch = "wasm32"))]
+    let background_material = {
+        let texture = load_texture_set(&asset_server, &BACKGROUND_TEXTURE.asset_folder());
+        natural_material_tiled(&texture, BACKGROUND_TILE)
+    };
+    #[cfg(target_arch = "wasm32")]
+    let background_material = StandardMaterial::default();
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 40.0, 50.0, 64))),
-        MeshMaterial3d(materials.add(natural_material_tiled(&metal, BACKGROUND_TILE))),
+        MeshMaterial3d(materials.add(background_material)),
         Transform::from_xyz(0.0, GROUND_Y, 0.0),
         Backdrop::Background,
     ));
@@ -161,12 +176,7 @@ fn apply_backdrops(
 /// the mask colour at `a = 1`.
 fn mask_tint(mask: [u32; 4]) -> Color {
     let [r, g, b, a] = mask.map(f32::from_bits);
-    let a = a.clamp(0.0, 1.0);
-    Color::srgb(
-        1.0 + (r - 1.0) * a,
-        1.0 + (g - 1.0) * a,
-        1.0 + (b - 1.0) * a,
-    )
+    color_mask_tint(Color::srgba(r, g, b, a))
 }
 
 /// Constructs a `PyramidConfig` from the current local game state

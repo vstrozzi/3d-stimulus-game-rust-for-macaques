@@ -1,7 +1,7 @@
 //! This file defines the various objects, resources, and components used in the game.
 use bevy::prelude::*;
 use std::time::Duration;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use shared::{SharedGameState, SharedGameStateLocal, DecorationShape, Texture};
 use crate::utils::load_assets::TextureSet;
 
@@ -13,6 +13,58 @@ pub struct PreloadedTextures(pub HashMap<Texture, TextureSet>);
 impl PreloadedTextures {
     pub fn get(&self, tex: Texture) -> &TextureSet {
         self.0.get(&tex).expect("texture not preloaded")
+    }
+}
+
+/// Texture variants the web build should fetch before starting Bevy.
+///
+/// `None` preserves the native preload-all behavior. The web controller sets
+/// `Some(...)` from every texture referenced by the loaded trials file. The
+/// two structural materials are always included because the pyramid base and
+/// top use them independently of trial configuration.
+#[derive(Resource, Clone, Default)]
+pub struct TexturePreloadManifest(pub Option<HashSet<Texture>>);
+
+impl TexturePreloadManifest {
+    pub fn from_indices(indices: impl IntoIterator<Item = u32>) -> Self {
+        let mut textures: HashSet<_> = indices
+            .into_iter()
+            .map(Texture::from_u32)
+            .collect();
+        textures.insert(Texture::Wood035_1K);
+        textures.insert(Texture::Metal061B_1K);
+        Self(Some(textures))
+    }
+
+    pub fn includes(&self, texture: Texture) -> bool {
+        self.0
+            .as_ref()
+            .map(|textures| textures.contains(&texture))
+            .unwrap_or(true)
+    }
+}
+
+#[cfg(test)]
+mod texture_preload_manifest_tests {
+    use super::*;
+
+    #[test]
+    fn native_default_includes_every_registered_texture() {
+        let manifest = TexturePreloadManifest::default();
+        assert!(manifest.includes(Texture::PavingStones143_1K));
+    }
+
+    #[test]
+    fn web_manifest_includes_requested_structural_and_invalid_fallback_textures() {
+        let manifest = TexturePreloadManifest::from_indices([
+            Texture::Tiles128B_1K as u32,
+            u32::MAX,
+        ]);
+        assert!(manifest.includes(Texture::Tiles128B_1K));
+        assert!(manifest.includes(Texture::Wood035_1K));
+        assert!(manifest.includes(Texture::Metal061B_1K));
+        assert!(manifest.includes(Texture::WoodFloor057_1K));
+        assert!(!manifest.includes(Texture::PavingStones143_1K));
     }
 }
 

@@ -13,7 +13,7 @@ use crate::utils::game_functions::{
 use crate::utils::setup::setup_environment;
 use crate::utils::fog::{setup_ambient_motes, setup_fog, update_ambient_motes, update_fog, update_fireflies, FireflyState};
 use crate::utils::handle_commands::{handle_check_alignment, handle_reset_command, handle_animation_door_command, handle_blank_screen, handle_stop_rendering, handle_rotation, handle_zoom};
-use crate::utils::load_assets::{preload_all_textures, check_scene_ready, load_sounds, update_background_music_volume};
+use crate::utils::load_assets::{preload_required_textures, check_scene_ready, load_sounds, update_background_music_volume};
 use crate::utils::warmup::{spawn_warmup_scene, tick_warmup};
 
 /// Plugin for managing all the game systems.config
@@ -32,7 +32,7 @@ impl Plugin for SystemsLogicPlugin {
                     spawn_persistent_camera,
                     setup_fog,
                     setup_environment,
-                    preload_all_textures,
+                    preload_required_textures,
                     load_sounds,
                     spawn_warmup_scene,
                     spawn_score_bar_pool,

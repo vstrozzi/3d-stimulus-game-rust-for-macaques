@@ -3,6 +3,7 @@ use bevy::audio::Volume;
 use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, ImageAddressMode};
 use bevy::math::Affine2;
 use crate::{PreloadedTextures, GameConditions, GameStateLocal};
+use crate::utils::objects::TexturePreloadManifest;
 use crate::utils::objects::{GameEntity, LoadingCountdown, LoadingCountdownText};
 use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::helpers::spawn_blank_screen;
@@ -168,10 +169,61 @@ pub fn natural_material_tiled(tex: &TextureSet, tile: f32) -> StandardMaterial {
     }
 }
 
-/// Tinted look grain detail from texture, hue from base_color
+/// Convert an RGBA color mask into the opaque multiplier used by materials.
+/// Alpha is mask strength: 0 keeps the authored texture color (white
+/// multiplier), while 1 applies the selected RGB fully.
+pub fn color_mask_tint(mask: Color) -> Color {
+    let mask = mask.to_srgba();
+    let strength = mask.alpha.clamp(0.0, 1.0);
+    Color::srgb(
+        1.0 + (mask.red - 1.0) * strength,
+        1.0 + (mask.green - 1.0) * strength,
+        1.0 + (mask.blue - 1.0) * strength,
+    )
+}
+
+#[cfg(test)]
+mod color_mask_tests {
+    use super::color_mask_tint;
+    use bevy::prelude::Color;
+
+    fn assert_rgb(actual: Color, expected: [f32; 3]) {
+        let actual = actual.to_srgba();
+        for (value, expected) in [actual.red, actual.green, actual.blue]
+            .into_iter()
+            .zip(expected)
+        {
+            assert!((value - expected).abs() < 1e-6, "{value} != {expected}");
+        }
+        assert!((actual.alpha - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn zero_strength_keeps_the_texture_untinted() {
+        assert_rgb(color_mask_tint(Color::srgba(0.2, 0.4, 0.6, 0.0)), [1.0; 3]);
+    }
+
+    #[test]
+    fn half_strength_interpolates_from_white_to_mask_rgb() {
+        assert_rgb(
+            color_mask_tint(Color::srgba(0.2, 0.4, 0.6, 0.5)),
+            [0.6, 0.7, 0.8],
+        );
+    }
+
+    #[test]
+    fn full_strength_applies_mask_rgb_without_transparency() {
+        assert_rgb(
+            color_mask_tint(Color::srgba(0.2, 0.4, 0.6, 1.0)),
+            [0.2, 0.4, 0.6],
+        );
+    }
+}
+
+/// Tinted texture whose RGBA tint is interpreted as a color mask.
 pub fn tinted_material(tex: &TextureSet, tint: Color) -> StandardMaterial {
     StandardMaterial {
-        base_color: tint,
+        base_color: color_mask_tint(tint),
         base_color_texture: tex.color_tintable.clone(),
         ..natural_material(tex)
     }
@@ -187,12 +239,17 @@ pub fn tinted_material_tiled(tex: &TextureSet, tint: Color, tile: f32) -> Standa
 
 /// Load every texture set at startup and keep the handles in a resource
 /// This prevents Bevy from GC-ing images between resets, eliminating latency at WASM trials's start
-pub fn preload_all_textures(asset_server: Res<AssetServer>, mut preloaded: ResMut<PreloadedTextures>) {
+pub fn preload_required_textures(
+    asset_server: Res<AssetServer>,
+    manifest: Res<TexturePreloadManifest>,
+    mut preloaded: ResMut<PreloadedTextures>,
+) {
     use shared::Texture;
     use strum::IntoEnumIterator;
-    for tex in Texture::iter() {
+    for tex in Texture::iter().filter(|&tex| manifest.includes(tex)) {
         preloaded.0.insert(tex, load_texture_set(&asset_server, &tex.asset_folder()));
     }
+    info!("Preloading {} of {} registered texture sets", preloaded.0.len(), Texture::iter().count());
 }
 
 /// Gates `is_scene_ready` behind a black pre-start countdown.
@@ -262,16 +319,7 @@ pub fn check_scene_ready(
     // Phase 1: wait for all assets, then start the countdown. The overlay
     // already exists; Phase 2 swaps its "Loading textures…" text to the number.
     if countdown.start.is_none() {
-        use shared::Texture;
-        let gs = &local_game_struct.0;
-        // All six texture slots (face + decoration) used by the current trial config must be loaded
-        let textures_loaded = gs.textures.iter()
-            .chain(gs.decorations_texture.iter())
-            .all(|&t| {
-                preloaded.0.get(&Texture::from_u32(t))
-                    .map(|set| set.all_loaded(&images))
-                    .unwrap_or(false)
-            });
+        let textures_loaded = preloaded.0.values().all(|set| set.all_loaded(&images));
         if !(textures_loaded && sounds.all_loaded(&audio_sources)) {
             return;
         }
@@ -279,7 +327,10 @@ pub fn check_scene_ready(
         countdown.start = Some(time.elapsed());
 
         // Fake pyramid (a GameEntity, cleaned up at the end) to warm the path.
-        let config = build_pyramid_config(&local_game_struct.0);
+        let mut config = build_pyramid_config(&local_game_struct.0);
+        let warmup_texture = *preloaded.0.keys().next().expect("at least one texture") as u32;
+        config.face_textures.fill(warmup_texture);
+        config.decoration_textures.fill(warmup_texture);
         spawn_pyramid(&mut commands, &mut meshes, &mut materials, &preloaded, &config);
 
         // Muted looping background music to warm the audio graph; unmuted at

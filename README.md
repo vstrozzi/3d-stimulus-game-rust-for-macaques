@@ -95,6 +95,12 @@ Create Custom levels by using trials_editor.html
 
 python game_node/src/scripts/prepare_bevy_textures.py ./Metal061B_1K-JPG
 
+This also creates `preview.webp` and `preview_tintable.webp` (maximum 128px)
+for the trial editor. To generate only those previews for existing processed
+textures:
+
+python game_node/src/scripts/prepare_bevy_textures.py --previews-only game_node/assets/textures/*
+
 
 ### Prepare / equalize sounds
 

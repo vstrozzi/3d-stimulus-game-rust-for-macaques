@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-prepare_bevy_textures.py  (v4 — with 1x1 neutral fallback textures)
+prepare_bevy_textures.py  (v5 — Bevy maps + lightweight editor previews)
 
 Usage:
-  python prepare_bevy_textures.py <folder>          # single folder
-  python prepare_bevy_textures.py <parent_dir>/* # all subfolders (shell glob)
-  python prepare_bevy_textures.py * # all subfolders in cwd
+  python prepare_bevy_textures.py <folder>             # full processing
+  python prepare_bevy_textures.py <parent_dir>/*        # all subfolders
+  python prepare_bevy_textures.py --previews-only <folder> [...]
 """
 
 import sys
@@ -28,6 +28,9 @@ SUFFIXES = {
     "ao":           ["_AmbientOcclusion", "_AO"],
     "displacement": ["_Displacement", "_Disp"],
 }
+
+PREVIEW_MAX_SIZE = (128, 128)
+PREVIEW_WEBP_QUALITY = 82
 
 
 def find_texture(folder: Path, key: str) -> Path | None:
@@ -68,6 +71,33 @@ def save_default_gray(color: int, out_path: Path, label: str):
     arr = np.array([[color]], dtype=np.uint8)
     Image.fromarray(arr, "L").save(out_path)
     print(f"    + {out_path.name}  (generated fallback: {label})")
+
+
+def save_editor_preview(source_path: Path, out_path: Path):
+    """Save a small browser-only preview without changing the source aspect ratio."""
+    image = Image.open(source_path).convert("RGB")
+    image.thumbnail(PREVIEW_MAX_SIZE, Image.Resampling.LANCZOS)
+    image.save(out_path, "WEBP", quality=PREVIEW_WEBP_QUALITY, method=6)
+    print(f"    ✓ {out_path.name}  ({image.width}x{image.height}, editor preview)")
+
+
+def write_editor_previews(out_dir: Path) -> bool:
+    sources = {
+        "preview.webp": out_dir / "color.png",
+        "preview_tintable.webp": out_dir / "color_tintable.png",
+    }
+    if not out_dir.is_dir() or not all(path.is_file() for path in sources.values()):
+        return False
+    for output_name, source_path in sources.items():
+        save_editor_preview(source_path, out_dir / output_name)
+    return True
+
+
+def prepare_previews_only(folder: Path) -> bool:
+    if not folder.is_dir() or folder.name == "bevy_ready":
+        return False
+    print(f"\n  📂 {folder.name}")
+    return write_editor_previews(folder / "bevy_ready")
 
 
 def srgb_to_linear(arr: np.ndarray) -> np.ndarray:
@@ -124,6 +154,9 @@ def prepare(folder: Path) -> bool:
     else:
         save_default_rgb((255, 255, 255), out_dir / "color.png", "white")
         save_default_rgb((255, 255, 255), out_dir / "color_tintable.png", "white")
+
+    # Small browser-only images used by the trial editor's material cubes.
+    write_editor_previews(out_dir)
 
     # 2. NORMAL
     if normal_path:
@@ -190,7 +223,9 @@ def main():
         print(__doc__)
         sys.exit(1)
 
-    folders = resolve_folders(sys.argv[1:])
+    args = sys.argv[1:]
+    previews_only = "--previews-only" in args
+    folders = resolve_folders(arg for arg in args if arg != "--previews-only")
 
     if not folders:
         print("No valid directories found in the provided arguments.")
@@ -200,7 +235,7 @@ def main():
 
     success, skipped = 0, 0
     for folder in folders:
-        ok = prepare(folder)
+        ok = prepare_previews_only(folder) if previews_only else prepare(folder)
         if ok:
             success += 1
         else:
@@ -219,6 +254,11 @@ Bevy StandardMaterial fields:
                             set metallic = 1.0 and perceptual_roughness = 1.0
   occlusion.png          -> occlusion_texture           (is_srgb: false)
   displacement_inv.png   -> depth_map                   (is_srgb: false)
+
+Trial editor fields:
+
+  preview.webp           -> natural-color cube preview (max 128px, WebP)
+  preview_tintable.webp  -> color-mask cube preview     (max 128px, WebP)
 """)
 
 

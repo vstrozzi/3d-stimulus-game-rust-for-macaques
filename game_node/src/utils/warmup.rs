@@ -1,5 +1,5 @@
 //! Startup warmup phase for GPU.
-//! Spawn a sub-pixel "warmup" scene that loads every
+//! Spawn a sub-pixel "warmup" scene that loads every preselected
 //! texture + every decoration shape + the emissive pipeline. After enough
 //! frames have rendered to cache everything, the warmup entities are
 //! despawned and `WarmupState.complete` is set. `check_scene_ready` is
@@ -8,8 +8,7 @@
 //!
 
 use bevy::prelude::*;
-use shared::{DecorationShape, Texture};
-use strum::IntoEnumIterator;
+use shared::DecorationShape;
 
 use crate::shared_memory::shared_memory_writer::RenderFrameCounterResource;
 use crate::utils::decorations::create_decoration_mesh;
@@ -45,10 +44,9 @@ pub fn spawn_warmup_scene(
     let tiny_scale = Vec3::splat(0.001);
     let origin = Vec3::new(0.0, 1.0, 0.0);
 
-    // One small cube per texture,  forces GPU upload of every `Texture`
-    // variant via natural_material's full PBR slots.
-    for (i, tex) in Texture::iter().enumerate() {
-        let texset = preloaded.get(tex);
+    // One small cube per preloaded texture forces GPU upload of every map in
+    // the trial manifest via natural_material's full PBR slots.
+    for (i, texset) in preloaded.0.values().enumerate() {
         let mat = materials.add(natural_material(texset));
         let mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0).mesh().build());
         commands.spawn((
@@ -62,7 +60,7 @@ pub fn spawn_warmup_scene(
 
     // One small mesh per DecorationShape, exercises every shape's
     // vertex layout and the tinted+tiled material pipeline.
-    let dec_tex = preloaded.get(Texture::iter().next().expect("at least one texture"));
+    let dec_tex = preloaded.0.values().next().expect("at least one texture");
     let shapes = [
         DecorationShape::Circle,
         DecorationShape::Square,
@@ -105,7 +103,7 @@ pub fn spawn_warmup_scene(
     ));
 
     info!("Warmup scene spawned ({} textures + {} shapes + 1 emissive)",
-          Texture::iter().count(), shapes.len());
+          preloaded.0.len(), shapes.len());
 }
 
 /// Each frame, advance the warmup state machine:

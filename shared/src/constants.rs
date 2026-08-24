@@ -139,8 +139,10 @@ pub mod pyramid_constants {
     // Angle increment of each side of the pyramid's base in radians
     pub const PYRAMID_ANGLE_INCREMENT_RAD: f32 = 120.0 * (std::f32::consts::PI / 180.0);
 
+    // RGBA color masks for each face. Alpha is mask strength, not
+    // transparency: 0 keeps the texture color and 1 applies RGB fully.
     pub const PYRAMID_COLORS: [[f32; 4]; 3] = [
-    [1.0, 0.0, 0.0, 1.0], // red, green, blue, alpha
+    [1.0, 0.0, 0.0, 1.0], // red, green, blue, mask strength
     [0.0, 1.0, 0.0, 1.0], // green
     [0.0, 0.0, 1.0, 1.0], // blue
     ];
@@ -172,6 +174,7 @@ pub mod pyramid_constants {
         DecorationShape::Star,
     ];
 
+    // Same RGBA color-mask semantics as PYRAMID_COLORS.
     pub const PYRAMID_DECORATIONS_COLOR: [[f32; 4]; 3] = [
         [1.0, 1.0, 0.0, 1.0], // yellow
         [1.0, 0.0, 1.0, 1.0], // magenta

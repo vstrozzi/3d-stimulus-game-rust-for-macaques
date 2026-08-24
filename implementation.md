@@ -32,7 +32,7 @@ monkey_3d_game/
 │           ├── setup.rs            setup_environment + setup_round
 │           ├── pyramid.rs          pyramid geometry + decoration placement
 │           ├── decorations.rs      shape meshes + per-decoration rotation
-│           ├── load_textures.rs    PBR texture set loading + check_scene_ready
+│           ├── load_assets.rs      PBR texture/audio loading + check_scene_ready
 │           ├── warmup.rs           sub-pixel warmup scene (pipeline pre-compile)
 │           ├── handle_commands.rs  reset / animation / rotation / blank / stop
 │           ├── game_functions.rs   door animation, score bar
@@ -140,6 +140,7 @@ stored as `f32::to_bits()` and re-read with `f32::from_bits()`.
 | `decorations_rotation` | controller | `[i32; 3]` per face; `-1` = random (seeded), else degrees. |
 | `camera_rotation_sense` | controller | `i32 ∈ {-1, +1}`; multiplies rotation speed. |
 | `target_door` | controller | Index of the door to align to. |
+| `colors`, `decorations_color` | controller | Per-face `[r,g,b,a]` color masks; `a` is mask strength, not transparency. `0` keeps the texture color and `1` applies RGB fully. |
 | Door / pyramid / texture indices | controller | See `shared/src/lib.rs:153+`. |
 | `session_time_left` | controller | f32 bits, `1.0` = full session left, `<0` hides the clock. Live-synced. |
 | `correct_streak` | controller | Session-wide correct/wrong balance (correct +1, wrong −1, floor 0). Persists across levels and drives ambient particle density. Live-synced. |
@@ -173,7 +174,7 @@ rotations are seeded with `GRID_RANDOM_ROTATION_SEED = 0xDEC0_DEAD`
 Startup:        init_shared_memory_system
                 spawn_persistent_camera
                 setup_environment
-                preload_all_textures
+                preload_required_textures
                 spawn_warmup_scene
                 spawn_score_bar_pool         (level chain, top-center — see §14e)
                 spawn_left_score_bar         (trial bar, bottom — see §14e)
@@ -633,8 +634,8 @@ the drift definition is simpler than it used to be. Remaining causes:
 
 ### Build / deployment
 - **Gzipped WASM shipped**. `game_node/pkg/game_node_bg.wasm.gz` is the
-  artefact loaded in production; `controller_main.js::start()` fetches
-  the `.wasm.gz` URL and decompresses in-browser via
+  artefact loaded in production; `controller_main.js::start()` and the trial
+  editor bootstrap fetch the `.wasm.gz` URL and decompress it in-browser via
   `new Response(blob.stream().pipeThrough(new DecompressionStream("gzip")))`.
   Reason: GitHub Pages does not gzip `.wasm` responses, so we
   pre-compress and inflate client-side. Build step:
@@ -824,8 +825,10 @@ None of the §8 timing semantics changed.
   actually used, even in entropy mode) is stamped into each trial log
   and each `trials_runs[]` entry as `level_random_seed` so a recorded
   session can be replayed by copying the int back into the editor.
-- **`fixed.score_bar_max`** — editor int (`0` hides the bar). Persists
-  across levels; the bar value is session-scoped.
+- **`fixed.score_bar_max`** — legacy JSON key now exposed as a **Show/Hide**
+  selector. `0` hides the bottom trial-progress bar and `1` shows it; other
+  non-zero magnitudes have no separate meaning and are normalized to `1` by
+  the editor.
 - **`fixed.show_progress_bar`** — *removed in §14e; the key is ignored by both
   controllers and stripped by the editor on import.* Was: bool, default `true`, hides the
   trial-progress dots column without touching chain logic. Implemented
@@ -860,7 +863,7 @@ None of the §8 timing semantics changed.
   - `shake_amplitude: AtomicU32` (f32 bits), `shake_duration: AtomicU32`
     (f32 bits) — per-level config.
 - **`SCORE_BAR_DEFAULT_MAX = 0`** in
-  [shared/src/constants.rs](shared/src/constants.rs) so the left bar is
+  [shared/src/constants.rs](shared/src/constants.rs) so the bottom trial bar is
   invisible before the controller writes a real max.
 
 ### Live SHM sync (was a latent bug)
@@ -951,40 +954,30 @@ Damage-style shake on wrong attempts. Lives in
   `cosine_alignment <= threshold` (same predicate that decrements the
   score bar). `shake=false` on correct.
 
-### Left-side score bar
-New UI element ([ui.rs](game_node/src/utils/ui.rs)):
-`LeftScoreBarRoot` (border + bg) containing a single `LeftScoreBarFill`
-that grows from the bottom. `update_left_score_bar`:
-- Hides the root when `score_bar_max == 0`.
-- Lerps `LIGHT_RED ↔ LIGHT_GREEN` proportional to `value/max`.
-- Alpha is `LEFT_SCORE_BAR_ALPHA = 0.30` from
-  [shared/src/constants.rs](shared/src/constants.rs).
-- Controller maintains `scoreBarValue` (Python: `self.score_bar_value`;
-  JS: `scoreBarValue`). Initialized to `score_bar_max / 2` on session
-  start, persists across levels, `+1` on correct check, `-1` on wrong
-  check, clamped to `[0, max]`.
+### Bottom trial-progress bar
+The component names retain their historical `LeftScoreBar*` prefix, but the
+bar is centered at the **bottom** of the screen and fills left to right. It
+shows the mean trial position across all objects in the current level. The
+controller sends a fixed 0–1000 scale; `fixed.score_bar_max` only controls
+visibility. `update_left_score_bar` hides the root when the value is `0`,
+changes the fill from red to green as the level progresses, and blinks the
+step being gained or lost during the door animation.
 
-### Trial-progress dots bar moved to the left
-The existing top-of-screen progress bar is now a **vertical** column
-just to the right of the score bar (`TRIAL_BAR_LEFT_PX =
-LEFT_SCORE_BAR_LEFT_PX + LEFT_SCORE_BAR_WIDTH_PX + 10`). Fixed vertical
-span regardless of trial count. Layout:
-- Outer node: `FlexDirection::Row` to hold one or more columns.
-- Each column: `FlexDirection::ColumnReverse` (fills bottom→top),
-  `PROGRESS_BAR_WRAP_AROUND_SIZE` dots per column.
-- When `progress_bar_size > WRAP_AROUND_SIZE`, the next 20 dots wrap
-  into a new column to the right of the previous one — vertical extent
-  is unchanged.
-- `update_score_bar` is untouched; it still just toggles
-  `Node.display` per dot/chain index.
+### Top level-progress row
+The other progress display is centered at the **top**. It shows one circle per
+level, fills them left to right as levels finish, and wraps to another row when
+needed. This display is always present; the retired `show_progress_bar` key no
+longer controls it.
 
-### Editor changes
-[trial_editor.html](trials_config/trial_editor.html) gained: editable
-`pr_switch`, `start_object` select (Random + chain indices),
-`score_bar_max` input (min 0), `shake_amplitude` + `shake_duration`
-inputs (in the Animation group), per-trial `show_all` checkbox.
-Backfill in `enforceLevel` populates every new field on import so older
-JSONL files still validate.
+### Editor settings
+[trial_editor.html](trials_config/trial_editor.html) exposes `start_object`
+(Random or an object index), a Show/Hide control backed by `score_bar_max`,
+camera shake settings, and the per-trial `show_all` option. Hover text describes
+the current runtime behavior and valid ranges. `enforceLevel` fills missing
+fields and normalizes invalid imported values. The retired
+`pr_switching_chain` and `show_progress_bar` keys are stripped on import;
+`start_orient` remains a `-1` sentinel because the controller selects and logs
+the real orientation for every trial.
 
 ### Controller-side housekeeping
 - Both `_CMD_KEYS` lists (module-level and class-level in Python; the
@@ -1164,6 +1157,102 @@ The SHM layout **and** the PyO3 signature both changed: a stale
 `monkey_shared.so` now fails on `monkey_shared.PLATFORM_TEXTURE`, and the web
 bundle and the wasm must be deployed together (the JS reads its field offsets
 from the wasm).
+
+---
+
+## 14f. ambientCG backdrop texture library (2026-08-24)
+
+Twenty-eight ambientCG materials were downloaded as `1K-JPG` archives and
+processed with `game_node/src/scripts/prepare_bevy_textures.py`. Each source
+folder therefore has a `bevy_ready/` directory containing `color.png`,
+`color_tintable.png`, `normal_gl.png`, `metallic_roughness.png`,
+`occlusion.png`, `displacement_inv.png`, plus the editor-only 128px WebP files
+`preview.webp` and `preview_tintable.webp`. `Tiles035` and `Tiles053` do not
+provide an AO map; the processor generated its neutral 1x1 white fallback. To
+backfill only the WebPs without rewriting existing PBR outputs, run:
+
+```
+python game_node/src/scripts/prepare_bevy_textures.py --previews-only \
+  game_node/assets/textures/*
+```
+
+`Texture` indices are persisted in JSONL/SHM and remain append-only. The new
+indices, in the order supplied, are:
+
+```
+13 PavingStones143_1K    14 PavingStones016_1K    15 PavingStones142_1K
+16 Tiles128B_1K          17 Tiles035_1K            18 PavingStones070_1K
+19 Tiles070_1K           20 PavingStones027_1K    21 PavingStones055_1K
+22 Tiles053_1K           23 Tiles104_1K            24 Tiles019_1K
+25 Rocks023_1K           26 Tiles120_1K            27 Tiles118_1K
+28 Tiles099_1K           29 Rocks004_1K            30 PavingStones148_1K
+31 Rocks022_1K           32 Rocks005_1K            33 Tiles101_1K
+34 Tiles103_1K           35 Rocks008_1K            36 PavingStones072_1K
+37 Tiles124_1K           38 PavingStones049_1K    39 PavingStones107_1K
+40 Tiles102_1K
+```
+
+The trial editor needs no separate texture list: `editor_constants()` exposes
+the Rust enum names, and the editor builds its face, decoration, platform, and
+background selectors from that array. Each selector shows the resulting
+material on a compact shaded three-face cube and updates it immediately:
+faces/decorations preview `preview_tintable.webp` multiplied by their selected
+color mask, while backdrops preview `preview.webp` multiplied by the same
+alpha-weighted mask value used by Bevy. For all three material types, alpha is
+mask strength rather than surface transparency: `0` keeps the texture's source
+color and `1` applies the selected RGB fully. The complete 44-material preview
+pair is about 0.35 MiB instead of 140.67 MiB for the corresponding full color
+PNGs.
+
+Below the per-level Background controls, the editor also composes those same
+preview maps into lightweight CSS 3D scenes, one window per object. Each is
+labelled **Approximate preview** and shows three square material faces with an
+opaque triangular `Metal061B_1K` lid on a regular six-sided `Wood035_1K` base,
+over the configured platform and background. The lid and base use the same
+relative radii, orientation, and shared center as the game geometry. A glowing
+pentagonal reward marker sits on the configured `target_door` side of the base
+and rotates with the object, using the game's six-door angular mapping. Scene
+textures repeat instead of being stretched. The model rotates
+automatically; pointer/touch dragging changes its view, while double-clicking
+(or pressing Enter/Space when focused) pauses or resumes it. Its faces include
+a compact sample of the configured decoration material, color, shape, count,
+size, and rotation. Decoration seed `0` uses a balanced square grid; non-zero
+seeds generate a deterministic, evenly dispersed random layout, and random
+rotation is applied separately to every mark. Selecting another level rebuilds
+the windows from that level, and material/color/decoration edits refresh them
+immediately. Material edits update the existing face elements in place, so
+they preserve the current drag angle and do not restart the rotating object or
+its texture requests. The triangular lid and wooden base share the prism's top
+and bottom planes, respectively. This is an editor approximation rather than a
+Bevy render, so it adds no 3D-library or full-resolution texture download;
+reduced-motion browser settings stop the automatic rotation.
+
+Texture controls use an editor-owned floating picker rather than the browser's
+native `<select>` popup. Opening it and hovering or keyboard-focusing a material
+shows a larger composited preview before selection. Changes to face or
+decoration mask strength are reflected while the picker is open; only that
+lightweight WebP is requested.
+
+Texture files are not embedded in `game_node_bg.wasm`. On web builds the Bevy
+asset root is `game_node/assets`, so they are separate HTTP requests. After
+parsing every level in the selected JSONL, `controller_main.js` collects each
+face, decoration, platform, and background texture index and passes that
+manifest to Rust with `set_required_texture_indices()` before `wasm_main()`.
+`preload_required_textures` and the warmup scene touch only that set plus the
+two structural materials used independently of trial configuration
+(`Wood035_1K` for the base and `Metal061B_1K` for the top). Invalid indices
+still resolve to the existing `WoodFloor057_1K` fallback. This collection is
+session-wide, not just for the first level, so later resets cannot encounter an
+unloaded configured material. Native builds retain preload-all behavior because
+their assets are read from local disk rather than downloaded.
+
+The web environment initially uses untextured placeholder backdrop materials;
+the first reset applies the configured platform/background maps. This avoids
+requesting the old default backdrop textures when the JSONL selected different
+ones. The original downloaded maps, source preview images, `.blend`, `.usdc`,
+etc. are served only if explicitly requested and are not part of the automatic
+game download. The trial editor is separate: opening it requests the lightweight
+WebP for each distinct texture currently displayed.
 
 ---
 

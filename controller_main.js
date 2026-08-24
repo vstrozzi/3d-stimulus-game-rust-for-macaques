@@ -17,6 +17,7 @@
 
 import init, {
   create_shared_memory_wasm,
+  set_required_texture_indices,
   WebSharedMemory,
   wasm_main,
   controller_constants,
@@ -28,7 +29,7 @@ import init, {
 // glue against a cached old wasm fails the same way
 // ("__wasm_bindgen_func_elem_* is not a function"). Needs no bumping on
 // later rebuilds; the server's ETag handles those.
-} from "./game_node/pkg/game_node.js?v=20260822";
+} from "./game_node/pkg/game_node.js?v=20260824-color-mask";
 
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -2462,6 +2463,26 @@ async function loadLevels() {
   }
 }
 
+/** Return every texture index used anywhere in the loaded session. Bevy also
+ *  adds its hard-wired structural materials before starting the preload. */
+function collectRequiredTextureIndices() {
+  const indices = new Set();
+  const add = (value) => {
+    const number = Number(value);
+    if (Number.isFinite(number)) indices.add(Math.max(0, Math.round(number)));
+  };
+
+  for (const level of levels) {
+    add(level.fixed.platform_texture);
+    add(level.fixed.background_texture);
+    for (const object of level.objects) {
+      for (const texture of (object.textures || [])) add(texture);
+      for (const texture of (object.decorations_texture || [])) add(texture);
+    }
+  }
+  return Uint32Array.from([...indices].sort((a, b) => a - b));
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // INITIALIZATION
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2472,7 +2493,7 @@ async function start() {
   setLoadingStep("Downloading game (WASM)...");
   setLoadingProgress(0);
 
-  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz?v=20260822", import.meta.url);
+  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz?v=20260824-color-mask", import.meta.url);
   let wasmBuffer;
   try {
     const gzBuffer = await fetchWithProgress(wasmUrl, (loaded, total) => {
@@ -2551,6 +2572,10 @@ async function start() {
     setLoadingStep("ERROR: No levels loaded");
     return;
   }
+
+  const requiredTextures = collectRequiredTextureIndices();
+  set_required_texture_indices(requiredTextures);
+  console.log(`Trial manifest requests ${requiredTextures.length} texture sets`);
 
   // ── Step 4: Set up shared memory ─────────────────────────────────────────
   setLoadingStep("Setting up game memory...");

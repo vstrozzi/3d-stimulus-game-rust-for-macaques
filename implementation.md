@@ -174,12 +174,14 @@ rotations are seeded with `GRID_RANDOM_ROTATION_SEED = 0xDEC0_DEAD`
 Startup:        init_shared_memory_system
                 spawn_persistent_camera
                 setup_environment
-                preload_required_textures
-                spawn_warmup_scene
                 spawn_score_bar_pool         (level chain, top-center — see §14e)
                 spawn_left_score_bar         (trial bar, bottom — see §14e)
                 spawn_session_clock          (round clock, blank screen only)
                 setup_ambient_motes          (ambient particle pool)
+
+Update (once):  wait for SharedTextureManifest
+                preload_required_textures
+                spawn_warmup_scene
 
 PreUpdate:      read_shared_memory_commands       (chained)
                 read_shared_memory_game_state_local  (seq-gated, snapshot copy)
@@ -1235,20 +1237,25 @@ lightweight WebP is requested.
 
 Texture files are not embedded in `game_node_bg.wasm`. On web builds the Bevy
 asset root is `game_node/assets`, so they are separate HTTP requests. After
-parsing every level in the selected JSONL, `controller_main.js` collects each
-face, decoration, platform, and background texture index and passes that
-manifest to Rust with `set_required_texture_indices()` before `wasm_main()`.
-`preload_required_textures` and the warmup scene touch only that set plus the
-two structural materials used independently of trial configuration
+parsing every level in the selected JSONL, both controllers collect each face,
+decoration, platform, and background texture index. JavaScript and Python then
+call the same `SharedMemoryWrapper`/`WebSharedMemory` method,
+`publish_texture_manifest(...)`, which writes a fixed-size bitset into
+`SharedMemory`. The game waits for that manifest before starting asset preload,
+whether it is running as WASM or as a native executable.
+
+`preload_required_textures` and the warmup scene touch only the published set
+plus the two structural materials used independently of trial configuration
 (`Wood035_1K` for the base and `Metal061B_1K` for the top). Invalid indices
 still resolve to the existing `WoodFloor057_1K` fallback. This collection is
 session-wide, not just for the first level, so later resets cannot encounter an
-unloaded configured material. Native builds retain preload-all behavior because
-their assets are read from local disk rather than downloaded.
+unloaded configured material. Native and web therefore use the same texture
+index mapping and selection rule; the only difference is that native reads the
+selected files from disk while web requests them from the server.
 
-The web environment initially uses untextured placeholder backdrop materials;
+Both environments initially use untextured placeholder backdrop materials;
 the first reset applies the configured platform/background maps. This avoids
-requesting the old default backdrop textures when the JSONL selected different
+loading the old default backdrop textures when the JSONL selected different
 ones. The original downloaded maps, source preview images, `.blend`, `.usdc`,
 etc. are served only if explicitly requested and are not part of the automatic
 game download. The trial editor is separate: opening it requests the lightweight

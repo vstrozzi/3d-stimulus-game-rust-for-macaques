@@ -16,14 +16,11 @@ impl PreloadedTextures {
     }
 }
 
-/// Texture variants the web build should fetch before starting Bevy.
-///
-/// `None` preserves the native preload-all behavior. The web controller sets
-/// `Some(...)` from every texture referenced by the loaded trials file. The
-/// two structural materials are always included because the pyramid base and
-/// top use them independently of trial configuration.
+/// Texture variants this session needs. Both controllers publish the trial
+/// indices through shared memory; the game adds the two structural materials
+/// used by every pyramid.
 #[derive(Resource, Clone, Default)]
-pub struct TexturePreloadManifest(pub Option<HashSet<Texture>>);
+pub struct TexturePreloadManifest(pub HashSet<Texture>);
 
 impl TexturePreloadManifest {
     pub fn from_indices(indices: impl IntoIterator<Item = u32>) -> Self {
@@ -33,15 +30,19 @@ impl TexturePreloadManifest {
             .collect();
         textures.insert(Texture::Wood035_1K);
         textures.insert(Texture::Metal061B_1K);
-        Self(Some(textures))
+        Self(textures)
     }
 
     pub fn includes(&self, texture: Texture) -> bool {
-        self.0
-            .as_ref()
-            .map(|textures| textures.contains(&texture))
-            .unwrap_or(true)
+        self.0.contains(&texture)
     }
+}
+
+/// One-time startup state for the controller-driven texture preload.
+#[derive(Resource, Default)]
+pub struct TexturePreloadState {
+    pub initialized: bool,
+    pub warmup_spawned: bool,
 }
 
 #[cfg(test)]
@@ -49,13 +50,13 @@ mod texture_preload_manifest_tests {
     use super::*;
 
     #[test]
-    fn native_default_includes_every_registered_texture() {
+    fn unpublished_default_does_not_include_textures() {
         let manifest = TexturePreloadManifest::default();
-        assert!(manifest.includes(Texture::PavingStones143_1K));
+        assert!(!manifest.includes(Texture::PavingStones143_1K));
     }
 
     #[test]
-    fn web_manifest_includes_requested_structural_and_invalid_fallback_textures() {
+    fn manifest_includes_requested_structural_and_invalid_fallback_textures() {
         let manifest = TexturePreloadManifest::from_indices([
             Texture::Tiles128B_1K as u32,
             u32::MAX,

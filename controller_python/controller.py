@@ -336,6 +336,33 @@ def load_levels(trials_path=None):
     return levels, paradigm_name
 
 
+def collect_required_texture_indices(levels):
+    """Return the same sorted session texture manifest as the web controller."""
+    indices = set()
+
+    def add(value):
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(number):
+            # Match JavaScript's Math.max(0, Math.round(number)).
+            # Uint32Array.from performs the same final u32 wrapping on web.
+            indices.add(max(0, math.floor(number + 0.5)) & 0xFFFFFFFF)
+
+    for level in levels:
+        fixed = level["fixed"]
+        add(fixed.get("platform_texture"))
+        add(fixed.get("background_texture"))
+        for obj in level["objects"]:
+            for texture in obj.get("textures", []):
+                add(texture)
+            for texture in obj.get("decorations_texture", []):
+                add(texture)
+
+    return sorted(indices)
+
+
 class ControllerState(Enum):
     INIT = auto()
     WAITING_FOR_START = auto()
@@ -419,6 +446,9 @@ class MonkeyGameController:
         # what it claims (catches VRR / dropped-frame mismatches).
         # Level configuration
         self.levels, paradigm_name = load_levels()
+        required_textures = collect_required_texture_indices(self.levels)
+        self.shm_wrapper.publish_texture_manifest(required_textures)
+        print(f"Trial manifest requests {len(required_textures)} texture sets")
         self.session_info = {
             "app_start_unix_ns": self._controller_unix_start_ns,
             "platform": "native",

@@ -58,6 +58,20 @@ impl SharedMemoryWrapper {
         self.command_seq_counter = shm.command_ack.load(Ordering::Acquire);
     }
 
+    /// Publish the complete set of texture indices used by this session.
+    fn publish_texture_manifest(&self, indices: Vec<u32>) {
+        self.inner.get().texture_manifest.publish(indices);
+    }
+
+    /// Read the currently published texture indices (empty before publish).
+    fn read_texture_manifest(&self) -> Vec<u32> {
+        self.inner
+            .get()
+            .texture_manifest
+            .read_indices()
+            .unwrap_or_default()
+    }
+
     /// Read the latest game state snapshot (from game_structure_game).
     fn read_game_state(&self) -> PyResult<Py<PyAny>> {
         let shm = self.inner.get();
@@ -521,4 +535,3 @@ impl SharedMemoryWrapper {
 
         Ok(())
     }
-

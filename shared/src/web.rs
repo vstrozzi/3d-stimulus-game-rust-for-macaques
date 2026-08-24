@@ -225,6 +225,16 @@ impl WebSharedMemory {
         self.ptr as usize
     }
 
+    /// Publish the complete set of texture indices used by this session.
+    pub fn publish_texture_manifest(&self, indices: Vec<u32>) {
+        unsafe { (*self.ptr).texture_manifest.publish(indices) };
+    }
+
+    /// Read the currently published texture indices (empty before publish).
+    pub fn read_texture_manifest(&self) -> Vec<u32> {
+        unsafe { (*self.ptr).texture_manifest.read_indices().unwrap_or_default() }
+    }
+
     /// Pointer to command_seq (AtomicU64, Controller writes)
     pub fn get_command_seq_ptr(&self) -> usize {
         unsafe { &(*self.ptr).command_seq as *const _ as usize }

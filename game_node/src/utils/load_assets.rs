@@ -3,7 +3,8 @@ use bevy::audio::Volume;
 use bevy::image::{ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor, ImageAddressMode};
 use bevy::math::Affine2;
 use crate::{PreloadedTextures, GameConditions, GameStateLocal};
-use crate::utils::objects::TexturePreloadManifest;
+use crate::shared_memory::shared_memory_reader::SharedMemResource;
+use crate::utils::objects::{TexturePreloadManifest, TexturePreloadState};
 use crate::utils::objects::{GameEntity, LoadingCountdown, LoadingCountdownText};
 use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::helpers::spawn_blank_screen;
@@ -237,18 +238,29 @@ pub fn tinted_material_tiled(tex: &TextureSet, tint: Color, tile: f32) -> Standa
     }
 }
 
-/// Load every texture set at startup and keep the handles in a resource
-/// This prevents Bevy from GC-ing images between resets, eliminating latency at WASM trials's start
+/// Wait for the controller's shared-memory manifest, then load exactly those
+/// trial textures plus the game's structural base/lid textures.
 pub fn preload_required_textures(
     asset_server: Res<AssetServer>,
-    manifest: Res<TexturePreloadManifest>,
+    shm_res: Option<Res<SharedMemResource>>,
+    mut manifest: ResMut<TexturePreloadManifest>,
+    mut preload_state: ResMut<TexturePreloadState>,
     mut preloaded: ResMut<PreloadedTextures>,
 ) {
+    if preload_state.initialized {
+        return;
+    }
+
+    let Some(shm_res) = shm_res else { return };
+    let Some(indices) = shm_res.0.get().texture_manifest.read_indices() else { return };
+
+    *manifest = TexturePreloadManifest::from_indices(indices);
     use shared::Texture;
     use strum::IntoEnumIterator;
     for tex in Texture::iter().filter(|&tex| manifest.includes(tex)) {
         preloaded.0.insert(tex, load_texture_set(&asset_server, &tex.asset_folder()));
     }
+    preload_state.initialized = true;
     info!("Preloading {} of {} registered texture sets", preloaded.0.len(), Texture::iter().count());
 }
 

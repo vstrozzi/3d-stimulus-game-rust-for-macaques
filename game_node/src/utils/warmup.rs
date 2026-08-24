@@ -13,7 +13,7 @@ use shared::DecorationShape;
 use crate::shared_memory::shared_memory_writer::RenderFrameCounterResource;
 use crate::utils::decorations::create_decoration_mesh;
 use crate::utils::load_assets::{natural_material, tinted_material_tiled};
-use crate::utils::objects::{PreloadedTextures, WarmupEntity};
+use crate::utils::objects::{PreloadedTextures, TexturePreloadState, WarmupEntity};
 
 /// Tracks warmup progress. `complete` is what `check_scene_ready` gates on.
 #[derive(Resource, Default)]
@@ -40,7 +40,12 @@ pub fn spawn_warmup_scene(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     preloaded: Res<PreloadedTextures>,
+    mut preload_state: ResMut<TexturePreloadState>,
 ) {
+    if !preload_state.initialized || preload_state.warmup_spawned {
+        return;
+    }
+
     let tiny_scale = Vec3::splat(0.001);
     let origin = Vec3::new(0.0, 1.0, 0.0);
 
@@ -104,6 +109,7 @@ pub fn spawn_warmup_scene(
 
     info!("Warmup scene spawned ({} textures + {} shapes + 1 emissive)",
           preloaded.0.len(), shapes.len());
+    preload_state.warmup_spawned = true;
 }
 
 /// Each frame, advance the warmup state machine:
@@ -112,13 +118,14 @@ pub fn spawn_warmup_scene(
 ///   - Then despawn all `WarmupEntity` entities and mark complete.
 pub fn tick_warmup(
     mut warmup: ResMut<WarmupState>,
+    preload_state: Res<TexturePreloadState>,
     images: Res<Assets<Image>>,
     preloaded: Res<PreloadedTextures>,
     render_frame_counter: Res<RenderFrameCounterResource>,
     warmup_entities: Query<Entity, With<WarmupEntity>>,
     mut commands: Commands,
 ) {
-    if warmup.complete {
+    if warmup.complete || !preload_state.warmup_spawned {
         return;
     }
 

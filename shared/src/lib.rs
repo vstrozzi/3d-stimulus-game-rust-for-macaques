@@ -21,6 +21,73 @@ pub mod constants;
 /// Number of slots in the frame ring buffer.
 pub const RING_BUFFER_SIZE: usize = 8;
 
+/// Capacity of the controller textures. Texture indices are
+/// represented as bits so the shared-memory layout stays fixed and identical
+/// for the native and WASM controllers.
+pub const TEXTURE_MANIFEST_WORDS: usize = 2;
+pub const TEXTURE_MANIFEST_CAPACITY: usize = TEXTURE_MANIFEST_WORDS * u64::BITS as usize;
+
+/// Texture indices required by the complete trials file for this session.
+///
+/// The controller clears `ready`, replaces the words, then publishes `ready`
+/// with Release ordering. The game only reads the words after an Acquire load
+/// observes `ready`, so it never consumes a partially-written manifest.
+#[repr(C)]
+#[derive(Debug)]
+pub struct SharedTextureManifest {
+    words: [AtomicU64; TEXTURE_MANIFEST_WORDS],
+    ready: AtomicBool,
+}
+
+impl SharedTextureManifest {
+    pub const fn new() -> Self {
+        Self {
+            words: [const { AtomicU64::new(0) }; TEXTURE_MANIFEST_WORDS],
+            ready: AtomicBool::new(false),
+        }
+    }
+
+    /// Atomically publish a complete replacement for the textures.
+    pub fn publish(&self, indices: impl IntoIterator<Item = u32>) {
+        self.ready.store(false, Ordering::Release);
+
+        let mut words = [0_u64; TEXTURE_MANIFEST_WORDS];
+        for raw_index in indices {
+            // Keep invalid trial values consistent with Texture::from_u32.
+            let index = Texture::from_u32(raw_index) as usize;
+            debug_assert!(index < TEXTURE_MANIFEST_CAPACITY);
+            words[index / u64::BITS as usize] |= 1_u64 << (index % u64::BITS as usize);
+        }
+
+        for (target, value) in self.words.iter().zip(words) {
+            target.store(value, Ordering::Relaxed);
+        }
+        self.ready.store(true, Ordering::Release);
+    }
+
+    /// Return `None` until a controller has published the session textures list.
+    pub fn read_indices(&self) -> Option<Vec<u32>> {
+        if !self.ready.load(Ordering::Acquire) {
+            return None;
+        }
+
+        let mut indices = Vec::new();
+        for (word_index, word) in self.words.iter().enumerate() {
+            let mut bits = word.load(Ordering::Relaxed);
+            while bits != 0 {
+                let bit = bits.trailing_zeros() as usize;
+                indices.push((word_index * u64::BITS as usize + bit) as u32);
+                bits &= bits - 1;
+            }
+        }
+        Some(indices)
+    }
+}
+
+impl Default for SharedTextureManifest {
+    fn default() -> Self { Self::new() }
+}
+
 /// Commands sent from Controller to Game.
 #[repr(C)]
 #[derive(Debug)]
@@ -746,6 +813,7 @@ impl Default for FrameRingBuffer {
 pub struct SharedMemory {
     pub command_seq: AtomicU64,
     pub command_ack: AtomicU64,
+    pub texture_manifest: SharedTextureManifest,
     pub commands: SharedCommands,
     pub game_structure_game: SharedGameState,
     pub game_structure_control: SharedGameState,
@@ -757,6 +825,7 @@ impl SharedMemory {
         Self {
             command_seq: AtomicU64::new(0),
             command_ack: AtomicU64::new(0),
+            texture_manifest: SharedTextureManifest::new(),
             commands: SharedCommands::new(),
             game_structure_game: SharedGameState::new(),
             game_structure_control: SharedGameState::new(),
@@ -772,6 +841,47 @@ impl Default for SharedMemory {
 // Ensure Send/Sync for thread usage
 unsafe impl Send for SharedMemory {}
 unsafe impl Sync for SharedMemory {}
+
+#[cfg(test)]
+mod texture_manifest_tests {
+    use super::*;
+
+    #[test]
+    fn manifest_is_unavailable_until_published() {
+        let manifest = SharedTextureManifest::new();
+        assert_eq!(manifest.read_indices(), None);
+    }
+
+    #[test]
+    fn manifest_deduplicates_sorts_and_normalizes_invalid_indices() {
+        let manifest = SharedTextureManifest::new();
+        manifest.publish([
+            Texture::Tiles128B_1K as u32,
+            Texture::Bark001_1K as u32,
+            Texture::Tiles128B_1K as u32,
+            u32::MAX,
+        ]);
+        assert_eq!(
+            manifest.read_indices(),
+            Some(vec![
+                Texture::Bark001_1K as u32,
+                Texture::WoodFloor057_1K as u32,
+                Texture::Tiles128B_1K as u32,
+            ])
+        );
+    }
+
+    #[test]
+    fn publishing_again_replaces_the_previous_manifest() {
+        let manifest = SharedTextureManifest::new();
+        manifest.publish([Texture::Bark001_1K as u32]);
+        manifest.publish([Texture::Tiles102_1K as u32]);
+        assert_eq!(
+            manifest.read_indices(),
+            Some(vec![Texture::Tiles102_1K as u32])
+        );
+    }
+}
 
 // Platform modules
 cfg_if::cfg_if! {

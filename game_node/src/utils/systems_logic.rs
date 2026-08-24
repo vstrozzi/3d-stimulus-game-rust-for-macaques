@@ -32,14 +32,15 @@ impl Plugin for SystemsLogicPlugin {
                     spawn_persistent_camera,
                     setup_fog,
                     setup_environment,
-                    preload_required_textures,
                     load_sounds,
-                    spawn_warmup_scene,
                     spawn_score_bar_pool,
                     spawn_left_score_bar,
                     spawn_session_clock,
                     setup_ambient_motes,
                 ).chain())
+            // The controller publishes the session textures through
+            // shared memory. Load it once, then create the GPU warmup scene.
+            .add_systems(Update, (preload_required_textures, spawn_warmup_scene).chain())
             // Shared memory
             .add_systems(
                 PreUpdate,

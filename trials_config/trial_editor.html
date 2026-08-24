@@ -756,7 +756,7 @@
 import init, {
   editor_constants,
   controller_constants,
-} from "../game_node/pkg/game_node.js?v=20260824-color-mask";
+} from "../game_node/pkg/game_node.js?v=20260824-texture-manifest";
 
 // Populated on init() — used throughout the editor.
 let TEXTURES = null;          // enum Texture variants, by repr
@@ -2509,7 +2509,7 @@ document.getElementById('levelList').addEventListener('click', e => {
   //    Bevy. The production build keeps only the pre-compressed WASM, so
   //    inflate it in-browser just like controller_main.js does.
   const wasmUrl = new URL(
-    "../game_node/pkg/game_node_bg.wasm.gz?v=20260824-color-mask",
+    "../game_node/pkg/game_node_bg.wasm.gz?v=20260824-texture-manifest",
     import.meta.url,
   );
   const wasmResponse = await fetch(wasmUrl);

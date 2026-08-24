@@ -10,8 +10,6 @@ use shared::DecorationShape;
 use crate::utils::objects::*;
 use crate::utils::pyramid::spawn_pyramid;
 use crate::utils::load_assets::{color_mask_tint, natural_material_tiled};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::utils::load_assets::load_texture_set;
 use crate::utils::objects::PreloadedTextures;
 use shared::Texture;
 use shared::constants::{
@@ -21,8 +19,6 @@ use shared::constants::{
     },
     object_constants::GROUND_Y,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use shared::constants::backdrop_constants::{BACKGROUND_TEXTURE, PLATFORM_TEXTURE};
 use crate::shared_memory::shared_memory_reader::SharedMemResource;
 
 /// Initial game scene, with the camera, ground, lights, and the pyramid.
@@ -31,17 +27,9 @@ pub fn setup_environment(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
-    asset_server: Res<AssetServer>,
 ) {
     // Ground. Texture and tint are re-applied from the level config at every
     // trial reset (`apply_backdrops`); these are just the defaults.
-    #[cfg(not(target_arch = "wasm32"))]
-    let platform_material = {
-        let texture = load_texture_set(&asset_server, &PLATFORM_TEXTURE.asset_folder());
-        natural_material_tiled(&texture, PLATFORM_TILE)
-    };
-    #[cfg(target_arch = "wasm32")]
     let platform_material = StandardMaterial::default();
     commands.spawn((
         Mesh3d(meshes.add(Plane3d::default().mesh().size(50.0, 200.0))),
@@ -51,12 +39,6 @@ pub fn setup_environment(
     ));
 
     // Wall
-    #[cfg(not(target_arch = "wasm32"))]
-    let background_material = {
-        let texture = load_texture_set(&asset_server, &BACKGROUND_TEXTURE.asset_folder());
-        natural_material_tiled(&texture, BACKGROUND_TILE)
-    };
-    #[cfg(target_arch = "wasm32")]
     let background_material = StandardMaterial::default();
     commands.spawn((
         Mesh3d(meshes.add(create_extended_semicircle_mesh(9.0, 40.0, 50.0, 64))),

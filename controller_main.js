@@ -9,6 +9,7 @@
 //
 // Shared memory layout (see shared/src/lib.rs):
 //   SharedMemory {
+//     texture_manifest:        SharedTextureManifest, // Controller → Game
 //     commands:                SharedCommands,   // Controller → Game
 //     game_structure_game:    SharedGameState,   // Game → Controller
 //     game_structure_control: SharedGameState,   // Controller → Game (config)
@@ -17,7 +18,6 @@
 
 import init, {
   create_shared_memory_wasm,
-  set_required_texture_indices,
   WebSharedMemory,
   wasm_main,
   controller_constants,
@@ -29,7 +29,7 @@ import init, {
 // glue against a cached old wasm fails the same way
 // ("__wasm_bindgen_func_elem_* is not a function"). Needs no bumping on
 // later rebuilds; the server's ETag handles those.
-} from "./game_node/pkg/game_node.js?v=20260824-color-mask";
+} from "./game_node/pkg/game_node.js?v=20260824-texture-manifest";
 
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -2493,7 +2493,7 @@ async function start() {
   setLoadingStep("Downloading game (WASM)...");
   setLoadingProgress(0);
 
-  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz?v=20260824-color-mask", import.meta.url);
+  const wasmUrl = new URL("./game_node/pkg/game_node_bg.wasm.gz?v=20260824-texture-manifest", import.meta.url);
   let wasmBuffer;
   try {
     const gzBuffer = await fetchWithProgress(wasmUrl, (loaded, total) => {
@@ -2574,13 +2574,13 @@ async function start() {
   }
 
   const requiredTextures = collectRequiredTextureIndices();
-  set_required_texture_indices(requiredTextures);
-  console.log(`Trial manifest requests ${requiredTextures.length} texture sets`);
 
   // ── Step 4: Set up shared memory ─────────────────────────────────────────
   setLoadingStep("Setting up game memory...");
   const sharedPtr = create_shared_memory_wasm();
   sharedMem = new WebSharedMemory(sharedPtr);
+  sharedMem.publish_texture_manifest(requiredTextures);
+  console.log(`Trial manifest requests ${requiredTextures.length} texture sets`);
 
   // Get offsets
   try {

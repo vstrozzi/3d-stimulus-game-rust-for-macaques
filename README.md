@@ -77,6 +77,11 @@ cp target/release/libshared.so controller_python/monkey_shared.so
 python controller_python/controller.py
 ```
 
+The Python and web controllers both scan the complete selected `trials.jsonl`
+and publish the same texture-index manifest through shared memory. The native
+and WASM games wait for it, then load only those session textures plus the
+always-required base and lid materials.
+
 #### Web Controller
 
 1. Build WASM (`wasm-pack build game_node --target web --out-dir pkg`) #add --dev for no optimizations

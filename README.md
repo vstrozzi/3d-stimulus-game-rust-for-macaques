@@ -98,6 +98,8 @@ Create Custom levels by using trials_editor.html
 
 ### Prepare Textures from ambientCG for bevy
 
+Download the `<Name>_1K-JPG.zip` from ambientCG, extract it, and run:
+
 python game_node/src/scripts/prepare_bevy_textures.py ./Metal061B_1K-JPG
 
 This also creates `preview.webp` and `preview_tintable.webp` (maximum 128px)
@@ -105,6 +107,11 @@ for the trial editor. To generate only those previews for existing processed
 textures:
 
 python game_node/src/scripts/prepare_bevy_textures.py --previews-only game_node/assets/textures/*
+
+**Only `bevy_ready/` is used.** The raw ambientCG download can be deleted. Then add t the `Texture` enum in
+[shared/src/lib.rs](shared/src/lib.rs). The
+name must match the folder name minus the `-JPG` suffix.
+Both the WASM bundle and the Python module embed the enum, so rebuild them.
 
 
 ### Prepare / equalize sounds

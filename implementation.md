@@ -1257,9 +1257,47 @@ Both environments initially use untextured placeholder backdrop materials;
 the first reset applies the configured platform/background maps. This avoids
 loading the old default backdrop textures when the JSONL selected different
 ones. The original downloaded maps, source preview images, `.blend`, `.usdc`,
-etc. are served only if explicitly requested and are not part of the automatic
-game download. The trial editor is separate: opening it requests the lightweight
-WebP for each distinct texture currently displayed.
+etc. are not stored in the repository at all: `prepare_bevy_textures.py`
+consumes them out of a scratch directory and only its `bevy_ready/` output is
+committed, so nothing outside that folder can be served. The trial editor is
+separate: opening it requests the lightweight WebP for each distinct texture
+currently displayed.
+
+---
+
+## 14g. Low-regularity ground/snow/ice textures (2026-08-25)
+
+Nineteen further ambientCG materials were added at indices 41-59, chosen for
+having less periodic structure than the paving/tile sets, so the backdrop
+interferes less with the object under discrimination:
+
+```
+41 Ground031_1K   42 Ground109_1K   43 Ice002_1K      44 Snow012_1K
+45 Ground049C_1K  46 Snow008B_1K    47 Ground035_1K   48 Snow011_1K
+49 Ground107_1K   50 Snow014_1K     51 Ground080_1K   52 Snow015_1K
+53 Snow008C_1K    54 Ground047_1K   55 Ground003_1K   56 Ground011_1K
+57 Ground020_1K   58 Ground097_1K   59 Ice004_1K
+```
+
+`Ground003`, `Ice002`, and `Ice004` ship no AO map; the processor generated its
+neutral 1x1 white fallback. None of the nineteen ship a metalness map, so
+`metallic_roughness.png` carries `B=0` as usual for these libraries.
+
+This batch also changed what is stored: only `bevy_ready/` is committed now,
+for the new materials and retroactively for the previous 44. The raw ambientCG
+download is read solely by `prepare_bevy_textures.py` and never at runtime, so
+434 source files (323 MB) were removed. Despite adding nineteen materials,
+`game_node/assets/textures/` shrank from 586 MB to 414 MB, and the Docker image
+(`COPY . .`) shrinks by the same amount.
+
+Registering textures costs nothing at load time. `preload_required_textures`
+walks `Texture::iter().filter(|t| manifest.includes(*t))`, so the game fetches
+only the sets a session's JSONL actually references; the editor fetches
+`preview*.webp` only for the textures it is currently displaying. The bitset
+ceiling is `TEXTURE_MANIFEST_CAPACITY` = 128, so 60 of 128 slots are used.
+
+`RoofingTiles005_1K`, `Tiles072_1K`, and `Wood004_1K` have processed
+`bevy_ready/` folders but no enum variant, so they are unreachable (~13 MB).
 
 ---
 

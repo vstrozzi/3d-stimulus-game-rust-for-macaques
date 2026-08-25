@@ -1296,8 +1296,10 @@ only the sets a session's JSONL actually references; the editor fetches
 `preview*.webp` only for the textures it is currently displaying. The bitset
 ceiling is `TEXTURE_MANIFEST_CAPACITY` = 128, so 60 of 128 slots are used.
 
-`RoofingTiles005_1K`, `Tiles072_1K`, and `Wood004_1K` have processed
-`bevy_ready/` folders but no enum variant, so they are unreachable (~13 MB).
+`RoofingTiles005_1K`, `Tiles072_1K`, and `Wood004_1K` had processed
+`bevy_ready/` folders but no enum variant, so they were unreachable; they were
+deleted in this batch (18 MB). The texture directory and the `Texture` enum are
+now exactly in step: 60 folders, 60 variants.
 
 ---
 

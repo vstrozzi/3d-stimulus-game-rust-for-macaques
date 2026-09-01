@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Tutorial</title>
+<style>
+  * { box-sizing: border-box; }
+  html { font-size: max(14px, min(calc(100vw / 1920 * 16), calc(100vh / 1080 * 16))); }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #e0e0f0;
+    background: #000;
+  }
+  main {
+    width: min(70rem, 94vw);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+  }
+  .lang-btn {
+    padding: 0.25rem 0.7rem;
+    font: inherit;
+    font-size: 0.8rem;
+    color: #bbb;
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 0.35rem;
+    cursor: pointer;
+  }
+  h1 {
+    margin: 0;
+    font-size: 1.8rem;
+    letter-spacing: 2px;
+    text-align: center;
+  }
+  .player-box {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #292929;
+    border-radius: 0.6rem;
+    background: #0b0b0b;
+  }
+  video {
+    display: block;
+    width: 100%;
+    max-height: min(70vh, 45rem);
+    background: #000;
+  }
+  .status {
+    min-height: 1.3em;
+    color: #aaa;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  .status.error { color: #ef8d8d; }
+  .continue-btn {
+    padding: 0.8rem 2.4rem;
+    font: inherit;
+    font-weight: 700;
+    color: #000;
+    background: #fff;
+    border: 0;
+    border-radius: 0.5rem;
+    cursor: pointer;
+  }
+  .continue-btn:disabled {
+    color: #777;
+    background: #292929;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+<main>
+  <button class="lang-btn" id="lang-toggle" type="button">Deutsch</button>
+  <h1 id="title">Video Tutorial</h1>
+  <div class="player-box">
+    <video id="tutorial-video" controls playsinline preload="metadata"></video>
+  </div>
+  <div class="status" id="status" aria-live="polite"></div>
+  <button class="continue-btn" id="continue" type="button" disabled>Continue</button>
+</main>
+
+<script>
+  const COPY = {
+    en: {
+      title: 'Video Tutorial',
+      toggle: 'Deutsch',
+      continue: 'Continue',
+      loading: 'Loading video…',
+      watch: 'Watch the video to the end to continue.',
+      error: 'The English tutorial video could not be loaded.',
+      file: './video_tutorial/tutorial_object_manipulation_english.mp4',
+    },
+    de: {
+      title: 'Video-Tutorial',
+      toggle: 'English',
+      continue: 'Weiter',
+      loading: 'Video wird geladen…',
+      watch: 'Sehen Sie das Video bis zum Ende an, um fortzufahren.',
+      error: 'Das deutsche Tutorial-Video konnte nicht geladen werden.',
+      file: './video_tutorial/tutorial_object_manipulation_german.mp4',
+    },
+  };
+
+  const video = document.getElementById('tutorial-video');
+  const title = document.getElementById('title');
+  const toggle = document.getElementById('lang-toggle');
+  const status = document.getElementById('status');
+  const continueButton = document.getElementById('continue');
+  let lang = sessionStorage.getItem('lang') === 'de' ? 'de' : 'en';
+
+  function leaveVideoFullscreen() {
+    try {
+      if (video.webkitDisplayingFullscreen && video.webkitExitFullscreen) {
+        video.webkitExitFullscreen();
+      } else if (document.fullscreenElement && document.exitFullscreen) {
+        const result = document.exitFullscreen();
+        if (result && result.catch) result.catch(() => {});
+      } else if (document.webkitFullscreenElement && document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+    } catch (_) {}
+  }
+
+  function loadLanguage() {
+    const text = COPY[lang];
+    sessionStorage.setItem('lang', lang);
+    document.documentElement.lang = lang;
+    title.textContent = text.title;
+    document.title = text.title;
+    toggle.textContent = text.toggle;
+    continueButton.textContent = text.continue;
+    continueButton.disabled = true;
+    status.className = 'status';
+    status.textContent = text.loading;
+    video.src = text.file;
+    video.load();
+  }
+
+  video.addEventListener('loadedmetadata', () => {
+    status.className = 'status';
+    status.textContent = COPY[lang].watch;
+  });
+
+  video.addEventListener('ended', () => {
+    continueButton.disabled = false;
+    status.textContent = '';
+    leaveVideoFullscreen();
+  });
+
+  video.addEventListener('error', () => {
+    continueButton.disabled = true;
+    status.className = 'status error';
+    status.textContent = COPY[lang].error;
+  });
+
+  toggle.addEventListener('click', () => {
+    leaveVideoFullscreen();
+    lang = lang === 'de' ? 'en' : 'de';
+    loadLanguage();
+  });
+
+  continueButton.addEventListener('click', () => {
+    if (continueButton.disabled) return;
+    sessionStorage.setItem('tutorial_complete', '1');
+    window.location.assign('./?instructions=1');
+  });
+
+  loadLanguage();
+</script>
+</body>
+</html>

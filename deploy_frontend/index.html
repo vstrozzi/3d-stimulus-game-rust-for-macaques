@@ -484,7 +484,7 @@
         <span class="action-icon">&#9654;</span>
         <span class="action-text">
           <span class="action-title">Play</span>
-          <span class="action-desc" id="btn-play-desc">Fullscreen + start</span>
+          <span class="action-desc" id="btn-play-desc">Watch the tutorial, then start</span>
         </span>
       </button>
 
@@ -604,9 +604,13 @@
     localStorage.setItem('session_name', sessionNameInput.value);
   });
 
+  const returnFromTutorial = new URLSearchParams(window.location.search).get('instructions') === '1'
+    && sessionStorage.getItem('tutorial_complete') === '1';
+
   // Decide which flow to show from the authoritative server role. The cookie
   // is HttpOnly, so JS can't read it directly — ask /me.
   fetch('/me').then(r => r.json()).then(({ role }) => {
+    if (returnFromTutorial && showInstructions()) return;
     if (role === 'admin') { adminFlow.hidden = false; setupAdmin(); }
     else { playerFlow.hidden = false; }
   }).catch(() => { playerFlow.hidden = false; });
@@ -637,6 +641,7 @@
   function bootGame() {
     if (_gameBooted) return;
     _gameBooted = true;
+    sessionStorage.removeItem('tutorial_complete');
     playerFlow.hidden = true;
     adminFlow.hidden = true;
     gameRoot.hidden = false;
@@ -676,14 +681,25 @@
     };
   }
 
-  // Player: Continue locks the name and reveals the instructions + Play.
+  // Player: Continue opens the required video tutorial. The tutorial returns
+  // here with ?instructions=1 only after its video reaches the end.
   const instrPlay = document.getElementById('instr-play');
-  document.getElementById('name-continue').addEventListener('click', () => {
-    if (!sessionNameInput.value.trim()) { sessionNameInput.focus(); return; }
+  function showInstructions() {
+    const name = (localStorage.getItem('session_name') || '').trim();
+    if (!name) return false;
+    sessionNameInput.value = name;
     sessionNameInput.readOnly = true;
     document.getElementById('name-continue').hidden = true;
     document.getElementById('instructions').hidden = false;
     instrPlay.hidden = false;
+    playerFlow.hidden = false;
+    return true;
+  }
+  document.getElementById('name-continue').addEventListener('click', () => {
+    if (!sessionNameInput.value.trim()) { sessionNameInput.focus(); return; }
+    localStorage.setItem('session_name', sessionNameInput.value);
+    sessionStorage.removeItem('tutorial_complete');
+    window.location.assign('./tutorial.html');
   });
   const onInstrPlay = makePlay(instrPlay, 'Press again to start');
   instrPlay.addEventListener('click', () => {
@@ -726,7 +742,7 @@
   i18nNodes.forEach(el => { I18N_EN[el.dataset.i18n] = el.textContent; });
   i18nPlaceholders.forEach(el => { I18N_EN[el.dataset.i18nPlaceholder] = el.placeholder; });
 
-  let lang = 'en';
+  let lang = sessionStorage.getItem('lang') === 'de' ? 'de' : 'en';
   const langToggle = document.getElementById('lang-toggle');
   function applyLang() {
     const t = lang === 'de' ? I18N_DE : I18N_EN;
@@ -771,32 +787,14 @@
     setInterval(pollPresence, 5000);
     document.getElementById('btn-load').addEventListener('click', () => fileInput.click());
 
-    // Admin Play: 1st press → fullscreen; 2nd press → the SAME instructions page
-    // players see, with the name prefilled + locked. Then the page's Play boots.
-    const btnPlayDesc = document.getElementById('btn-play-desc');
+    // Admin Play uses the same required tutorial and instructions as players.
+    // The selected trial remains in sessionStorage across both page changes.
     document.getElementById('btn-play').addEventListener('click', () => {
-      const goInstructions = () => {
-        const nm = (adminName.value || '').trim();
-        if (!nm) { adminName.focus(); return; }
-        sessionNameInput.value = nm;
-        adminFlow.hidden = true;
-        playerFlow.hidden = false;
-        sessionNameInput.readOnly = true;
-        document.getElementById('name-continue').hidden = true;
-        document.getElementById('instructions').hidden = false;
-        instrPlay.hidden = false;
-      };
-      if (isFullscreen() || btnPlayDesc.dataset.ready === '1') { goInstructions(); return; }
-      const root = document.documentElement;
-      const req = root.requestFullscreen ? root.requestFullscreen.bind(root) : null;
-      if (req) {
-        let p; try { p = req({ navigationUI: 'hide' }); } catch (_) { p = null; }
-        if (p && p.catch) p.catch(() => alert('Fullscreen is required. Press Play again.'));
-        btnPlayDesc.dataset.ready = '1';
-        btnPlayDesc.textContent = 'Press again to continue';
-        return;
-      }
-      goInstructions();
+      const nm = (adminName.value || '').trim();
+      if (!nm) { adminName.focus(); return; }
+      localStorage.setItem('session_name', nm);
+      sessionStorage.removeItem('tutorial_complete');
+      window.location.assign('./tutorial.html');
     });
 
     // Mark a library trial as the one to play now. (Promote-to-default lives in

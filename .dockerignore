@@ -5,6 +5,9 @@ data/
 .env
 **/__pycache__/
 *.pyc
+# Keep the original high-resolution/120-fps tutorial masters out of the server
+# image. The browser-compatible copies live under deploy_frontend/video_tutorial/.
+video_tutorial/*.mp4
 # WASM build junk — keep the image lean (only the .gz is fetched at runtime):
 game_node/pkg/debug-analysis/
 game_node/pkg/*.d.ts

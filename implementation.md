@@ -1413,8 +1413,9 @@ they do not prove that every submitted image reached the eye.
 `deploy_backend/log_server.py` (FastAPI + uvicorn) replaces static web
 hosting. It serves the **`deploy_frontend/`** bundle **behind a cookie gate**
 and receives the per-trial logs the web controller used to bundle into a client
-ZIP. `deploy_frontend/` holds `index.html`, `login.html`,
-`controller_main.min.js`, and symlinks `game_node` / `assets` / `trials_config`
+ZIP. `deploy_frontend/` holds `index.html`, `login.html`, `tutorial.html`, the
+browser-compatible `video_tutorial/*.mp4` files, `controller_main.min.js`, and
+symlinks `game_node` / `assets` / `trials_config`
 back into the repo (so the frontend's relative paths and the wasm build dir are
 unchanged). Static realpaths are contained under `REPO_ROOT` so those symlinks
 resolve but nothing outside the project is reachable; `out/server_logs/` is
@@ -1432,9 +1433,10 @@ explicitly excluded from static serving.
   role; `index.html` reads it to pick the player vs admin landing.
 - Login is rate-limited per IP (`LOGIN_MAX`/`LOGIN_WINDOW`).
 
-### Pages (`index.html`, single file, role-rendered)
-- **player**: name → instructions (black bg, fullscreen/main-monitor/20-min/
-  per-trial-save notes) → two-step Play (fullscreen → boot).
+### Pages (`index.html`, role-rendered, plus `tutorial.html`)
+- **player**: name → required EN/DE video tutorial → instructions (black bg,
+  fullscreen/main-monitor/20-min/per-trial-save notes) → two-step Play
+  (fullscreen → boot).
 - **admin**: the original landing + a name field (test play); `upload_trial`
   (validates a `.jsonl`, `POST /admin/trials/save` to the library, selects it);
   `select_trial` (popup over `/admin/trials/list` with per-row use / ★default /
@@ -1443,6 +1445,16 @@ explicitly excluded from static serving.
   `/admin/list` (navigate), `/admin/file` (view inline) + a "Download this
   folder (.zip)" button → `/admin/zip`.
 - `login.html` is a standalone password page.
+- **tutorial**: both player Continue and admin Play navigate to
+  `tutorial.html`. It chooses the `_english.mp4` / `_german.mp4` asset from the
+  existing session language, resets completion when the language changes,
+  enables Continue only on `ended`, exits native/document fullscreen on end,
+  then returns to the textual instructions. The source videos in repository
+  `video_tutorial/` are high-resolution/120-fps masters; browser-compatible
+  H.264 Level 4.1, 1080p/30-fps copies live in
+  `deploy_frontend/video_tutorial/`. FastAPI serves
+  them with `video/mp4` MIME and byte-range support through the authenticated
+  static bundle. Docker excludes the large masters and includes the web copies.
 
 ### Trial-config library
 - `trials_config/trials/` holds all saved trials; the active default is

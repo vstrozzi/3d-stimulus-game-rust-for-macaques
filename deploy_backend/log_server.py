@@ -379,5 +379,7 @@ def static_files(request: Request, path: str):
         raise HTTPException(404, "not found")
     # .gz is served raw (octet-stream, no Content-Encoding) — the client
     # decompresses it itself via DecompressionStream.
-    media = "application/octet-stream" if full.endswith(".gz") else None
+    media = ("application/octet-stream" if full.endswith(".gz")
+             else "video/mp4" if full.endswith(".mp4")
+             else None)
     return _static_file(request, full, media_type=media)

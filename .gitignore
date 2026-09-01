@@ -5,6 +5,9 @@
 .env
 __pycache__/
 *.pyc
+# Local high-resolution tutorial masters; deploy_frontend/video_tutorial/
+# contains the browser-ready copies that are committed and deployed.
+/video_tutorial/*.mp4
 # WASM build junk
 game_node/pkg/debug-analysis/
 game_node/pkg/*.d.ts

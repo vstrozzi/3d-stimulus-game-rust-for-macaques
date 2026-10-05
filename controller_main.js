@@ -55,12 +55,13 @@ let DEFAULT_BACKGROUND_TEXTURE = 0;   // from Rust; back-wall texture of a level
 let MAX_SESSION_DURATION_MS = 0;      // derived; cap in milliseconds (used by the loop)
 let MAX_TRIAL_FRAMES = 0;             // derived; per-trial frame-log capacity (session cap × 120 Hz)
 
-// Sample the controller's monotonic and Unix clocks together. Input-event
-// timestamps below use this controller clock, independent of Bevy's clock.
-const APP_START_PERFORMANCE_MS = performance.now();
-const APP_START_UNIX_NS = Math.round(
-  (performance.timeOrigin + APP_START_PERFORMANCE_MS) * 1_000_000
-);
+// Zero of the controller clock, as performance.now() and as Unix time. Set
+// right before the game is started: Bevy creates the clock of
+// `present_elapsed_secs` a moment later while it builds, so input-event and
+// heart rate times counted from here compare directly with it (they read
+// late by that build moment).
+let APP_START_PERFORMANCE_MS = null;
+let APP_START_UNIX_NS = null;
 
 const TRIALS_PATH = "./trials_config/trials/trials.jsonl";
 
@@ -2638,6 +2639,8 @@ async function start() {
   }
 
   // ── Step 5: Start Bevy ───────────────────────────────────────────────────
+  APP_START_PERFORMANCE_MS = performance.now();
+  APP_START_UNIX_NS = Math.round((performance.timeOrigin + APP_START_PERFORMANCE_MS) * 1_000_000);
   wasm_main();
 
   // Setup input handlers

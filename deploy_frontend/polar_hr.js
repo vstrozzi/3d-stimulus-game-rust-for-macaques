@@ -19,7 +19,7 @@
 
   // Written into every trial log next to the measurements.
   const HR_UNITS = {
-    arrival_elapsed_secs: "packet arrival time, seconds on the controller clock (zero = session_info.app_start_unix_ns)",
+    arrival_elapsed_secs: "packet arrival time, seconds on the controller clock (zero = session_info.app_start_unix_ns, the game start), comparable with present_elapsed_secs",
     hr: "bpm",
     rr_ms: "ms",
     raw: "packet bytes, hex",
@@ -79,29 +79,29 @@
   // ───────────────────────────── trial log ─────────────────────────────
 
   /**
-   * performance.now() milliseconds → seconds on the controller clock, kept as
-   * a 32-bit float like the game's `present_elapsed_secs`. Packets that
-   * arrived before the controller started come out negative.
+   * performance.now() milliseconds → seconds since `clockZeroMs` (the
+   * controller clock's zero, the game start, so the result compares with
+   * `present_elapsed_secs`), kept as a 32-bit float like it. Packets that arrived before that come out negative.
    */
-  function elapsedSecs(t_ms, appStartMs) {
-    return Math.fround((t_ms - appStartMs) / 1000);
+  function elapsedSecs(t_ms, clockZeroMs) {
+    return Math.fround((t_ms - clockZeroMs) / 1000);
   }
 
   /**
    * The `hr_info` / `hr_meas` pair of one trial log, from packets and events
    * given in performance.now() milliseconds.
    */
-  function buildTrialLog(device, packets, events, appStartMs, trialStartMs, trialEndMs) {
+  function buildTrialLog(device, packets, events, clockZeroMs, trialStartMs, trialEndMs) {
     return {
       hr_info: {
         device,
-        trial_start_elapsed_secs: trialStartMs === null ? null : elapsedSecs(trialStartMs, appStartMs),
-        trial_end_elapsed_secs: elapsedSecs(trialEndMs, appStartMs),
+        trial_start_elapsed_secs: trialStartMs === null ? null : elapsedSecs(trialStartMs, clockZeroMs),
+        trial_end_elapsed_secs: elapsedSecs(trialEndMs, clockZeroMs),
         units: HR_UNITS,
-        connection_events: events.map((e) => ({ elapsed_secs: elapsedSecs(e.t_ms, appStartMs), event: e.event })),
+        connection_events: events.map((e) => ({ elapsed_secs: elapsedSecs(e.t_ms, clockZeroMs), event: e.event })),
       },
       hr_meas: packets.map((p) => ({
-        arrival_elapsed_secs: elapsedSecs(p.t_ms, appStartMs),
+        arrival_elapsed_secs: elapsedSecs(p.t_ms, clockZeroMs),
         hr: p.hr,
         rr_ms: p.rr_ms,
         raw: p.raw,
@@ -211,9 +211,9 @@
      * Each packet and event is returned exactly once, so reading consecutive
      * trial logs in order gives the unbroken stream.
      */
-    takeTrialLog(appStartMs, trialStartMs, trialEndMs) {
+    takeTrialLog(clockZeroMs, trialStartMs, trialEndMs) {
       const device = this.device ? this.device.name : null;
-      return buildTrialLog(device, this.pending.splice(0), this.pendingEvents.splice(0), appStartMs, trialStartMs, trialEndMs);
+      return buildTrialLog(device, this.pending.splice(0), this.pendingEvents.splice(0), clockZeroMs, trialStartMs, trialEndMs);
     }
 
     _event(event) {

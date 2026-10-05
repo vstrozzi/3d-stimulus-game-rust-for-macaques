@@ -126,6 +126,53 @@ python game_node/src/scripts/equalize_audio.py game_node/assets/sounds
 python tools/verify_trial_logs.py out/trial_logs/
 
 
+## Heart rate data (optional, Polar H9)
+
+In the web version a participant can connect a **Polar H9** chest band on the
+landing page before playing. Web Bluetooth only: Chromium browsers on desktop
+and Android (on Linux enable `chrome://flags/#enable-web-bluetooth`); not
+Firefox, Safari or any browser on iPhone/iPad. Other bands that offer the
+standard heart rate service connect too, with a warning; only the H9 is tested.
+
+- **Source**: the band's standard Bluetooth Heart Rate Measurement
+  notifications, logged unmodified (`raw` hex) and decoded. The band detects
+  beats from its own ECG and sends only the result: no raw ECG, no
+  accelerometer, no timestamp.
+- **Rate**: one packet about once a second (not a fixed sampling rate). Each
+  packet has `hr`, the band's smoothed bpm (roughly the last 15 beats), and
+  `rr_ms`, the 0–2 beat-to-beat intervals since the previous packet, in steps
+  of 1/1024 s (about 1 ms).
+- **Time**: `arrival_elapsed_secs` is when the packet reached the browser, not
+  when the heart beat; a packet is typically about 1 s old on arrival. It is in
+  seconds (32-bit float) on the controller clock, the same clock as
+  `check_input_event_elapsed_secs`. In the web version that clock starts at
+  the game start, so both compare directly with the frames'
+  `present_elapsed_secs`, and `session_info.app_start_unix_ns` plus any of
+  them gives Unix time. The zero is taken just before the game engine creates
+  its own clock, so controller-clock times read late against the frames by
+  that short, constant moment (expected milliseconds, not measured).
+- **Sessions of 2026-10-05**: recorded before this, when the controller clock
+  started 1–1.5 s before the game's. To align them, take the session's median
+  of `check_input_event_elapsed_secs − state_read.present_elapsed_secs` over
+  the frames where the former is not null, and subtract it from every
+  `arrival_elapsed_secs` and `check_input_event_elapsed_secs` (good to about
+  ±40 ms).
+- **Where**: each trial log has `hr_info` (device name, trial start/end on the
+  same clock, units, connection events) and `hr_meas` (the packets). A trial
+  log holds every packet since the previous trial log, so reading them in order
+  gives the unbroken stream; the first one also holds the packets from the
+  connection page, with negative times. Each level summary has
+  `hr_measurements` (true if any of its trials saved a packet).
+- **No band**: `hr_info` is `null` and `hr_meas` is `[]`. After a band was
+  lost mid-session, `hr_info` stays an object and `hr_meas` is `[]`.
+- **Strap off**: the band keeps sending for a while with the last `hr` repeated
+  and then `hr: 0`, all with empty `rr_ms`. Treat only packets with RR
+  intervals as real beats.
+- **Size**: about 16 kB per minute, under 1 % of a session's logs.
+
+Details: [implementation.md](implementation.md) §20.
+
+
 ## Hosted web server
 
 The web application is served by a small Python server (`deploy_backend/log_server.py`)
@@ -225,7 +272,7 @@ sudo crontab -e
 # add:
 0 3 * * * rsync -a --delete /srv/3d-stimulus-game-rust-for-macaques/data/server_logs/ /srv/backup/server_logs/ >> /var/log/monkey-backup.log 2>&1
 ```
-Test it immediately: `sudo rsync -av --delete /srv/3d-stimulus-game-rust-for-macaques/data/server_logs/ /srv/backup/server_logs/`.
+Test it immfediately: `sudo rsync -av --delete /srv/3d-stimulus-game-rust-for-macaques/data/server_logs/ /srv/backup/server_logs/`.
 `--delete` keeps exactly one mirror (no history). It's on the same disk, so for
 real safety point the destination at a second volume / another host / R2.
 Read the data with `python tools/verify_trial_logs.py data/server_logs/<date>/<name>/`.

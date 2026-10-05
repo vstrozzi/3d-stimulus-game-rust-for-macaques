@@ -337,7 +337,9 @@ state copies of the control fields. Each row also has `commands_sent` and
 nullable `check_input_event_elapsed_secs`; the latter is populated only on
 the dispatch row for a human space/tap check and uses the controller's
 monotonic clock. `session_info.app_start_unix_ns` maps that controller-clock
-zero to Unix time. It is deliberately controller metadata, not a new SHM
+zero to Unix time. In the web controller the zero is taken right before
+`wasm_main()`, so these times compare directly with `present_elapsed_secs`
+(§20); in `controller.py` it is the controller process start. It is deliberately controller metadata, not a new SHM
 state field. `elapsed_secs` / `render_elapsed_secs` remain SHM-only.
 
 ---
@@ -1572,8 +1574,21 @@ Trial log, top level:
   (always the case for `controller.py`, which writes them for schema parity).
 - All times are seconds on the **controller clock** — the clock of
   `check_input_event_elapsed_secs`, zero at `session_info.app_start_unix_ns` —
-  stored as 32-bit floats like `present_elapsed_secs`. They are not on the
-  frame clock; the constant between the two is still not logged (§15.6).
+  stored as 32-bit floats like `present_elapsed_secs`.
+- **The web controller clock starts at the game start**: `APP_START_*` in
+  `controller_main.js` are set right before `wasm_main()`. Bevy creates
+  `Time<Real>` (the zero of `present_elapsed_secs`) a moment later while it
+  builds, so packets, input events and frames compare directly, with
+  controller-clock times reading late by that constant moment (expected
+  milliseconds; not measured, and the logs cannot resolve it below about
+  ±40 ms). An exact zero would need the game to export its clock. The value
+  must stay fixed for the session: both clocks run on `performance.now()`, so
+  there is no drift to correct, and moving the zero mid-session would shift
+  later trials against earlier ones.
+- The sessions of 2026-10-05 predate this: their controller clock started when
+  the script loaded, 0.94–1.52 s before the game's. Align them by subtracting
+  the session's median of `check_input_event_elapsed_secs` −
+  `present_elapsed_secs` over the frames that carry an input event.
 - Events: `connected`, `disconnected`, `silent` (10 s without packets, written
   just before the `disconnected` it causes).
 - **Each trial log holds every packet since the previous trial log**: the black
@@ -1590,5 +1605,14 @@ Trial log, top level:
 - Beat time on the laptop clock: a packet is typically ~1 s old on arrival
   (wait for the band's 1 Hz send, then for a radio slot). Anchoring a whole
   run on its fastest packet is good to tens of ms at best.
+- Controller clock vs frame clock, first full session (58 trials, 4.5 min,
+  recorded with the old controller-clock zero):
+  `trial_start_elapsed_secs` minus the first `present_elapsed_secs` of the
+  trial was 1.105–1.147 s with no drift, and `app_start_unix_ns` +
+  `trial_end_elapsed_secs` matched `timestamp_end` within 2 ms.
+- Strap taken off mid-session: a few garbage RR values, then ~10 s of packets
+  repeating the last bpm with no RR, then `00 00` packets (0 bpm) for ~14 s,
+  then the disconnect. Packets keep arriving, so neither the silence watchdog
+  nor `hr_measurements` notices; only a non-empty `rr_ms` means real beats.
 - The link ran at a 480 ms connection interval on Linux (arrivals in 480 ms
   steps, ~18 s from connect to first packet). The page cannot change this.

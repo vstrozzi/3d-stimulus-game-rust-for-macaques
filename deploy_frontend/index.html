@@ -447,6 +447,98 @@
     0%, 40%   { transform: rotate(0deg); }
     60%, 100% { transform: rotate(90deg); }
   }
+  /* ── Heart rate band (optional) ───────────────────────────────────── */
+  /* These carry a display rule, which would otherwise beat `hidden`. */
+  #name-step[hidden], #hr-step[hidden], #hr-live[hidden], #hr-details[hidden],
+  #hr-toast[hidden] { display: none !important; }
+  .link-btn {
+    padding: 0.45rem 1rem;
+    font-size: 0.9em;
+    font-family: inherit;
+    color: #bbb;
+    background: transparent;
+    border: 1px solid #444;
+    border-radius: 0.4rem;
+    cursor: pointer;
+  }
+  .link-btn.on { color: #55cc88; border-color: #2f6f4c; }
+  .start-btn:disabled { opacity: 0.35; cursor: default; }
+  .start-btn.secondary { background: #333; color: #fff; }
+  /* Wider than the name column: the plots need the room. A definite width,
+     because the canvases inside size themselves from it. */
+  #hr-step { width: min(46rem, 92vw); max-width: none; padding: 2rem 0; }
+  #hr-step .instructions { font-size: 1em; line-height: 1.7; }
+  .hr-msg { min-height: 1.4em; font-size: 0.95em; color: #bbb; }
+  .hr-msg.ok { color: #55cc88; }
+  .hr-msg.warn { color: #e6a64d; }
+  #hr-warn:empty { display: none; }
+  .hr-buttons { display: flex; gap: 0.8rem; flex-wrap: wrap; justify-content: center; }
+  #hr-live, #hr-details {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    text-align: left;
+  }
+  #hr-live h2 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin-top: 0.6rem;
+  }
+  #hr-details-toggle { align-self: center; margin-top: 0.6rem; }
+  .hr-stats { border-collapse: collapse; font-size: 0.9em; }
+  .hr-stats td { padding: 0.1rem 1rem 0.1rem 0; vertical-align: top; }
+  .hr-stats td:first-child { color: #888; white-space: nowrap; }
+  #hr-step canvas {
+    width: 100%;
+    height: 11rem;
+    background: #050505;
+    border: 1px solid #333;
+    border-radius: 0.4rem;
+    display: block;
+  }
+  #hr-step pre {
+    background: #050505;
+    border: 1px solid #333;
+    border-radius: 0.4rem;
+    padding: 0.5rem;
+    font-size: 0.72em;
+    max-height: 12rem;
+    overflow: auto;
+    white-space: pre;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  /* Shown over every page, including the running game; never takes input. */
+  #hr-toast {
+    position: fixed;
+    top: 1.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 300;
+    max-width: 90vw;
+    padding: 0.7rem 1.2rem;
+    background: #1a1206;
+    color: #ffd9a0;
+    border: 1px solid #e6a64d;
+    border-radius: 0.5rem;
+    font-size: 0.95em;
+    text-align: center;
+    pointer-events: none;
+  }
+  /* The tutorial page, shown inside this page while a band is connected. */
+  #tutorial-frame {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    z-index: 60;
+    background: #000;
+  }
 </style>
 </head>
 <body>
@@ -460,6 +552,7 @@
            data-i18n-placeholder="name_ph"
            autocomplete="off" spellcheck="false" maxlength="64">
     <button class="start-btn" id="name-continue" type="button" data-i18n="continue">Continue</button>
+    <button class="link-btn" id="hr-open" type="button">Connect heart rate band (optional)</button>
 
     <!-- Revealed (name locked) once Continue is pressed -->
     <div class="instructions" id="instructions" hidden>
@@ -491,6 +584,46 @@
     </div>
     <button class="start-btn" id="instr-play" type="button" data-i18n="play" hidden>Play</button>
   </div>
+
+  <!-- Optional heart rate band: opened from the name step (or the admin
+       landing) and left again with Back. See polar_hr.js. -->
+  <div id="hr-step" class="center-col" hidden>
+    <button class="lang-btn" id="hr-lang-toggle" type="button">Deutsch</button>
+    <h1 data-i18n="hr_title">Heart rate band (optional)</h1>
+    <div class="instructions">
+      <p data-i18n="hr_intro">You can record your heart rate during the game. The supported device is the Polar H9 chest band. This step is optional.</p>
+      <ul>
+        <li data-i18n="hr_s1">Moisten the two electrode areas on the inside of the strap with water</li>
+        <li data-i18n="hr_s2">Fasten the strap around your chest, just below the chest muscles, and snap the sensor onto it</li>
+        <li data-i18n="hr_s3">Close any other app that is connected to the band (for example on your phone)</li>
+        <li data-i18n="hr_s4">Press &ldquo;Connect band&rdquo; and choose &ldquo;Polar H9 &hellip;&rdquo; in the browser window</li>
+        <li data-i18n="hr_s5">Wait until the heart rate appears below, then go back and continue</li>
+      </ul>
+    </div>
+    <div class="hr-msg" id="hr-msg" aria-live="polite"></div>
+    <div class="hr-msg warn" id="hr-warn"></div>
+    <div class="hr-buttons">
+      <button class="start-btn" id="hr-connect" type="button">Connect band</button>
+      <button class="start-btn secondary" id="hr-back" type="button">Back</button>
+    </div>
+
+    <div id="hr-live" hidden>
+      <table class="hr-stats" id="hr-stats"></table>
+      <h2 data-i18n="hr_h_bpm">Heart rate (bpm)</h2>
+      <canvas id="hr-bpm-plot"></canvas>
+      <h2 data-i18n="hr_h_rr">RR intervals (ms)</h2>
+      <canvas id="hr-rr-plot"></canvas>
+      <button class="lang-btn" id="hr-details-toggle" type="button">Show details</button>
+      <div id="hr-details" hidden>
+        <h2 data-i18n="hr_h_gaps">Packet interval histogram</h2>
+        <canvas id="hr-gap-plot"></canvas>
+        <h2 data-i18n="hr_h_packets">Packets received</h2>
+        <pre id="hr-packets"></pre>
+        <h2 data-i18n="hr_h_log">Log</h2>
+        <pre id="hr-log"></pre>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ─────────────────── ADMIN FLOW ─────────────────── -->
@@ -506,6 +639,14 @@
         <span class="action-text">
           <span class="action-title">Play</span>
           <span class="action-desc" id="btn-play-desc">Watch the tutorial, then start</span>
+        </span>
+      </button>
+
+      <button class="action-btn" id="btn-hr" type="button">
+        <span class="action-icon">&#9825;</span>
+        <span class="action-text">
+          <span class="action-title">Heart Rate Band</span>
+          <span class="action-desc" id="btn-hr-desc">Optional: connect a Polar H9 before playing</span>
         </span>
       </button>
 
@@ -614,6 +755,9 @@
   </div>
 </div>
 
+<div id="hr-toast" role="status" hidden></div>
+
+<script src="./polar_hr.js"></script>
 <script>
   const playerFlow = document.getElementById('player-flow');
   const adminFlow = document.getElementById('admin-flow');
@@ -720,6 +864,8 @@
     sessionNameInput.value = name;
     sessionNameInput.readOnly = true;
     document.getElementById('name-continue').hidden = true;
+    document.getElementById('name-step').hidden = false;
+    document.getElementById('hr-step').hidden = true;
     document.getElementById('instructions').hidden = false;
     instrPlay.hidden = false;
     playerFlow.hidden = false;
@@ -728,8 +874,38 @@
   document.getElementById('name-continue').addEventListener('click', () => {
     if (!sessionNameInput.value.trim()) { sessionNameInput.focus(); return; }
     localStorage.setItem('session_name', sessionNameInput.value);
+    openTutorial();
+  });
+
+  // Leaving this page drops the band's Bluetooth link, and a page cannot get
+  // it back without the user choosing the device again. So while a band is
+  // connected the tutorial is shown inside this page; otherwise it is the
+  // plain page change it always was.
+  function openTutorial() {
     sessionStorage.removeItem('tutorial_complete');
-    window.location.assign('./tutorial.html');
+    if (!hrSession || !(hrSession.connected || hrState === 'connecting')) {
+      window.location.assign('./tutorial.html');
+      return;
+    }
+    const frame = document.createElement('iframe');
+    frame.id = 'tutorial-frame';
+    frame.src = './tutorial.html';
+    frame.allow = 'fullscreen; autoplay';
+    frame.allowFullscreen = true;
+    document.body.appendChild(frame);
+    playerFlow.hidden = true;
+    adminFlow.hidden = true;
+  }
+  window.addEventListener('message', (e) => {
+    if (e.origin !== window.location.origin || !e.data || e.data.type !== 'tutorial_complete') return;
+    const frame = document.getElementById('tutorial-frame');
+    if (!frame) return;
+    frame.remove();
+    adminFlow.hidden = true;
+    // The tutorial has its own language switch; pick up what was chosen there.
+    lang = sessionStorage.getItem('lang') === 'de' ? 'de' : 'en';
+    applyLang();
+    showInstructions();
   });
   const onInstrPlay = makePlay(instrPlay, 'Press again to start');
   instrPlay.addEventListener('click', () => {
@@ -737,6 +913,213 @@
     // makePlay wrote the English "press again" label; re-apply the active language.
     if (instrPlay.dataset.ready === '1') applyLang();
   });
+
+  // ── Heart rate band (optional) ───────────────────────────────────────────
+  // A Polar H9 can be connected before playing. polar_hr.js records its
+  // packets; controller_main.js finds the session on `window.hrBand` and
+  // writes them into each trial log.
+  const HR_READY_MS = 5000;     // heartbeats must have been arriving this long before Back is offered
+  const HR_SILENCE_MS = 10000;  // no packet for this long = the band is treated as disconnected
+  const HR_TOAST_MS = 1500;
+  const HR_MAX_LINES = 400;     // packet / log lines kept for the details view
+  const nameStep = document.getElementById('name-step');
+  const hrStep = document.getElementById('hr-step');
+  const hrLangToggle = document.getElementById('hr-lang-toggle');
+  const hrOpenBtn = document.getElementById('hr-open');
+  const hrConnectBtn = document.getElementById('hr-connect');
+  const hrBackBtn = document.getElementById('hr-back');
+  const hrDetails = document.getElementById('hr-details');
+  const hrDetailsToggle = document.getElementById('hr-details-toggle');
+  const hrToastEl = document.getElementById('hr-toast');
+  const hrSupported = !!(navigator.bluetooth && window.Polar);
+  let hrSession = null;         // Polar.PolarSession once Connect was pressed
+  let hrState = 'idle';         // idle | connecting | live | lost | failed
+  let hrLiveSinceMs = null;     // when the current link finished its setup
+  let hrFirstPacketMs = null;   // first packet on the current link
+  let hrFromAdmin = false;      // which landing Back returns to
+  let hrToastTimer = null;
+  const hrPacketLines = [];
+  const hrLogLines = [];
+
+  /** Text in the active language; {x} placeholders are filled from `vars`. */
+  function txt(key, vars) {
+    let text = (lang === 'de' ? I18N_DE : I18N_EN)[key];
+    for (const k in vars) text = text.replace('{' + k + '}', () => String(vars[k]));
+    return text;
+  }
+
+  function hrLog(msg) {
+    hrLogLines.push(`[${(performance.now() / 1000).toFixed(2)}] ${msg}`);
+    if (hrLogLines.length > HR_MAX_LINES) hrLogLines.shift();
+  }
+
+  // Brief notice over whatever is on screen, the running game included.
+  function hrToast() {
+    hrToastEl.textContent = txt('hr_toast');
+    hrToastEl.hidden = false;
+    clearTimeout(hrToastTimer);
+    hrToastTimer = setTimeout(() => { hrToastEl.hidden = true; }, HR_TOAST_MS);
+  }
+
+  function hrOnLost() {
+    hrState = 'lost';
+    hrLiveSinceMs = hrFirstPacketMs = null;
+    hrToast();
+    hrRender();
+  }
+
+  async function hrConnect() {
+    if (!hrSession) {
+      hrSession = new Polar.PolarSession(hrLog);
+      hrSession.onPacket = ({ t_ms, hex, note }) => {
+        if (hrFirstPacketMs === null) hrFirstPacketMs = t_ms;
+        hrPacketLines.push(`${t_ms.toFixed(1).padStart(10)}  ${hex.padEnd(17)}  → ${note}`);
+        if (hrPacketLines.length > HR_MAX_LINES) hrPacketLines.shift();
+      };
+      hrSession.onDisconnect = hrOnLost;
+    }
+    hrState = 'connecting';
+    hrLiveSinceMs = hrFirstPacketMs = null;
+    hrRender();
+    try {
+      await hrSession.connect();
+      window.hrBand = hrSession;  // from here on the game writes its packets into the trial logs
+      hrLiveSinceMs = performance.now();
+      hrState = 'live';
+    } catch (err) {
+      hrLog(`Connect failed: ${err.name}: ${err.message}`);
+      // NotFoundError = the browser's device window was closed without a choice.
+      hrState = err.name === 'NotFoundError' ? 'idle' : 'failed';
+    }
+    hrRender();
+  }
+
+  function hrSetPre(id, lines) {
+    const el = document.getElementById(id);
+    const text = lines.join('\n');
+    if (el.textContent === text) return;
+    el.textContent = text;
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function hrRenderStats(last) {
+    const s = hrSession;
+    const drops = s.events.filter((e) => e.event === 'disconnected').length;
+    const gaps = Polar.packetGaps(s.hr, s.events);
+    const rows = [
+      [txt('st_band'), s.device.name || '?'],
+      [txt('st_conn'), `${txt(s.connected ? 'st_conn_on' : 'st_conn_off')}, ${txt('st_drops', { n: drops })}`],
+      [txt('st_last'), txt('st_ago', { s: ((performance.now() - last.t_ms) / 1000).toFixed(1) })],
+      [txt('st_latest'), txt('st_latest_v', { hr: last.hr, rr: last.rr_ms.map((x) => x.toFixed(0)).join(' ') || '–' })],
+      [txt('st_packets'), txt('st_packets_v', {
+        n: s.hr.length,
+        s: ((last.t_ms - s.hr[0].t_ms) / 1000).toFixed(0),
+        r: s.hr.reduce((n, r) => n + r.rr_ms.length, 0),
+      })],
+    ];
+    if (gaps.length) {
+      rows.push([txt('st_gap'), txt('st_gap_v', {
+        m: Polar.median(gaps).toFixed(0), a: Math.min(...gaps).toFixed(0), b: Math.max(...gaps).toFixed(0),
+      })]);
+    }
+    // Built as text nodes: the band's name comes from the device itself.
+    document.getElementById('hr-stats').replaceChildren(...rows.map((cells) => {
+      const row = document.createElement('tr');
+      for (const text of cells) row.appendChild(document.createElement('td')).textContent = text;
+      return row;
+    }));
+  }
+
+  function hrRender() {
+    const live = hrState === 'live';
+    const readyIn = live && hrFirstPacketMs !== null ? HR_READY_MS - (performance.now() - hrFirstPacketMs) : null;
+    const ready = readyIn !== null && readyIn <= 0;
+    const last = hrSession ? hrSession.hr.at(-1) : null;
+
+    // Entry points on the two landings double as the connection indicator.
+    const onText = `${txt('hr_open_on')} ✓${last ? `  ·  ${last.hr} bpm` : ''}`;
+    hrOpenBtn.textContent = live ? onText : txt('hr_open');
+    hrOpenBtn.classList.toggle('on', live);
+    document.getElementById('btn-hr-desc').textContent = live ? onText : 'Optional: connect a Polar H9 before playing';
+    if (hrStep.hidden || playerFlow.hidden) return;
+
+    let key = null;
+    let cls = '';
+    if (!hrSupported) { key = 'hr_unsupported'; cls = 'warn'; }
+    else if (hrState === 'connecting') key = 'hr_connecting';
+    else if (live && hrFirstPacketMs === null) key = 'hr_waiting';
+    else if (live && !ready) key = 'hr_checking';
+    else if (live) { key = 'hr_ok'; cls = 'ok'; }
+    else if (hrState === 'lost') { key = 'hr_lost'; cls = 'warn'; }
+    else if (hrState === 'failed') { key = 'hr_failed'; cls = 'warn'; }
+    const msg = document.getElementById('hr-msg');
+    msg.textContent = key ? txt(key) : '';
+    msg.className = 'hr-msg' + (cls ? ' ' + cls : '');
+    const wrongDevice = hrSession && hrSession.device && hrState !== 'idle' && !hrSession.isSupportedDevice;
+    document.getElementById('hr-warn').textContent =
+      wrongDevice ? txt('hr_not_h9', { name: hrSession.device.name || '?' }) : '';
+
+    hrConnectBtn.textContent = txt('hr_connect');
+    hrConnectBtn.disabled = !hrSupported || hrState === 'connecting' || live;
+    // Leaving is held back only between "the link is up" and "5 s of heartbeats seen".
+    hrBackBtn.disabled = live && !ready;
+    hrBackBtn.textContent = live && readyIn !== null && !ready
+      ? txt('hr_back_wait', { s: Math.ceil(readyIn / 1000) }) : txt('hr_back');
+    hrDetailsToggle.textContent = txt(hrDetails.hidden ? 'hr_details_show' : 'hr_details_hide');
+
+    const liveBox = document.getElementById('hr-live');
+    liveBox.hidden = !last;
+    if (!last) return;
+    hrRenderStats(last);
+    const { bpm, rr } = Polar.beatSeries(hrSession.hr);
+    const note = (v, m, sd) => txt('pl_note', { v: v.toFixed(0), m: m.toFixed(1), sd: sd.toFixed(1) });
+    Polar.drawSeries(document.getElementById('hr-bpm-plot'), bpm, { xTitle: txt('pl_time'), yTitle: txt('pl_bpm'), note });
+    Polar.drawSeries(document.getElementById('hr-rr-plot'), rr, { xTitle: txt('pl_time'), yTitle: txt('pl_rr'), note });
+    if (hrDetails.hidden) return;
+    Polar.drawGapHistogram(document.getElementById('hr-gap-plot'), Polar.packetGaps(hrSession.hr, hrSession.events), {
+      xTitle: txt('pl_gap_x'),
+      yTitle: txt('pl_gap_y'),
+      note: (n, m, a, b) => txt('pl_gap_note', { n, m: m.toFixed(0), a: a.toFixed(0), b: b.toFixed(0) }),
+    });
+    hrSetPre('hr-packets', hrPacketLines);
+    hrSetPre('hr-log', hrLogLines);
+  }
+
+  setInterval(() => {
+    if (!hrSession) return;
+    // The browser does not always report a lost band, so a link that is up
+    // but silent for too long is treated as a disconnection.
+    if (hrState === 'live') {
+      const last = hrSession.hr.at(-1);
+      const since = Math.max(hrLiveSinceMs, last ? last.t_ms : 0);
+      if (performance.now() - since > HR_SILENCE_MS) {
+        hrLog(`No packet for ${HR_SILENCE_MS / 1000} s: treating the band as disconnected.`);
+        hrSession.drop('silent');  // ends in hrOnLost
+      }
+    }
+    if (!_gameBooted) hrRender();  // nothing of this page is visible during the game
+  }, 500);
+
+  function hrOpenPage(fromAdmin) {
+    hrFromAdmin = fromAdmin;
+    adminFlow.hidden = true;
+    nameStep.hidden = true;
+    hrStep.hidden = false;
+    playerFlow.hidden = false;
+    window.scrollTo(0, 0);
+    hrRender();
+  }
+  function hrClosePage() {
+    hrStep.hidden = true;
+    nameStep.hidden = false;
+    if (hrFromAdmin) { playerFlow.hidden = true; adminFlow.hidden = false; }
+    hrRender();
+  }
+  hrOpenBtn.addEventListener('click', () => hrOpenPage(false));
+  document.getElementById('btn-hr').addEventListener('click', () => hrOpenPage(true));
+  hrBackBtn.addEventListener('click', hrClosePage);
+  hrConnectBtn.addEventListener('click', hrConnect);
+  hrDetailsToggle.addEventListener('click', () => { hrDetails.hidden = !hrDetails.hidden; hrRender(); });
 
   // ── Language switch (player pages only) ──────────────────────────────────
   // English is the markup, so it is the default and needs no table: the
@@ -765,8 +1148,97 @@
 
     play: 'Spielen',
     play_again: 'Erneut dr\u00fccken zum Starten',
+
+    // Heart rate band page: static text ...
+    hr_title: 'Herzfrequenz-Gurt (optional)',
+    hr_intro: 'Sie k\u00f6nnen w\u00e4hrend des Spiels Ihre Herzfrequenz aufzeichnen. Unterst\u00fctzt wird der Brustgurt Polar H9. Dieser Schritt ist freiwillig.',
+    hr_s1: 'Befeuchten Sie die beiden Elektrodenfl\u00e4chen auf der Innenseite des Gurts mit Wasser',
+    hr_s2: 'Legen Sie den Gurt direkt unterhalb der Brustmuskulatur um den Brustkorb und befestigen Sie den Sensor daran',
+    hr_s3: 'Schlie\u00dfen Sie alle anderen Apps, die mit dem Gurt verbunden sind (z. B. auf Ihrem Smartphone)',
+    hr_s4: 'Dr\u00fccken Sie \u201eGurt verbinden\u201c und w\u00e4hlen Sie im Browserfenster \u201ePolar H9 \u2026\u201c aus',
+    hr_s5: 'Warten Sie, bis unten die Herzfrequenz erscheint, gehen Sie dann zur\u00fcck und fahren Sie fort',
+    hr_h_bpm: 'Herzfrequenz (Schl\u00e4ge/min)',
+    hr_h_rr: 'RR-Intervalle (ms)',
+    hr_h_gaps: 'Histogramm der Paketabst\u00e4nde',
+    hr_h_packets: 'Empfangene Pakete',
+    hr_h_log: 'Protokoll',
+    // ... and text set from script ({x} are placeholders).
+    hr_open: 'Herzfrequenz-Gurt verbinden (optional)',
+    hr_open_on: 'Herzfrequenz-Gurt verbunden',
+    hr_connect: 'Gurt verbinden',
+    hr_back: 'Zur\u00fcck',
+    hr_back_wait: 'Signal wird gepr\u00fcft\u2026 {s} s',
+    hr_details_show: 'Details anzeigen',
+    hr_details_hide: 'Details ausblenden',
+    hr_unsupported: 'Dieser Browser kann sich nicht mit dem Gurt verbinden. Verwenden Sie Chrome oder Edge auf einem Computer oder Android-Ger\u00e4t (unter Linux chrome://flags/#enable-web-bluetooth aktivieren). Sie k\u00f6nnen ohne Gurt fortfahren.',
+    hr_connecting: 'Verbindung wird hergestellt\u2026 das kann bis zu 30 Sekunden dauern',
+    hr_waiting: 'Verbunden. Warten auf den ersten Herzschlag\u2026',
+    hr_checking: 'Herzschl\u00e4ge werden empfangen. Das Signal wird gepr\u00fcft\u2026',
+    hr_ok: 'Der Gurt ist verbunden und zeichnet auf. Sie k\u00f6nnen zur\u00fcckgehen.',
+    hr_lost: 'Der Gurt ist getrennt. Verbinden Sie ihn erneut oder gehen Sie zur\u00fcck und fahren Sie ohne ihn fort.',
+    hr_failed: 'Die Verbindung ist fehlgeschlagen. Pr\u00fcfen Sie, ob der Gurt angelegt ist und die Elektroden feucht sind, und versuchen Sie es erneut.',
+    hr_not_h9: 'Warnung: \u201e{name}\u201c ist kein Polar H9. Die Aufzeichnung ist f\u00fcr den Polar H9 ausgelegt und funktioniert mit diesem Ger\u00e4t m\u00f6glicherweise nicht korrekt.',
+    hr_toast: 'Herzfrequenz-Gurt getrennt. Starten Sie das Spiel neu, um ihn wieder zu verbinden, oder fahren Sie ohne ihn fort.',
+    st_band: 'Gurt',
+    st_conn: 'Verbindung',
+    st_conn_on: 'verbunden',
+    st_conn_off: 'getrennt',
+    st_drops: 'bisher {n} Unterbrechung(en)',
+    st_last: 'Letztes Paket',
+    st_ago: 'vor {s} s',
+    st_latest: 'Aktuell',
+    st_latest_v: '{hr} Schl\u00e4ge/min, RR {rr} ms',
+    st_packets: 'Pakete',
+    st_packets_v: '{n} in {s} s, {r} RR-Werte',
+    st_gap: 'Paketabstand',
+    st_gap_v: 'Median {m} ms, min. {a}, max. {b}',
+    pl_time: 'Uhrzeit (Laptop-Uhr)',
+    pl_bpm: 'Schl\u00e4ge/min',
+    pl_rr: 'ms',
+    pl_note: 'aktuell {v} \u00b7 10-s-Mittel {m} \u00b1 {sd}',
+    pl_gap_x: 'Abstand zwischen Paketen (ms)',
+    pl_gap_y: 'Pakete',
+    pl_gap_note: 'n {n} \u00b7 Median {m} ms \u00b7 min. {a} \u00b7 max. {b}',
   };
-  const I18N_EN = { play_again: 'Press again to start' };
+  const I18N_EN = {
+    play_again: 'Press again to start',
+    hr_open: 'Connect heart rate band (optional)',
+    hr_open_on: 'Heart rate band connected',
+    hr_connect: 'Connect band',
+    hr_back: 'Back',
+    hr_back_wait: 'Checking signal\u2026 {s} s',
+    hr_details_show: 'Show details',
+    hr_details_hide: 'Hide details',
+    hr_unsupported: 'This browser cannot connect to the band. Use Chrome or Edge on a computer or an Android device (on Linux, enable chrome://flags/#enable-web-bluetooth). You can continue without the band.',
+    hr_connecting: 'Connecting\u2026 this can take up to 30 seconds',
+    hr_waiting: 'Connected. Waiting for the first heartbeat\u2026',
+    hr_checking: 'Receiving heartbeats. Checking the signal\u2026',
+    hr_ok: 'The band is connected and recording. You can go back.',
+    hr_lost: 'The band is disconnected. Connect it again, or go back and continue without it.',
+    hr_failed: 'The connection failed. Check that the band is worn and the electrodes are wet, then try again.',
+    hr_not_h9: 'Warning: \u201c{name}\u201d is not a Polar H9. The recording is designed for the Polar H9 and may not work correctly with this device.',
+    hr_toast: 'Heart rate band disconnected. Restart the game to reconnect it, or continue without it.',
+    st_band: 'Band',
+    st_conn: 'Connection',
+    st_conn_on: 'connected',
+    st_conn_off: 'disconnected',
+    st_drops: '{n} interruption(s) so far',
+    st_last: 'Last packet',
+    st_ago: '{s} s ago',
+    st_latest: 'Latest',
+    st_latest_v: '{hr} bpm, RR {rr} ms',
+    st_packets: 'Packets',
+    st_packets_v: '{n} in {s} s, {r} RR values',
+    st_gap: 'Packet interval',
+    st_gap_v: 'median {m} ms, min {a}, max {b}',
+    pl_time: 'time (laptop clock)',
+    pl_bpm: 'bpm',
+    pl_rr: 'ms',
+    pl_note: 'last {v} \u00b7 10 s mean {m} \u00b1 {sd}',
+    pl_gap_x: 'interval between packets (ms)',
+    pl_gap_y: 'packets',
+    pl_gap_note: 'n {n} \u00b7 median {m} ms \u00b7 min {a} \u00b7 max {b}',
+  };
   const i18nNodes = document.querySelectorAll('[data-i18n]');
   const i18nPlaceholders = document.querySelectorAll('[data-i18n-placeholder]');
   i18nNodes.forEach(el => { I18N_EN[el.dataset.i18n] = el.textContent; });
@@ -780,16 +1252,20 @@
     i18nPlaceholders.forEach(el => { el.placeholder = t[el.dataset.i18nPlaceholder]; });
     if (instrPlay.dataset.ready === '1') instrPlay.textContent = t.play_again;
     langToggle.textContent = lang === 'de' ? 'English' : 'Deutsch';
+    hrLangToggle.textContent = langToggle.textContent;
     document.documentElement.lang = lang;
     // Hand the choice to the game: controller_main.js reads it for its own
     // in-game prompts. Written on every call (including the initial one) so a
     // stale value from an earlier play in this tab can never leak in.
     try { sessionStorage.setItem('lang', lang); } catch (_) {}
+    hrRender();
   }
-  langToggle.addEventListener('click', () => {
+  function toggleLang() {
     lang = lang === 'de' ? 'en' : 'de';
     applyLang();
-  });
+  }
+  langToggle.addEventListener('click', toggleLang);
+  hrLangToggle.addEventListener('click', toggleLang);
   applyLang();
 
   // ── Admin landing ────────────────────────────────────────────────────────
@@ -823,8 +1299,7 @@
       const nm = (adminName.value || '').trim();
       if (!nm) { adminName.focus(); return; }
       localStorage.setItem('session_name', nm);
-      sessionStorage.removeItem('tutorial_complete');
-      window.location.assign('./tutorial.html');
+      openTutorial();
     });
 
     // Mark a library trial as the one to play now. (Promote-to-default lives in

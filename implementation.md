@@ -51,13 +51,15 @@ monkey_3d_game/
 │   ├── index.html              landing page (role-rendered; loads WASM)
 │   ├── login.html              password page
 │   ├── controller_main.min.js  minified build output of controller_main.js
+│   ├── polar_hr.js             optional heart rate band (Polar H9, see §20)
 │   ├── game_node -> ../game_node      symlink (WASM build dir is game_node/pkg)
 │   ├── assets -> ../game_node/assets  symlink
 │   └── trials_config -> ../trials_config  symlink
 ├── trials_config/
 │   └── trial_editor.html       browser-based trial JSON editor
 ├── tools/
-│   └── verify_trial_logs.py    drift / gap / FPS verifier + session overview (native + web ZIPs)
+│   ├── verify_trial_logs.py    drift / gap / FPS verifier + session overview (native + web ZIPs)
+│   └── tests/test_polar_hr.js  `node` tests for the heart rate band library (§20)
 └── assets/                     PBR textures (color, normal, mr, occlusion, depth)
 ```
 
@@ -1499,3 +1501,94 @@ explicitly excluded from static serving.
 (systemd, `Restart=always`, runs `python -m uvicorn deploy_backend.log_server:app`
 from the repo root). Run on a VM with a **persistent disk** under
 `out/server_logs/`; HTTPS is mandatory (SAB / cookies / fullscreen).
+
+---
+
+## 20. Heart rate band (Polar H9, web only)
+
+Optional. A participant can connect a Polar H9 chest band before playing; its
+packets are then written into every trial log. Web Bluetooth only, so this
+exists in the web controller alone: Chromium browsers on desktop and Android,
+not Firefox, not Safari, not any browser on iPhone/iPad. Chrome on Linux needs
+`chrome://flags/#enable-web-bluetooth`.
+
+### What the band gives
+One packet about once a second on the standard Heart Rate service: a smoothed
+bpm value and zero, one or two RR intervals (1/1024 s units). No timestamp, no
+raw ECG, no accelerometer. The only time available is the packet's arrival on
+the laptop.
+
+**Only the heart rate service is touched.** Reading the band's other services
+on an unpaired link makes the OS start a pairing; nothing confirms it and the
+link is dropped 30 s later. `polar_hr.js` requests access to `heart_rate` only.
+
+### Files
+- [deploy_frontend/polar_hr.js](deploy_frontend/polar_hr.js) — packet parser,
+  `PolarSession` (connect with retries, packet + event buffers,
+  `takeTrialLog`), the pure `buildTrialLog`, and the canvas plots.
+- [deploy_frontend/index.html](deploy_frontend/index.html) — the band page
+  (`#hr-step`), EN/DE text in the existing `I18N_*` tables, the 10 s silence
+  watchdog, the 1.5 s notice, and `window.hrBand`.
+- [controller_main.js](controller_main.js) — `trialStartPerformanceMs` and the
+  `hr_info` / `hr_meas` / `hr_measurements` fields in `saveTrialLog`.
+- [tools/tests/test_polar_hr.js](tools/tests/test_polar_hr.js) — tests for
+  the parser, the trial-log block and the plot series:
+  `node tools/tests/test_polar_hr.js`.
+
+### Page flow
+The name step (and the admin landing) has a "Connect heart rate band
+(optional)" button that opens the band page: instructions, Connect, then
+status, heart rate and RR plots, and a details toggle (packet-interval
+histogram, raw packets, log). Back is held until 5 s of packets have arrived.
+
+A page change drops a Web Bluetooth link and a page cannot restore it without
+the device chooser. So **while a band is connected, the tutorial is shown in an
+iframe** over the landing page (`openTutorial()`); `tutorial.html` reports its
+end with `postMessage` when embedded. With no band, the tutorial is the plain
+page change it always was.
+
+Lost band — a disconnect event, or 10 s without a packet (Chrome on Linux does
+not always report the loss): a notice is shown for 1.5 s, recording stops, and
+the game carries on. There is no automatic reconnection.
+
+### Log schema
+Level summary, top level: `hr_measurements` — true once a trial of that level
+saved at least one packet.
+
+Trial log, top level:
+```
+"hr_info": {
+  "device": "Polar H9 20FCA238",
+  "trial_start_elapsed_secs": 51.33,   controller clock, switch to PLAYING
+  "trial_end_elapsed_secs": 56.39,     controller clock, trial log written
+  "units": { ... },
+  "connection_events": [ { "elapsed_secs": 12.40, "event": "connected" } ]
+},
+"hr_meas": [
+  { "arrival_elapsed_secs": 50.96, "hr": 62, "rr_ms": [984.375], "raw": "10 3e f0 03" }
+]
+```
+- `hr_info` is `null` and `hr_meas` is `[]` when no band was ever connected
+  (always the case for `controller.py`, which writes them for schema parity).
+- All times are seconds on the **controller clock** — the clock of
+  `check_input_event_elapsed_secs`, zero at `session_info.app_start_unix_ns` —
+  stored as 32-bit floats like `present_elapsed_secs`. They are not on the
+  frame clock; the constant between the two is still not logged (§15.6).
+- Events: `connected`, `disconnected`, `silent` (10 s without packets, written
+  just before the `disconnected` it causes).
+- **Each trial log holds every packet since the previous trial log**: the black
+  screen before the trial, the trial, its door animation. Packets before
+  `trial_start_elapsed_secs` belong to the black screen. Reading the logs in
+  order gives the unbroken stream, which the RR chain needs.
+- The first trial also holds everything since the band connected; packets from
+  before the controller started have negative times. Packets after the last
+  trial are not saved.
+
+### What the timing supports (measured on one H9, Chrome/Linux)
+- RR intervals: about 1 ms each; anything derived from them is solid.
+- bpm: a running average over roughly the last 15 beats; not for timing.
+- Beat time on the laptop clock: a packet is typically ~1 s old on arrival
+  (wait for the band's 1 Hz send, then for a radio slot). Anchoring a whole
+  run on its fastest packet is good to tens of ms at best.
+- The link ran at a 480 ms connection interval on Linux (arrivals in 480 ms
+  steps, ~18 s from connect to first packet). The page cannot change this.

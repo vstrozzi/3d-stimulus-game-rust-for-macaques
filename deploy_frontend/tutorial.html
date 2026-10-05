@@ -172,6 +172,12 @@
   continueButton.addEventListener('click', () => {
     if (continueButton.disabled) return;
     sessionStorage.setItem('tutorial_complete', '1');
+    // Shown inside the landing page while a heart rate band is connected (a
+    // page change would drop its Bluetooth link): hand control back to it.
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: 'tutorial_complete' }, window.location.origin);
+      return;
+    }
     window.location.assign('./?instructions=1');
   });
 

@@ -175,6 +175,9 @@ let trialRunCounter = 0;
 // Timestamp of the most recent human check event, consumed by the exact row
 // on which `check` is dispatched to the game.
 let pendingCheckInputEventElapsedSecs = null;
+// performance.now() when the current trial switched to PLAYING. Splits the
+// heart rate packets of a trial log into "black screen before" and "trial".
+let trialStartPerformanceMs = null;
 
 // Per-level-run tracking — mirrors controller.py
 let levelRunCounter = 0;
@@ -1294,6 +1297,7 @@ function _startLevelRunIfNeeded() {
     elapsed_time_no_anim: null,
     elapsed_time_anim: null,
     level_completed: null,
+    hr_measurements: false,
     trials_runs: [],
     timing_health: null,
     prev_file: lastSummaryFilename,
@@ -1458,6 +1462,16 @@ function saveTrialLog(outcome) {
   const chainCompleted = trialProceeding === PROCEEDING.ADVANCE
     && _trialIdx() === currentLevel().trials.length - 1;
 
+  // Optional heart rate band, connected on the landing page (polar_hr.js).
+  // Every packet since the previous trial log goes into this one, so the
+  // black screen before the trial is covered and consecutive logs form the
+  // unbroken stream. Times are on this controller's clock.
+  const hrBand = (typeof window !== "undefined" && window.hrBand) || null;
+  const hr = hrBand
+    ? hrBand.takeTrialLog(APP_START_PERFORMANCE_MS, trialStartPerformanceMs, performance.now())
+    : { hr_info: null, hr_meas: [] };
+  if (hr.hr_meas.length > 0) currentLevelSummary.hr_measurements = true;
+
   const log = {
     level_index: currentLevelIndex,
     active_chain: activeChain,
@@ -1475,6 +1489,8 @@ function saveTrialLog(outcome) {
     timestamp_end: trialEndDt.toISOString(),
     session_info: _sessionInfo(),
     win_event: winEvent,
+    hr_info: hr.hr_info,
+    hr_meas: hr.hr_meas,
     frames: framesCompact,
   };
   // Serialize the trial log to a JSON string now and hand it to the sender.
@@ -1617,6 +1633,7 @@ function handleInit(state) {
   frameLogLen = 0;
   _frameLogOverflowWarned = false;
   pendingCheckInputEventElapsedSecs = null;
+  trialStartPerformanceMs = null;
   frameZero = null;
   renderFrameZero = null;
   winEvent = null;
@@ -1666,6 +1683,7 @@ function handleWaitingForStart(state) {
     writeCommands(cmds);
     fsmState = FSM.PLAYING;
     _playingStartTime = Date.now();
+    trialStartPerformanceMs = performance.now();
     if (sessionStartMs === null) sessionStartMs = Date.now();
     // Re-sync at the trial boundary. Raw game/render IDs stay monotonic, but
     // the log rebases from the first completed post-reset snapshot. Drop the

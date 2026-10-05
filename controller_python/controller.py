@@ -898,6 +898,7 @@ class MonkeyGameController:
             "elapsed_time_no_anim": None,
             "elapsed_time_anim": None,
             "level_completed": None,
+            "hr_measurements": False,  # heart rate band: web controller only
             "trials_runs": [],
             "timing_health": None,
             "prev_file": self._last_summary_filename,
@@ -1088,6 +1089,10 @@ class MonkeyGameController:
             "timestamp_end": end_dt.isoformat(),
             "session_info": self.session_info,
             "win_event": self.win_event,
+            # Heart rate band: web controller only (Web Bluetooth). Written
+            # empty here so native and web trial logs share one schema.
+            "hr_info": None,
+            "hr_meas": [],
             "frames": frames_compact,
         }
         try:

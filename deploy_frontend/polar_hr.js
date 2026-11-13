@@ -38,7 +38,7 @@
     verity: { mt: MEAS.PPG, key: "hr_ppg", source: null },
   };
 
-  const SYNC_MAX_SD_MS = 15;   // a sync whose press offsets spread more than this (SD) is not used
+  const SYNC_MAX_SD_MS = 15;   // a sync whose press-offset SD exceeds this is not used
   const SYNC_SETTLE_MS = 4000; // longest wait for the accelerometer data of the last press
   const BEAT_CONTEXT = 30;     // neighbouring beats used to match a beat to its R-peak
   // A beat is matched to its R-peak in the background once it arrived this
@@ -78,7 +78,7 @@
   const SYNC_FILE_UNITS = {
     kind: "start: before the game; end: after it",
     accepted: "used for the clock mapping: at least half of the presses (and 3) felt, their offsets' SD at most 15 ms",
-    reason: "why not: nodata (no accelerometer data), few (too few presses felt), irregular (offsets spread too much)",
+    reason: "why not: nodata (no accelerometer data), few (too few presses felt), irregular (offset standard deviation too high)",
     key_elapsed_secs: "keydown time (event.timeStamp) on the controller clock",
     onset_elapsed_secs: "impact onset in the accelerometer on the controller clock (via the syncs of its clock segment; via packet arrival times if it has none)",
     residual_ms: "keydown minus impact onset on that clock (ms)",
@@ -409,7 +409,7 @@
      * the start or the end of the session (`kind`). Waits for the
      * accelerometer data of the last press, finds each press's impact, and
      * accepts the sync when at least half of the presses (and 3) were felt
-     * and their offsets spread at most 15 ms (SD). An accepted sync re-times
+     * and their offsets have an SD of at most 15 ms. An accepted sync re-times
      * every trial file written so far and sends it again.
      */
     async sync(kind, keys) {

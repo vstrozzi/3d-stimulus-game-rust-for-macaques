@@ -218,8 +218,8 @@ function beatErrors(sent, beats, from = 0, to = Infinity) {
     const b = beatErrors(sent, sim.beats);
     assert.ok(b.timed >= 0.9 * b.reported, `${b.timed} of ${b.reported} beats timed`);
     assert.ok(Math.abs(b.mean - KEY_BIAS) < 5, `mean beat-time error ${b.mean.toFixed(2)} ms (keyboard ${KEY_BIAS})`);
-    const spread = Math.sqrt(b.errs.reduce((t, e) => t + (e - b.mean) ** 2, 0) / b.errs.length);
-    assert.ok(spread < 2 && b.errs.every((e) => Math.abs(e - b.mean) < 6), `beat times scatter ${spread.toFixed(2)} ms around that offset`);
+    const sd = Math.sqrt(b.errs.reduce((t, e) => t + (e - b.mean) ** 2, 0) / b.errs.length);
+    assert.ok(sd < 2 && b.errs.every((e) => Math.abs(e - b.mean) < 6), `beat-time SD ${sd.toFixed(2)} ms around that offset`);
 
     // ECG frames: the first sample's time on the controller clock.
     const f = logs[10].hr_ecg[3];
@@ -233,7 +233,7 @@ function beatErrors(sent, beats, from = 0, to = Infinity) {
     assert.ok(syncFile.syncs[0].acc.x.length > 2000);
     const used = syncFile.syncs[0].presses.filter((p) => p.used);
     assert.ok(used.every((p) => Math.abs(p.residual_ms) < 15));
-    console.log(`one clock: beats ${b.timed}/${b.reported} timed, error ${b.mean.toFixed(2)} ± ${spread.toFixed(2)} ms (8 ms keyboard included); ` +
+    console.log(`one clock: beats ${b.timed}/${b.reported} timed, error ${b.mean.toFixed(2)} ms (SD ${sd.toFixed(2)} ms; 8 ms keyboard included); ` +
       `drift ${info.sync_info.drift_ppm} ppm, precision ${info.sync_info.precision_ms} ms, RR check ${info.hr_rr_check_sd_ms} ms`);
   }
 
@@ -283,6 +283,7 @@ function beatErrors(sent, beats, from = 0, to = Infinity) {
   }
 
   console.log("polar_hr.js sync: all tests passed");
+  process.exit(0);  // the background beat-matching timer would keep Node alive
 })().catch((err) => {
   console.error(err);
   process.exit(1);

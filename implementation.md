@@ -1732,8 +1732,10 @@ An H9's files are unchanged.
   sync; no sync; sensor switched off mid-session).
 
 ### Flow
-1. Band page: connect; the sync box asks for 10 firm space bar presses about
-   a second apart with the sensor in the pressing hand (H10: unclipped, fingers
+1. Band page: for an H10, switch it on and pair it in the operating system's
+   Bluetooth settings first, then connect and complete the sync here within
+   50 seconds. The sync box asks for 10 firm space bar presses about a second apart
+   with the sensor in the pressing hand (H10: unclipped, fingers
    on both electrodes; Verity: on the arm of that hand). While presses are
    collected the space bar does nothing else. Accepted when at least half of
    the presses (and 3) were felt and their offsets' SD ≤ 15 ms; otherwise the
@@ -1808,4 +1810,4 @@ link drop and reconnection, end sync and re-send; 101 of 112 beats timed (the
 others during the in-hand presses and the drop), beat times a constant
 5.6 ± 0.3 ms after the true beats (the simulated 8 ms keyboard delay less the
 late impact pick), drift 39 ppm (true 40). Fake H9: files unchanged. Fake
-Verity: synced at 52 Hz (spread 6.4 ms), optical frames saved.
+Verity: synced at 52 Hz (standard deviation 6.4 ms), optical frames saved.

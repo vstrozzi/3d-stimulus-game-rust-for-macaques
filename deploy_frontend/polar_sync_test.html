@@ -134,7 +134,7 @@
   const SETTLE_MS = 2000;      // wait for late frames before analysing a block
   const SILENCE_MS = 8000;     // streaming but no frame for this long: drop the link and reconnect
   const LIVE_MS = 8000;        // live plot width
-  const MAX_SD_MS = 15;        // a block with a larger spread (SD of its offsets) does not set an offset
+  const MAX_SD_MS = 15;        // a block with a larger offset SD does not set an offset
 
   const SLOTS = {
     h10: {

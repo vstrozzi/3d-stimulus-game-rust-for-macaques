@@ -612,6 +612,7 @@
         <li data-i18n="hr_s1">Chest band: moisten the two electrode areas on the inside of the strap with water</li>
         <li data-i18n="hr_s2">Fasten the strap around your chest, just below the chest muscles, and snap the sensor onto it (Verity Sense: wear it on your forearm or upper arm, sensor against the skin)</li>
         <li data-i18n="hr_s3">Close any other app that is connected to the band (for example on your phone)</li>
+        <li data-i18n="hr_s3b">Polar H10: switch it on and pair it in your operating system's Bluetooth settings first. Then connect and synchronize it here within 50 seconds</li>
         <li data-i18n="hr_s4">Press &ldquo;Connect band&rdquo; and choose your device (&ldquo;Polar H9 &hellip;&rdquo;, &ldquo;Polar H10 &hellip;&rdquo; or &ldquo;Polar Sense &hellip;&rdquo;) in the browser window</li>
         <li data-i18n="hr_s5">Wait until the heart rate appears below (H10 and Verity Sense: then synchronize as shown below), then go back and continue</li>
       </ul>
@@ -1249,6 +1250,9 @@
 
   window.addEventListener('keydown', (e) => {
     if (!hrSyncRun || e.code !== 'Space') return;
+    // A start sync left unfinished (Back, or the game started) is dropped,
+    // so the game always gets its space bar.
+    if (hrSyncRun.kind === 'start' && (_gameBooted || hrStep.hidden)) { hrSyncRun = null; hrRenderSync(); return; }
     e.preventDefault();
     e.stopImmediatePropagation();  // never reaches the game
     if (e.repeat) return;
@@ -1259,7 +1263,7 @@
     else hrRenderSync();
   }, true);
   window.addEventListener('keyup', (e) => {
-    if (hrSyncRun && e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); }
+    if (hrSyncRun && e.code === 'Space' && !(hrSyncRun.kind === 'start' && (_gameBooted || hrStep.hidden))) { e.preventDefault(); e.stopImmediatePropagation(); }
   }, true);
 
   hrSyncUi.start.btn.addEventListener('click', () => hrSyncClick('start'));
@@ -1315,6 +1319,7 @@
     hr_s1: 'Brustgurt: Befeuchten Sie die beiden Elektrodenfl\u00e4chen auf der Innenseite des Gurts mit Wasser',
     hr_s2: 'Legen Sie den Gurt direkt unterhalb der Brustmuskulatur um den Brustkorb und befestigen Sie den Sensor daran (Verity Sense: am Unter- oder Oberarm tragen, Sensor auf der Haut)',
     hr_s3: 'Schlie\u00dfen Sie alle anderen Apps, die mit dem Gurt verbunden sind (z. B. auf Ihrem Smartphone)',
+    hr_s3b: 'Polar H10: Schalten Sie ihn ein und koppeln Sie ihn zuerst in den Bluetooth-Einstellungen Ihres Betriebssystems. Verbinden und synchronisieren Sie ihn dann hier innerhalb von 50 Sekunden',
     hr_s4: 'Dr\u00fccken Sie \u201eGurt verbinden\u201c und w\u00e4hlen Sie im Browserfenster Ihr Ger\u00e4t aus (\u201ePolar H9 \u2026\u201c, \u201ePolar H10 \u2026\u201c oder \u201ePolar Sense \u2026\u201c)',
     hr_s5: 'Warten Sie, bis unten die Herzfrequenz erscheint (H10 und Verity Sense: dann wie unten gezeigt synchronisieren), gehen Sie dann zur\u00fcck und fahren Sie fort',
     hr_h_bpm: 'Herzfrequenz (Schl\u00e4ge/min)',
@@ -1351,13 +1356,13 @@
     sync_press: 'Dr\u00fccken Sie die Leertaste: {n} von {of}',
     sync_checking: 'Wird gepr\u00fcft\u2026',
     sync_waiting: 'Warten auf die Bewegungsdaten des Sensors\u2026',
-    sync_ok: 'Synchronisiert \u2713 ({u} von {n} Tastendr\u00fccken verwendet, Streuung {sd} ms)',
+    sync_ok: 'Synchronisiert \u2713 ({u} von {n} Tastendr\u00fccken verwendet, Standardabweichung {sd} ms)',
     sync_bad: 'Nicht synchronisiert: {why}. Bitte versuchen Sie es erneut.',
     sync_needed: 'Noch nicht synchronisiert. Bitte synchronisieren Sie, bevor Sie zur\u00fcckgehen.',
     sync_unavailable: 'Dieser Sensor kann nicht synchronisiert werden ({err}). Die Herzfrequenz wird trotzdem aufgezeichnet.',
     sync_saving: 'Synchronisiert \u2713. Die gespeicherten Daten werden aktualisiert\u2026',
     why_few: 'der Sensor hat nur {f} der {n} Tastendr\u00fccke gesp\u00fcrt; halten Sie ihn fest in der dr\u00fcckenden Hand und dr\u00fccken Sie kr\u00e4ftiger',
-    why_irregular: 'die gemessenen Tastendr\u00fccke streuen zu stark ({sd} ms); dr\u00fccken Sie kr\u00e4ftig, eine Taste nach der anderen',
+    why_irregular: 'die Standardabweichung der gemessenen Tastendr\u00fccke ist zu hoch ({sd} ms); dr\u00fccken Sie kr\u00e4ftig, eine Taste nach der anderen',
     why_nodata: 'keine Bewegungsdaten vom Sensor',
     st_band: 'Gurt',
     st_conn: 'Verbindung',
@@ -1408,13 +1413,13 @@
     sync_press: 'Press the space bar: {n} of {of}',
     sync_checking: 'Checking\u2026',
     sync_waiting: 'Waiting for the sensor\'s movement data\u2026',
-    sync_ok: 'Synchronized \u2713 ({u} of {n} presses used, spread {sd} ms)',
+    sync_ok: 'Synchronized \u2713 ({u} of {n} presses used, standard deviation {sd} ms)',
     sync_bad: 'Not synchronized: {why}. Please try again.',
     sync_needed: 'Not synchronized yet. Please synchronize before going back.',
     sync_unavailable: 'This sensor cannot be synchronized ({err}). Its heart rate is still recorded.',
     sync_saving: 'Synchronized \u2713. Updating the saved data\u2026',
     why_few: 'the sensor felt only {f} of the {n} presses; hold it firmly in the pressing hand and press harder',
-    why_irregular: 'the presses were felt too unevenly (spread {sd} ms); press firmly, one press at a time',
+    why_irregular: 'the measured presses have too high a standard deviation ({sd} ms); press firmly, one press at a time',
     why_nodata: 'no movement data from the sensor',
     st_band: 'Band',
     st_conn: 'Connection',

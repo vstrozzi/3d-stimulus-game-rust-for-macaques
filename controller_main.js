@@ -1466,8 +1466,11 @@ function saveTrialLog(outcome) {
   // Optional heart rate band, connected on the landing page (polar_hr.js).
   // Every packet since the previous trial log goes into this one, so the
   // black screen before the trial is covered and consecutive logs form the
-  // unbroken stream. Times are on this controller's clock.
+  // unbroken stream. Times are on this controller's clock. An H10 / Verity
+  // Sense also adds its ECG / optical frames, and sends its sync file and the
+  // re-timed trial files (after the end sync) through enqueueLog.
   const hrBand = (typeof window !== "undefined" && window.hrBand) || null;
+  if (hrBand && hrBand.useLogger) hrBand.useLogger(enqueueLog, `${_participantName()}/${_sessionFolderName()}`, APP_START_PERFORMANCE_MS);
   const hr = hrBand
     ? hrBand.takeTrialLog(APP_START_PERFORMANCE_MS, trialStartPerformanceMs, performance.now())
     : { hr_info: null, hr_meas: [] };
@@ -1492,13 +1495,17 @@ function saveTrialLog(outcome) {
     win_event: winEvent,
     hr_info: hr.hr_info,
     hr_meas: hr.hr_meas,
+    hr_ecg: hr.hr_ecg,  // H10 only; undefined keys are not written
+    hr_ppg: hr.hr_ppg,  // Verity Sense only
     frames: framesCompact,
   };
   // Serialize the trial log to a JSON string now and hand it to the sender.
   // Collapses the deep per-trial object tree (frames dict + nested rows) into
   // a single opaque heap entry so V8 MajorGC has almost nothing to walk.
   const _json = JSON.stringify(log, null, 2);
-  enqueueLog(`${currentLevelSummary._dir}/trials/${filename}`, _json);
+  const _relpath = `${currentLevelSummary._dir}/trials/${filename}`;
+  enqueueLog(_relpath, _json);
+  if (hrBand && hrBand.keepTrialFile) hrBand.keepTrialFile(_relpath, _json, hr);
   // Drop references to the deep intermediate tree so it can be reclaimed
   // before the next trial fills the frameLog scratch.
   log.frames = null;

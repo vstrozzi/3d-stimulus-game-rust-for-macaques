@@ -80,7 +80,16 @@ assert.strictEqual(P.describeHeartRate(dv("00 40")), "flags=0x00 (hr u8, rr abse
   assert.strictEqual(s.hr.length, 3); // the display copy is untouched
   assert.strictEqual(s.isSupportedDevice, true);
   s.device = { name: "Polar H10 0A1B2C3D" };
+  assert.strictEqual(s.isSupportedDevice, true);
+  s.device = { name: "Polar Sense 0A1B2C3D" };
+  assert.strictEqual(s.isSupportedDevice, true);
+  s.device = { name: "Polar OH1 0A1B2C3D" };
   assert.strictEqual(s.isSupportedDevice, false);
+  assert.deepStrictEqual(["Polar H9 1", "Polar H10 1", "Polar Sense 1", "Polar OH1 1", "Garmin"].map(P.sensorKind), ["h9", "h10", "verity", null, null]);
+  // An H9's trial log has exactly the keys it always had.
+  assert.deepStrictEqual(Object.keys(first), ["hr_info", "hr_meas"]);
+  assert.deepStrictEqual(Object.keys(first.hr_info), ["device", "trial_start_elapsed_secs", "trial_end_elapsed_secs", "units", "connection_events"]);
+  assert.deepStrictEqual(Object.keys(first.hr_meas[0]), ["arrival_elapsed_secs", "hr", "rr_ms", "raw"]);
 }
 
 // ── Plot series ─────────────────────────────────────────────────────────

@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polar Sync Test</title>
+<!--
+  Test page for syncing a Polar H10 and a Polar Verity Sense with this
+  laptop's clock (Web Bluetooth, Polar Measurement Data service). Protocol,
+  recorder and sync estimates: polar_pmd.js (tests: tools/tests/test_polar_pmd.js).
+  Details: implementation.md §21. Nothing is uploaded; "Download session"
+  saves everything as JSON lines.
+-->
+<style>
+  :root {
+    --bg: #0b0b0d; --card: #151519; --line: #2a2a30; --text: #e0e0f0; --muted: #9a9aaa;
+    --ok: #6c6; --warn: #fb4; --bad: #f66; --plot: #0e0e12;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; } /* .row's display:flex would otherwise show hidden rows */
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+  header, main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+  main { padding-top: 0; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  p { margin: 6px 0; }
+  .sub { color: var(--muted); margin: 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px; min-width: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0; }
+  button { background: #2a2a35; color: var(--text); border: 1px solid #444; border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { background: #353545; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { background: #2d4a6b; border-color: #3d6a9b; }
+  select, input[type=number] { background: #1d1d24; color: var(--text); border: 1px solid #444; border-radius: 4px; padding: 2px 4px; font: inherit; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  td, th { text-align: left; padding: 3px 10px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+  .stats td:first-child { color: var(--muted); white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--ok); }
+  .warn { color: var(--warn); }
+  .bad { color: var(--bad); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+  canvas { width: 100%; display: block; background: var(--plot); border: 1px solid var(--line); border-radius: 4px; }
+  .plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 12px; }
+  .plot-title { margin: 0 0 4px; color: var(--muted); }
+  .plots canvas { height: 170px; }
+  #plot-overlay { height: 240px; }
+  #plot-env { height: 200px; }
+  pre { background: var(--plot); border: 1px solid var(--line); border-radius: 4px; padding: 8px; max-height: 260px; overflow: auto; font-size: 12px; white-space: pre-wrap; margin: 0; }
+  .msg { min-height: 1.5em; font-size: 16px; }
+  ol { margin: 4px 0 8px 20px; padding: 0; }
+  li { margin: 3px 0; }
+  #blocks tbody tr { cursor: pointer; }
+  #blocks tr.sel td { background: #1d2430; }
+  .warnline:empty { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Polar H10 + Verity Sense: clock sync test</h1>
+  <p class="sub">Streams both sensors over Web Bluetooth and measures each sensor's clock against this laptop's from spacebar presses and knocks. Nothing leaves this page: use “Download session” at the bottom.</p>
+  <p id="support" class="warn"></p>
+</header>
+<main>
+  <div class="grid" id="devices"></div>
+
+  <section class="card">
+    <h2>Session sync</h2>
+    <p class="muted">At the start and at the end of a session, press the spacebar 10 times, firmly, about once a second, with a sensor that feels the presses: the H10 pod held between your fingers (keep touching both electrodes, or clip it back within 30 s) or the forearm wearing the Verity Sense. Every connected sensor that feels the presses is synced; offset from the syncs, drift from the line through them.</p>
+    <div class="row">
+      <button id="btn-sync-start" class="primary">1 · Start sync</button>
+      <button id="btn-sync-end" class="primary">2 · End sync</button>
+      <span id="session-clock" class="muted"></span>
+    </div>
+    <div class="scroll"><table id="session"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Blocks</h2>
+    <p class="muted">Every sync and test block. Extra tests: a <b>press block</b> between the syncs is a held-out check (its offset should match the line through the syncs); a <b>knock block</b> (knock the H10 pod with the fist of the arm wearing the Verity Sense, 5 times, then Enter) syncs one sensor through the other.</p>
+    <div class="row">
+      <button id="btn-press" class="primary">Press block</button>
+      <button id="btn-knock" class="primary">Knock block</button>
+      <button id="btn-finish" disabled>Finish block</button>
+      <label class="muted">smallest jolt <input id="min-mg" type="number" value="80" min="10" step="10" style="width:5em"> mG</label>
+    </div>
+    <p id="block-msg" class="msg"></p>
+    <div class="scroll"><table id="blocks"></table></div>
+    <p class="muted">Selected block (click a row): each line is one press or knock, scaled to its peak, on the laptop clock; dots are the detected onsets. Presses are aligned on the keydown (0), knocks on the reference sensor's impact.</p>
+    <canvas id="plot-overlay"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Live signals</h2>
+    <p class="muted">Last 8 s on this laptop's clock through each sensor's current mapping; white lines are spacebar presses (after a sync the jolts should sit on them). Accelerometer x / y / z in mG.</p>
+    <div class="plots">
+      <div><p class="plot-title">H10 accelerometer (mG)</p><canvas id="plot-h10-acc"></canvas></div>
+      <div><p class="plot-title">H10 ECG (µV)</p><canvas id="plot-h10-ecg"></canvas></div>
+      <div><p class="plot-title">Verity Sense accelerometer (mG)</p><canvas id="plot-verity-acc"></canvas></div>
+      <div><p class="plot-title">Verity Sense PPG (channel 0, raw)</p><canvas id="plot-verity-ppg"></canvas></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Validation</h2>
+    <div class="scroll"><table id="validation"></table></div>
+  </section>
+
+  <section class="card">
+    <h2>Arrival delay</h2>
+    <p class="muted">Each frame's arrival time minus its device time, minus the envelope line (ms). The bottom edge is the line; the spread above it is the wait for a radio slot. A thin flat band means every frame waits the same time (“locked”): the arrivals then hide the drift, and it must come from two press blocks.</p>
+    <canvas id="plot-env"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>Log</h2>
+    <div class="row"><button id="btn-download" class="primary">Download session (.jsonl)</button><span id="dl-msg" class="muted"></span></div>
+    <pre id="log"></pre>
+  </section>
+</main>
+<script src="polar_hr.js"></script>
+<script src="polar_pmd.js"></script>
+<script>
+(() => {
+  "use strict";
+  const PP = window.PolarPmd;
+  const { MEAS, MEAS_NAME } = PP;
+
+  const PRESSES = 10;          // presses per press block
+  const KNOCK_MAX_MS = 20000;  // a knock block ends by itself after this
+  const SETTLE_MS = 2000;      // wait for late frames before analysing a block
+  const SILENCE_MS = 8000;     // streaming but no frame for this long: drop the link and reconnect
+  const LIVE_MS = 8000;        // live plot width
+  const MAX_SD_MS = 15;        // a block with a larger spread (SD of its offsets) does not set an offset
+
+  const SLOTS = {
+    h10: {
+      label: "Polar H10", color: "#f90", expect: /H10/i,
+      hint: "Chest strap: wet the electrodes and wear it (it only wakes up on skin). Accelerometer for the sync, ECG for the beats.",
+      defaults: { ACC: true, ECG: true }, artifact: [MEAS.ECG, 0, "ECG"],
+    },
+    verity: {
+      label: "Polar Verity Sense", color: "#4cd", expect: /Sense|Verity/i,
+      hint: "On the forearm of the hand that presses the spacebar. Normal mode: accelerometer 52 Hz, PPG, optional PPI. SDK mode: accelerometer up to 416 Hz, no HR/PPI.",
+      defaults: { ACC: true, PPG: true }, artifact: [MEAS.PPG, 0, "PPG"],
+    },
+  };
+  const STREAM_TYPES = ["ACC", "ECG", "PPG", "PPI", "GYRO"];
+
+  const state = {
+    dev: { h10: null, verity: null }, // PmdDevice
+    ui: {},
+    avail: { h10: {}, verity: {} },   // stream → settings offered by the device
+    cals: { h10: [], verity: [] },    // { o, x, seg, block, via }
+    busy: { h10: false, verity: false },
+    retired: [],                      // devices replaced by a new Connect, kept for the download
+    keys: [],                         // { t, handler, block }
+    blocks: [],
+    block: null,                      // running block
+    pending: null,                    // finished block waiting for its last frames
+    nextBlock: 1,
+    selBlock: null,
+    session: { start: null, end: null }, // block ids of the latest start / end sync
+    logLines: [],
+    downloadedAt: null,
+  };
+
+  const fmt = (v, d = 1) => (v === null || v === undefined || !Number.isFinite(v) ? "–" : v.toFixed(d));
+  const r3 = (v) => (v === null || v === undefined || !Number.isFinite(v) ? null : Math.round(v * 1000) / 1000);
+
+  function log(text) {
+    state.logLines.push(`[${(performance.now() / 1000).toFixed(2)}] ${text}`);
+    if (state.logLines.length > 2000) state.logLines.shift();
+    const el = document.getElementById("log");
+    el.textContent = state.logLines.join("\n");
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function msg(text, cls) {
+    const el = document.getElementById("block-msg");
+    el.textContent = text;
+    el.className = "msg " + (cls || "");
+  }
+
+  // ───────────────────────────── devices ─────────────────────────────
+
+  function buildCard(slot) {
+    const s = SLOTS[slot];
+    const card = document.createElement("section");
+    card.className = "card";
+    card.innerHTML = `
+      <h2><span class="dot" style="background:${s.color}"></span>${s.label}</h2>
+      <p class="muted">${s.hint}</p>
+      <div class="row">
+        <button class="connect primary">Connect</button>
+        <button class="disconnect" disabled>Disconnect</button>
+        <span class="status muted">not connected</span>
+      </div>
+      <p class="warnline warn"></p>
+      <div class="row sdk" hidden><label><input type="checkbox" class="sdk-mode"> SDK mode (accelerometer up to 416 Hz; no HR or PPI)</label></div>
+      <table class="streams"></table>
+      <div class="row"><button class="start" disabled>Start streams</button><button class="stop" disabled>Stop streams</button></div>
+      <div class="scroll"><table class="stats"></table></div>`;
+    document.getElementById("devices").appendChild(card);
+    const q = (c) => card.querySelector(c);
+    const ui = {
+      connect: q(".connect"), disconnect: q(".disconnect"), status: q(".status"), warn: q(".warnline"),
+      sdkRow: q(".sdk"), sdk: q(".sdk-mode"), streams: q(".streams"), start: q(".start"), stop: q(".stop"), stats: q(".stats"),
+    };
+    state.ui[slot] = ui;
+    ui.connect.onclick = () => connect(slot);
+    ui.disconnect.onclick = () => disconnect(slot);
+    ui.start.onclick = () => startStreams(slot);
+    ui.stop.onclick = () => stopStreams(slot);
+    ui.sdk.onchange = () => setSdk(slot, ui.sdk.checked);
+  }
+
+  async function withBusy(slot, fn) {
+    state.busy[slot] = true;
+    renderDevice(slot);
+    try {
+      await fn();
+    } finally {
+      state.busy[slot] = false;
+      renderDevice(slot);
+    }
+  }
+
+  async function connect(slot) {
+    const label = SLOTS[slot].label;
+    const old = state.dev[slot];
+    const d = new PP.PmdDevice((m) => log(`${label}: ${m}`));
+    d.onChange = () => renderDevice(slot);
+    await withBusy(slot, async () => {
+      try {
+        await d.connect();
+      } catch (err) {
+        if (!d.device) return; // the chooser was closed: keep what was there
+        log(`${label}: connect failed: ${err.message}`);
+      }
+      // The old device is never disconnected here: it may be the same
+      // physical sensor, now linked by `d`. Connect is only offered while it
+      // is not linked; this only stops it from trying again.
+      if (old) {
+        old.userClosed = true;
+        if (old.rec.frames.length) state.retired.push({ slot, dev: old, cals: state.cals[slot] });
+      }
+      state.dev[slot] = d;
+      state.cals[slot] = [];
+      state.ui[slot].warn.textContent = SLOTS[slot].expect.test(d.name) ? "" : `“${d.name}” does not look like a ${label}.`;
+      if (d.linkUp) await loadSettings(slot);
+    });
+  }
+
+  async function loadSettings(slot) {
+    const d = state.dev[slot];
+    const avail = {};
+    for (const name of STREAM_TYPES) {
+      if (!d.features.includes(name)) continue;
+      try {
+        avail[name] = await d.getSettings(MEAS[name]);
+      } catch (err) {
+        avail[name] = {};
+        d.log(`settings of ${name}: ${err.message}`);
+      }
+    }
+    state.avail[slot] = avail;
+    renderStreams(slot);
+  }
+
+  function renderStreams(slot) {
+    const ui = state.ui[slot];
+    const d = state.dev[slot];
+    ui.streams.replaceChildren();
+    for (const [name, set] of Object.entries(state.avail[slot])) {
+      if (name === "PPI" && d.sdkMode) continue; // no PPI in SDK mode
+      const tr = document.createElement("tr");
+      const td0 = document.createElement("td");
+      const lab = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.dataset.stream = name;
+      cb.checked = !!SLOTS[slot].defaults[name];
+      lab.append(cb, ` ${name}`);
+      td0.append(lab);
+      tr.append(td0);
+      for (const [key, unit] of [["SAMPLE_RATE", "Hz"], ["RANGE", name === "GYRO" ? "deg/s" : "g"]]) {
+        const td = document.createElement("td");
+        const vals = (set[key] || []).filter((v) => typeof v === "number").sort((a, b) => a - b);
+        if (vals.length) {
+          const sel = document.createElement("select");
+          sel.dataset.stream = name;
+          sel.dataset.key = key;
+          for (const v of vals) sel.append(new Option(String(v), String(v)));
+          sel.value = String(key === "RANGE" && name === "ACC" && vals.includes(8) ? 8 : vals[vals.length - 1]);
+          td.append(sel, ` ${unit}`);
+        }
+        tr.append(td);
+      }
+      ui.streams.append(tr);
+    }
+  }
+
+  /** Settings for a start request: the chosen rate and range, the largest of everything else (as the SDK does). */
+  function selectedSettings(slot, name) {
+    const ui = state.ui[slot];
+    const sel = {};
+    for (const [k, vals] of Object.entries(state.avail[slot][name] || {})) {
+      if (k === "FACTOR" || !vals.length || typeof vals[0] !== "number") continue;
+      const input = ui.streams.querySelector(`select[data-stream="${name}"][data-key="${k}"]`);
+      sel[k] = input ? Number(input.value) : Math.max(...vals);
+    }
+    return sel;
+  }
+
+  function startStreams(slot) {
+    const d = state.dev[slot];
+    const names = [...state.ui[slot].streams.querySelectorAll("input[type=checkbox]:checked")].map((cb) => cb.dataset.stream);
+    if (!names.length) return d.log("no stream ticked");
+    return withBusy(slot, async () => {
+      for (const name of names) {
+        const sel = selectedSettings(slot, name);
+        try {
+          await d.startStream(MEAS[name], sel);
+          d.log(`${name} started: ${JSON.stringify(sel)}, factor ${d.active[MEAS[name]].factor}`);
+        } catch (err) {
+          d.log(`${name}: ${err.message}`);
+        }
+      }
+    });
+  }
+
+  function stopStreams(slot) {
+    return withBusy(slot, () => state.dev[slot].stopAll());
+  }
+
+  function setSdk(slot, on) {
+    const d = state.dev[slot];
+    return withBusy(slot, async () => {
+      try {
+        await d.setSdkMode(on);
+        d.log(`SDK mode ${on ? "on" : "off"}`);
+        await loadSettings(slot);
+      } catch (err) {
+        d.log(err.message);
+      }
+    });
+  }
+
+  function disconnect(slot) {
+    return withBusy(slot, () => state.dev[slot].disconnect());
+  }
+
+  /** Calibrations of the device's current clock segment. */
+  function calsOf(slot) {
+    const d = state.dev[slot];
+    return d ? state.cals[slot].filter((k) => k.seg === d.rec.segment) : [];
+  }
+
+  /** Current mapping laptop = dev + c + s·dev of a slot, or null. */
+  function mappingOf(slot) {
+    const d = state.dev[slot];
+    if (!d) return null;
+    const m = PP.chooseMapping(calsOf(slot), d.rec.envelope());
+    if (m) m.seg = d.rec.segment;
+    return m;
+  }
+
+  function describeMapping(slot, m) {
+    const blocks = calsOf(slot).map((k) => `#${k.block}${k.via === "knock" ? " (knock)" : ""}`).join(", ");
+    const off = m.offset_from === "blocks" ? `offset from block ${blocks}` : "offset from arrivals only (late by the Bluetooth delay)";
+    return `${off}; drift ${fmt(m.s * 1e6, 1)} ppm from ${m.drift_from === "blocks" ? "blocks" : "arrivals"}`;
+  }
+
+  function frameStats(d) {
+    const st = d._stats || (d._stats = { i: 0, count: {}, err: 0, firstErr: null, lastPpi: null });
+    const fr = d.rec.frames;
+    for (; st.i < fr.length; st.i++) {
+      const f = fr[st.i];
+      st.count[f.mt] = (st.count[f.mt] || 0) + 1;
+      if (f.err) {
+        st.err++;
+        st.firstErr = st.firstErr || f.err;
+      }
+      if (f.mt === MEAS.PPI && f.ch) st.lastPpi = f;
+    }
+    return st;
+  }
+
+  function renderDevice(slot) {
+    const d = state.dev[slot];
+    const ui = state.ui[slot];
+    const busy = state.busy[slot];
+    const has = !!(d && d.device);
+    const up = has && d.linkUp;
+    ui.connect.disabled = busy || up || (has && d._reconnecting && !d.userClosed);
+    ui.disconnect.disabled = busy || !has || d.userClosed;
+    ui.start.disabled = busy || !up || d.streaming;
+    ui.stop.disabled = busy || !up || !d.streaming;
+    ui.sdkRow.hidden = !(up && d.features.includes("SDK_MODE"));
+    ui.sdk.checked = !!(d && d.sdkMode);
+    ui.sdk.disabled = busy || !up;
+    for (const el of ui.streams.querySelectorAll("input, select")) el.disabled = busy || !up || d.streaming;
+    ui.status.textContent = !has ? "not connected" : up ? `${d.name} · connected` : d.userClosed ? `${d.name} · disconnected` : `${d.name} · link lost, reconnecting…`;
+    ui.status.className = "status " + (up ? "ok" : has && !d.userClosed ? "warn" : "muted");
+    renderStats(slot);
+  }
+
+  function renderStats(slot) {
+    const d = state.dev[slot];
+    const ui = state.ui[slot];
+    if (!d || !d.device) return ui.stats.replaceChildren();
+    const now = performance.now();
+    const st = frameStats(d);
+    const rows = [];
+    let link = `${d.linkUp ? "up" : "down"} · ${d.drops} drop(s)`;
+    if (d.lastFrameAt) link += ` · last frame ${fmt((now - d.lastFrameAt) / 1000, 1)} s ago`;
+    const a = d.rec.pairs.a;
+    if (a.length > 20) {
+      const gaps = [];
+      for (let i = Math.max(1, a.length - 200); i < a.length; i++) gaps.push(a[i] - a[i - 1]);
+      link += ` · frames every ${fmt(PP.median(gaps), 0)} ms (median)`;
+    }
+    rows.push(["Link", link]);
+    for (const [mt, act] of Object.entries(d.active)) {
+      const buf = d.rec.streams[mt];
+      const rate = buf ? PP.measuredRate(buf) : null;
+      let text = `${act.sel.SAMPLE_RATE ? `${act.sel.SAMPLE_RATE} Hz set` : "no rate setting"}`;
+      if (rate) text += ` · ${fmt(rate, 3)} Hz on the device clock`;
+      text += ` · ${st.count[mt] || 0} frames · ${d.rec.gaps[mt] || 0} gaps`;
+      if (Number(mt) === MEAS.PPI && st.lastPpi) {
+        const c = st.lastPpi.ch;
+        const k = c[1].length - 1;
+        text += ` · last PP ${c[1][k]} ms (±${c[2][k]}), HR ${c[0][k]}`;
+      }
+      rows.push([MEAS_NAME[mt], text]);
+    }
+    const env = d.rec.envelope();
+    if (env) {
+      let clock = `drift from arrivals ${fmt(env.s * 1e6, 1)} ppm over ${env.windows} × 5 s · arrival spread ${fmt(env.spread_ms, 1)} ms`;
+      if (env.locked) clock += " · LOCKED: arrivals hide the drift, run two press blocks";
+      rows.push(["Clock", clock]);
+    }
+    const m = mappingOf(slot);
+    if (m) rows.push(["Mapping", describeMapping(slot, m)]);
+    if (d.rec.segments.length > 1) rows.push(["Clock jumps", `${d.rec.segments.length - 1}: calibrations before a jump no longer apply`]);
+    const hr = d.hr[d.hr.length - 1];
+    if (hr && window.Polar) {
+      const p = window.Polar.parseHeartRate(new DataView(hr.bytes.buffer));
+      rows.push(["Heart rate service", `${p.hr} bpm${p.rr_ms.length ? ` · RR ${p.rr_ms.map((x) => x.toFixed(0)).join(" ")} ms` : ""}`]);
+    }
+    if (st.err) rows.push(["Undecoded frames", `${st.err} (${st.firstErr}); their bytes are still saved`]);
+    ui.stats.replaceChildren(
+      ...rows.map((cells) => {
+        const tr = document.createElement("tr");
+        for (const text of cells) tr.appendChild(document.createElement("td")).textContent = text;
+        return tr;
+      })
+    );
+  }
+
+  // ───────────────────────────── keys and blocks ─────────────────────────────
+
+  function keyTime(e) {
+    let t = Number(e.timeStamp);
+    if (!Number.isFinite(t)) t = performance.now();
+    if (t > 1e12) t -= performance.timeOrigin; // very old browsers: epoch-based timestamps
+    return t;
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      if (e.repeat) return;
+      const k = { t: keyTime(e), handler: performance.now(), block: state.block ? state.block.id : null };
+      state.keys.push(k);
+      if (state.block && state.block.kind === "press") {
+        state.block.keys.push(k.t);
+        msg(`Press ${state.block.keys.length} of ${PRESSES}…`);
+        if (state.block.keys.length >= PRESSES) finishBlock();
+      }
+    } else if (e.code === "Enter" && state.block && state.block.kind === "knock") {
+      e.preventDefault();
+      finishBlock();
+    }
+  });
+  window.addEventListener("keyup", (e) => {
+    if (e.code === "Space") e.preventDefault(); // no button is clicked by a press
+  });
+
+  const accSlots = () => Object.keys(SLOTS).filter((s) => state.dev[s] && state.dev[s].active[MEAS.ACC]);
+
+  function updateBlockButtons() {
+    const busy = !!(state.block || state.pending);
+    for (const id of ["btn-sync-start", "btn-sync-end", "btn-press"]) document.getElementById(id).disabled = busy;
+    document.getElementById("btn-knock").disabled = busy;
+    document.getElementById("btn-finish").disabled = !state.block;
+  }
+
+  /** kind: press | knock; role (press blocks only): start | end | null (an extra test). */
+  function startBlock(kind, role = null) {
+    if (state.block || state.pending) return;
+    const slots = accSlots();
+    if (!slots.length) return msg("Start the accelerometer of at least one sensor first.", "warn");
+    if (kind === "knock" && slots.length < 2) return msg("A knock block needs both accelerometers streaming.", "warn");
+    if (role === "end" && !state.session.start) return msg("Run the start sync first.", "warn");
+    if (document.activeElement) document.activeElement.blur();
+    state.block = { id: state.nextBlock++, kind, role, t_start: performance.now(), keys: [] };
+    const name = role ? `${role === "start" ? "Start" : "End"} sync` : "Press block";
+    if (kind === "press") msg(`${name} #${state.block.id}: press the spacebar ${PRESSES} times, about once a second.`);
+    else {
+      msg(`Knock block #${state.block.id}: knock the H10 pod 5 times with the fist, about a second apart, then press Enter.`);
+      state.block.timer = setTimeout(finishBlock, KNOCK_MAX_MS);
+    }
+    updateBlockButtons();
+  }
+
+  function finishBlock() {
+    const b = state.block;
+    if (!b) return;
+    clearTimeout(b.timer);
+    b.t_end = performance.now();
+    state.block = null;
+    state.pending = b;
+    msg(`Block #${b.id}: analysing in ${SETTLE_MS / 1000} s (waiting for the last frames)…`);
+    updateBlockButtons();
+    setTimeout(() => {
+      state.pending = null;
+      try {
+        analyzeBlock(b);
+      } catch (err) {
+        msg(`Block #${b.id} could not be analysed: ${err.message}`, "bad");
+        log(err.stack || String(err));
+      }
+      updateBlockButtons();
+    }, SETTLE_MS);
+  }
+
+  const acceptable = (s, need) => s.used >= need && s.sd <= MAX_SD_MS;
+
+  function analyzeBlock(b) {
+    const minMg = Number(document.getElementById("min-mg").value) || 80;
+    const res = { id: b.id, kind: b.kind, role: b.role, t_start: b.t_start, t_end: b.t_end, keys: b.keys.slice(), min_mg: minMg, dev: {}, knock: null, artifacts: {} };
+    const notes = [];
+
+    if (b.kind === "press") {
+      if (b.keys.length < 3) return msg(`Block #${b.id}: only ${b.keys.length} press(es); run it again.`, "warn");
+      for (const slot of accSlots()) {
+        const d = state.dev[slot];
+        const m = mappingOf(slot);
+        const env = d.rec.envelope(true);
+        if (!m || !env || !d.rec.streams[MEAS.ACC]) {
+          notes.push(`${SLOTS[slot].label}: no accelerometer data yet`);
+          continue;
+        }
+        const r = PP.analyzePresses(b.keys, d.rec.streams[MEAS.ACC], m, { minMg });
+        const ok = r.o !== null && acceptable(r.summary, Math.max(3, Math.ceil(b.keys.length / 2)));
+        res.dev[slot] = {
+          presses: r.presses, detected: r.detected, summary: r.summary, o: r.o, x: r.x, noise: r.noise,
+          seg: d.rec.segment, mapping_before: m, used: ok,
+          vs_arrivals: r.o === null ? null : r.o - (env.c + env.s * r.x),
+        };
+        if (ok) state.cals[slot].push({ o: r.o, x: r.x, se: r.summary.se, seg: d.rec.segment, block: b.id, via: "press" });
+        notes.push(`${SLOTS[slot].label} ${r.detected}/${b.keys.length}, SD ${fmt(r.summary.sd, 1)} ms${ok ? " → offset set" : ""}`);
+      }
+    } else {
+      // The reference is the sensor whose offset comes from a block (normally the Verity Sense).
+      const mv = mappingOf("verity");
+      const mh = mappingOf("h10");
+      if (!mv || !mh || !state.dev.verity.rec.streams[MEAS.ACC] || !state.dev.h10.rec.streams[MEAS.ACC]) {
+        return msg(`Block #${b.id}: one of the accelerometers has no data yet.`, "warn");
+      }
+      const refSlot = mv.offset_from === "blocks" || mh.offset_from !== "blocks" ? "verity" : "h10";
+      const otherSlot = refSlot === "verity" ? "h10" : "verity";
+      const ref = { buf: state.dev[refSlot].rec.streams[MEAS.ACC], mapping: mappingOf(refSlot) };
+      const other = { buf: state.dev[otherSlot].rec.streams[MEAS.ACC], mapping: mappingOf(otherSlot) };
+      const k = PP.analyzeKnocks(ref, other, b.t_start, b.t_end, { minMg });
+      const ok = k.o !== null && acceptable(k.summary, 3);
+      res.knock = {
+        ref: refSlot, other: otherSlot, ref_mapping: ref.mapping, other_mapping_before: other.mapping,
+        ref_impacts: k.ref_impacts, other_impacts: k.other_impacts, pairs: k.pairs, summary: k.summary,
+        o: k.o, x: k.x, seg: state.dev[otherSlot].rec.segment, used: ok,
+      };
+      if (ok) state.cals[otherSlot].push({ o: k.o, x: k.x, se: k.summary.se, seg: state.dev[otherSlot].rec.segment, block: b.id, via: "knock" });
+      notes.push(`${k.pairs.length} knock(s) seen by both (${k.ref_impacts} by the ${SLOTS[refSlot].label}, ${k.other_impacts} by the ${SLOTS[otherSlot].label}), SD ${fmt(k.summary.sd, 1)} ms${ok ? ` → ${SLOTS[otherSlot].label} offset set through the ${SLOTS[refSlot].label}` : ""}`);
+      if (ref.mapping.offset_from !== "blocks") notes.push("(reference not yet calibrated by a press block)");
+    }
+
+    // Motion artifacts in ECG / PPG after each detected impact (same device clock).
+    for (const slot of Object.keys(SLOTS)) {
+      const d = state.dev[slot];
+      if (!d) continue;
+      const [mt, ch, label] = SLOTS[slot].artifact;
+      const sig = d.rec.streams[mt];
+      if (!sig) continue;
+      let onsets = [];
+      if (b.kind === "press" && res.dev[slot]) onsets = res.dev[slot].presses.filter((p) => p.onset !== undefined && !p.outlier).map((p) => p.onset);
+      if (b.kind === "knock") onsets = res.knock.pairs.filter((p) => !p.outlier).map((p) => (res.knock.ref === slot ? p.ref_onset : p.other_onset));
+      const found = onsets.map((o) => PP.artifactDelay(sig, ch, o)).filter(Boolean);
+      res.artifacts[slot] = { stream: label, tried: onsets.length, delays: found.map((f) => f.delay) };
+    }
+
+    state.blocks.push(res);
+    state.selBlock = res.id;
+    if (b.role === "start") {
+      state.session.start = res.id;
+      state.session.end = null; // a new start begins a new session
+    } else if (b.role === "end") state.session.end = res.id;
+    renderSession();
+    msg(`Block #${b.id}: ${notes.join("; ")}.`, notes.some((n) => n.includes("→")) ? "ok" : "warn");
+    log(`Block #${b.id} (${b.kind}): ${notes.join("; ")}`);
+    renderBlocks();
+    renderValidation();
+    drawOverlay();
+  }
+
+  function renderBlocks() {
+    const table = document.getElementById("blocks");
+    const head = ["#", "kind", "at (s)", "n", "H10", "Verity Sense", "knocks"];
+    const cell = (r) => {
+      if (!r) return "–";
+      return `${r.detected}/${r.presses.length} · SD ${fmt(r.summary.sd, 1)} ms · ±${fmt(r.summary.se, 1)} · vs arrivals ${fmt(r.vs_arrivals, 1)} ms${r.used ? " ✓" : ""}`;
+    };
+    const rows = state.blocks.map((b) => {
+      const k = b.knock;
+      return {
+        id: b.id,
+        cells: [
+          `#${b.id}`, b.role ? `${b.role} sync` : b.kind, fmt(b.t_start / 1000, 0), b.kind === "press" ? String(b.keys.length) : "–",
+          cell(b.dev.h10), cell(b.dev.verity),
+          k ? `${k.pairs.length} paired · SD ${fmt(k.summary.sd, 1)} ms · ±${fmt(k.summary.se, 1)} → ${SLOTS[k.other].label}${k.used ? " ✓" : ""}` : "–",
+        ],
+      };
+    });
+    const thead = document.createElement("tr");
+    for (const h of head) thead.appendChild(document.createElement("th")).textContent = h;
+    table.replaceChildren(
+      thead,
+      ...rows.map(({ id, cells }) => {
+        const tr = document.createElement("tr");
+        if (id === state.selBlock) tr.className = "sel";
+        for (const text of cells) tr.appendChild(document.createElement("td")).textContent = text;
+        tr.onclick = () => {
+          state.selBlock = id;
+          renderBlocks();
+          drawOverlay();
+        };
+        return tr;
+      })
+    );
+  }
+
+  function renderValidation() {
+    const rows = [];
+    for (const slot of Object.keys(SLOTS)) {
+      const d = state.dev[slot];
+      if (!d) continue;
+      const label = SLOTS[slot].label;
+      const env = d.rec.envelope(true);
+      const cals = calsOf(slot);
+      // Drift: each later calibration against the first, with the
+      // uncertainty from the two blocks' standard errors (large when they
+      // are close together), against the drift from the arrivals.
+      const a = cals[0];
+      for (const b of cals.slice(1)) {
+        const dx = b.x - a.x;
+        if (dx <= 0) continue;
+        const blockPpm = ((b.o - a.o) / dx) * 1e6;
+        const se = (k) => (Number.isFinite(k.se) ? k.se : 0);
+        const unc = (Math.sqrt(se(a) ** 2 + se(b) ** 2) / dx) * 1e6;
+        const miss = b.o - a.o - env.s * dx;
+        rows.push([label, `drift #${a.block} → #${b.block}`, `${fmt(dx / 1000, 0)} s apart: ${fmt(blockPpm, 1)} ± ${fmt(unc, 0)} ppm from the blocks vs ${fmt(env.s * 1e6, 1)} ppm from arrivals${env.locked ? " (locked)" : ""}; block #${a.block} + arrival drift would be off by ${fmt(miss, 1)} ms at #${b.block}`]);
+      }
+      // Press-set vs knock-set offsets of the same sensor (closure).
+      const m = mappingOf(slot);
+      for (const p of cals.filter((k) => k.via === "press")) {
+        for (const k of cals.filter((c) => c.via === "knock")) {
+          const diff = k.o - (p.o + m.s * (k.x - p.x));
+          rows.push([label, `closure #${p.block} vs #${k.block}`, `offset through knocks minus offset from its own presses: ${fmt(diff, 1)} ms`]);
+        }
+      }
+      // Block offsets against the arrival envelope.
+      const vs = state.blocks.map((b) => b.dev[slot]).filter((r) => r && r.used).map((r) => r.vs_arrivals);
+      if (vs.length) rows.push([label, "blocks vs arrivals", `press offset minus arrival offset: median ${fmt(PP.median(vs), 1)} ms over ${vs.length} block(s) (keyboard delay minus Bluetooth delay floor)`]);
+      // Motion artifacts.
+      const delays = state.blocks.flatMap((b) => (b.artifacts[slot] ? b.artifacts[slot].delays : []));
+      const tried = state.blocks.reduce((n, b) => n + (b.artifacts[slot] ? b.artifacts[slot].tried : 0), 0);
+      if (tried) {
+        const stream = SLOTS[slot].artifact[2];
+        rows.push([label, `${stream} artifact`, delays.length ? `${stream} motion artifact ${fmt(PP.median(delays), 1)} ms after the accelerometer impact (median; SD ${fmt(PP.robustSd(delays), 1)}; ${delays.length} of ${tried} impacts; rough)` : `no clear ${stream} artifact in ${tried} impacts`]);
+      }
+    }
+    const table = document.getElementById("validation");
+    if (!rows.length) {
+      table.replaceChildren();
+      const tr = table.insertRow();
+      tr.insertCell().textContent = "Run at least two press blocks some minutes apart (and knock blocks) to fill this in.";
+      return;
+    }
+    table.replaceChildren(
+      ...rows.map((cells) => {
+        const tr = document.createElement("tr");
+        for (const text of cells) tr.appendChild(document.createElement("td")).textContent = text;
+        return tr;
+      })
+    );
+  }
+
+  /** Link-down time of a device since laptop ms `from`: { n: drops, ms }. */
+  function lostTime(d, from) {
+    let n = 0;
+    let ms = 0;
+    let down = null;
+    for (const e of d.rec.events) {
+      if (e.t < from) continue;
+      if (e.event === "disconnected" && down === null) {
+        down = e.t;
+        n++;
+      } else if (e.event === "connected" && down !== null) {
+        ms += e.t - down;
+        down = null;
+      }
+    }
+    if (down !== null) ms += performance.now() - down;
+    return { n, ms };
+  }
+
+  /**
+   * The session's sync per sensor: both syncs, drift and precision between
+   * them, and the failure modes. `problems` make the sync unusable or
+   * doubtful; `info` does not.
+   */
+  function sessionRows() {
+    const S = state.session;
+    const start = S.start ? state.blocks.find((b) => b.id === S.start) : null;
+    const end = S.end ? state.blocks.find((b) => b.id === S.end) : null;
+    const rows = [];
+    for (const slot of Object.keys(SLOTS)) {
+      const d = state.dev[slot];
+      if (!d || !d.device) continue;
+      const rs = start ? start.dev[slot] : null;
+      const re = end ? end.dev[slot] : null;
+      const env = d.rec.envelope();
+      const problems = [];
+      const info = [];
+      const sync = (r, b) => (!b ? null : !r ? { block: b.id, text: "no accelerometer data", used: false } : {
+        block: b.id, found: r.detected, presses: r.presses.length, sd_ms: r.summary.sd, se_ms: r.summary.se, used: r.used,
+        text: `#${b.id}: ${r.detected}/${r.presses.length} found, SD ${fmt(r.summary.sd, 1)} ms${r.used ? " ✓" : " ✗"}`,
+      });
+      const row = { slot, label: SLOTS[slot].label, start: sync(rs, start), end: sync(re, end), drift_ppm: null, drift_unc_ppm: null, mid_ms: null, ends_ms: null, problems, info, ok: false };
+      if (!start) problems.push("no start sync yet");
+      else if (!rs || !rs.used) problems.push("start sync did not take (sensor did not feel the presses, or they were too irregular): redo it");
+      if (!end) info.push("no end sync yet: the drift comes from the arrival times until then");
+      else if (!re || !re.used) problems.push("end sync did not take: redo it");
+      if (rs && rs.used && re && re.used) {
+        if (rs.seg !== re.seg) problems.push("the sensor's clock jumped (it shut down) between the syncs: each side has only one sync");
+        else {
+          const dx = re.x - rs.x;
+          const s = (re.o - rs.o) / dx;
+          const se2 = rs.summary.se ** 2 + re.summary.se ** 2;
+          row.drift_ppm = s * 1e6;
+          row.drift_unc_ppm = (Math.sqrt(se2) / dx) * 1e6;
+          row.mid_ms = 0.5 * Math.sqrt(se2);
+          row.ends_ms = Math.max(rs.summary.se, re.summary.se);
+          if (Math.abs(row.drift_ppm) > 100) problems.push(`drift ${fmt(row.drift_ppm, 0)} ppm is implausible for the sensor's crystal (expect within ±50): a sync is off, redo the end sync`);
+          if (env && !env.locked && Math.abs(row.drift_ppm - env.s * 1e6) > 3 * row.drift_unc_ppm + 5) {
+            info.push(`arrival times give ${fmt(env.s * 1e6, 1)} ppm instead`);
+          }
+          if (dx < 60000) info.push("syncs less than a minute apart: drift poorly determined");
+        }
+      }
+      const t0 = start ? start.t_start : 0;
+      const jumps = d.rec.events.filter((e) => e.event === "clock_jump" && e.t >= t0).length;
+      if (jumps && !(rs && re && rs.seg !== re.seg)) problems.push(`clock jump${jumps > 1 ? "s" : ""} since the start sync: redo the start sync`);
+      if (env && env.locked) info.push("arrivals locked: the end sync is the only source of drift");
+      const lost = lostTime(d, t0);
+      if (lost.n) info.push(`link lost ${lost.n}× (${fmt(lost.ms / 1000, 1)} s without data; the clock ${jumps ? "jumped" : "kept running"})`);
+      const undecoded = frameStats(d).err;
+      if (undecoded) problems.push(`${undecoded} frame(s) not decoded`);
+      row.ok = !problems.length && row.mid_ms !== null;
+      rows.push(row);
+    }
+    return rows;
+  }
+
+  function renderSession() {
+    const S = state.session;
+    const start = S.start ? state.blocks.find((b) => b.id === S.start) : null;
+    const end = S.end ? state.blocks.find((b) => b.id === S.end) : null;
+    const clock = document.getElementById("session-clock");
+    if (!start) clock.textContent = "";
+    else {
+      const until = end ? end.t_start : performance.now();
+      const s = Math.round((until - start.t_start) / 1000);
+      clock.textContent = `${end ? "session lasted" : "session running for"} ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    }
+    const table = document.getElementById("session");
+    const head = ["Sensor", "Start sync", "End sync", "Drift (ppm)", "Precision (1 SD)", "Status"];
+    const rows = sessionRows();
+    const tr0 = document.createElement("tr");
+    for (const h of head) tr0.appendChild(document.createElement("th")).textContent = h;
+    table.replaceChildren(
+      tr0,
+      ...rows.map((r) => {
+        const tr = document.createElement("tr");
+        const cells = [
+          r.label,
+          r.start ? r.start.text : "–",
+          r.end ? r.end.text : "–",
+          r.drift_ppm === null ? "–" : `${fmt(r.drift_ppm, 1)} ± ${fmt(r.drift_unc_ppm, 1)}`,
+          r.mid_ms === null ? "–" : `±${fmt(r.mid_ms, 1)} ms mid-session, ±${fmt(r.ends_ms, 1)} ms at the syncs`,
+          [r.ok ? "✓ synced" : r.problems.length ? `⚠ ${r.problems.join("; ")}` : "…", ...r.info].join(" · "),
+        ];
+        for (const text of cells) tr.appendChild(document.createElement("td")).textContent = text;
+        tr.lastChild.className = r.ok ? "ok" : r.problems.length ? "warn" : "muted";
+        return tr;
+      })
+    );
+    if (!rows.length) {
+      const tr = table.insertRow();
+      tr.insertCell().textContent = "Connect a sensor and start its accelerometer.";
+    }
+  }
+
+  // ───────────────────────────── plots ─────────────────────────────
+
+  const COL = { text: "#aaa", grid: "#24242a", frame: "#555", key: "rgba(255,255,255,0.6)" };
+
+  function prep(canvas) {
+    const W = canvas.clientWidth;
+    const H = canvas.clientHeight;
+    if (!W || !H) return null;
+    const dpr = window.devicePixelRatio || 1;
+    if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+      canvas.width = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+    }
+    const g = canvas.getContext("2d");
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    g.font = "11px system-ui, sans-serif";
+    return { g, W, H, m: { l: 50, r: 12, t: 10, b: 32 } };
+  }
+
+  function niceTicks(lo, hi, n) {
+    const raw = (hi - lo) / n;
+    if (!(raw > 0)) return [lo];
+    const mag = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 5, 10].map((k) => k * mag).find((x) => x >= raw);
+    const out = [];
+    for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+    return out;
+  }
+
+  function axes(p, xr, yr, xFmt, xTitle, yTitle) {
+    const { g, W, H, m } = p;
+    const x = (v) => m.l + ((v - xr[0]) / (xr[1] - xr[0])) * (W - m.l - m.r);
+    const y = (v) => H - m.b - ((v - yr[0]) / (yr[1] - yr[0])) * (H - m.t - m.b);
+    g.lineWidth = 1;
+    g.textAlign = "right";
+    g.textBaseline = "middle";
+    for (const v of niceTicks(yr[0], yr[1], 4)) {
+      g.strokeStyle = COL.grid;
+      g.beginPath();
+      g.moveTo(m.l, y(v));
+      g.lineTo(W - m.r, y(v));
+      g.stroke();
+      g.fillStyle = COL.text;
+      g.fillText(Math.abs(v) >= 1e4 ? `${Math.round(v / 1000)}k` : String(Math.round(v * 100) / 100), m.l - 6, y(v));
+    }
+    g.textAlign = "center";
+    g.textBaseline = "top";
+    for (const v of niceTicks(xr[0], xr[1], W < 500 ? 4 : 8)) {
+      g.strokeStyle = COL.grid;
+      g.beginPath();
+      g.moveTo(x(v), m.t);
+      g.lineTo(x(v), H - m.b);
+      g.stroke();
+      g.fillStyle = COL.text;
+      g.fillText(xFmt(v), x(v), H - m.b + 4);
+    }
+    g.strokeStyle = COL.frame;
+    g.strokeRect(m.l, m.t, W - m.l - m.r, H - m.t - m.b);
+    g.fillStyle = COL.text;
+    g.fillText(xTitle, m.l + (W - m.l - m.r) / 2, H - 14);
+    g.save();
+    g.translate(12, m.t + (H - m.t - m.b) / 2);
+    g.rotate(-Math.PI / 2);
+    g.textBaseline = "middle";
+    g.fillText(yTitle, 0, 0);
+    g.restore();
+    return { x, y };
+  }
+
+  function vline(p, xpx, color) {
+    p.g.strokeStyle = color;
+    p.g.beginPath();
+    p.g.moveTo(xpx, p.m.t);
+    p.g.lineTo(xpx, p.H - p.m.b);
+    p.g.stroke();
+  }
+
+  function polyline(g, pts, x, y) {
+    g.beginPath();
+    pts.forEach(([a, b], i) => (i ? g.lineTo(x(a), y(b)) : g.moveTo(x(a), y(b))));
+    g.stroke();
+  }
+
+  // canvas, slot, stream, channels drawn (one colour each; one channel = the sensor's colour)
+  const LIVE_PLOTS = [
+    ["plot-h10-acc", "h10", MEAS.ACC, [0, 1, 2]],
+    ["plot-h10-ecg", "h10", MEAS.ECG, [0]],
+    ["plot-verity-acc", "verity", MEAS.ACC, [0, 1, 2]],
+    ["plot-verity-ppg", "verity", MEAS.PPG, [0]],
+  ];
+  const XYZ = [["x", "#e66"], ["y", "#6c6"], ["z", "#69f"]];
+
+  function drawLive() {
+    const now = performance.now();
+    const x0 = now - LIVE_MS;
+    const xFmt = (v) => fmt((v - now) / 1000, 0);
+    for (const [id, slot, mt, chans] of LIVE_PLOTS) {
+      const p = prep(document.getElementById(id));
+      if (!p) continue;
+      const d = state.dev[slot];
+      const buf = d && d.rec.streams[mt];
+      const m = mappingOf(slot);
+      const pts = chans.map(() => []);
+      let lo = Infinity;
+      let hi = -Infinity;
+      if (buf && m) {
+        for (let i = PP.lowerBound(buf.t, PP.toDevice(m, x0)); i < buf.length; i++) {
+          const t = PP.toLaptop(m, buf.t[i]);
+          chans.forEach((c, k) => {
+            const v = buf.ch[c][i];
+            pts[k].push([t, v]);
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+          });
+        }
+      }
+      if (!pts[0].length) {
+        axes(p, [x0, now], [0, 1], xFmt, "seconds (0 = now)", "");
+        p.g.fillStyle = COL.text;
+        p.g.textAlign = "center";
+        p.g.fillText("not streaming", p.W / 2, p.H / 2 - 8);
+        continue;
+      }
+      const pad = Math.max(1, (hi - lo) * 0.08);
+      const { x, y } = axes(p, [x0, now], [lo - pad, hi + pad], xFmt, "seconds (0 = now)", "");
+      for (const k of state.keys) if (k.t >= x0) vline(p, x(k.t), COL.key);
+      p.g.lineWidth = 1;
+      chans.forEach((_, k) => {
+        p.g.strokeStyle = chans.length > 1 ? XYZ[k][1] : SLOTS[slot].color;
+        polyline(p.g, pts[k], x, y);
+      });
+      if (chans.length > 1) {
+        p.g.textAlign = "left";
+        p.g.textBaseline = "top";
+        XYZ.forEach(([name, color], k) => {
+          p.g.fillStyle = color;
+          p.g.fillText(name, p.m.l + 6 + 14 * k, p.m.t + 4);
+        });
+      }
+    }
+  }
+
+  function drawOverlay() {
+    const p = prep(document.getElementById("plot-overlay"));
+    if (!p) return;
+    const b = state.blocks.find((r) => r.id === state.selBlock);
+    const xr = [-150, 200];
+    const title = b && b.kind === "knock" ? `ms from the ${SLOTS[b.knock.ref].label} impact` : "ms from the keydown";
+    const { x, y } = axes(p, xr, [0, 1.05], (v) => String(v), title, "deviation (peak = 1)");
+    vline(p, x(0), COL.key);
+    if (!b) return;
+    const g = p.g;
+    const trace = (slot, onsetDev, toX) => {
+      const d = state.dev[slot];
+      const buf = d && d.rec.streams[MEAS.ACC];
+      const tr = buf && PP.deviationTrace(buf, onsetDev, 200, 250);
+      if (!tr) return;
+      g.strokeStyle = SLOTS[slot].color;
+      g.globalAlpha = 0.55;
+      g.lineWidth = 1.2;
+      polyline(g, tr.t.map((t, i) => [toX(t), tr.v[i]]).filter(([u]) => u >= xr[0] && u <= xr[1]), x, y);
+      g.globalAlpha = 1;
+      g.fillStyle = SLOTS[slot].color;
+      g.fillRect(x(toX(onsetDev)) - 2.5, y(0.5) - 2.5, 5, 5);
+    };
+    if (b.kind === "press") {
+      for (const slot of Object.keys(SLOTS)) {
+        const r = b.dev[slot];
+        if (!r || r.o === null) continue;
+        for (const pr of r.presses) if (pr.onset !== undefined && !pr.outlier) trace(slot, pr.onset, (t) => t + r.o - pr.key);
+      }
+    } else {
+      const k = b.knock;
+      for (const pr of k.pairs) {
+        if (pr.outlier) continue;
+        trace(k.ref, pr.ref_onset, (t) => PP.toLaptop(k.ref_mapping, t) - pr.laptop);
+        if (k.o !== null) trace(k.other, pr.other_onset, (t) => t + k.o - pr.laptop);
+      }
+    }
+  }
+
+  function drawEnv() {
+    const p = prep(document.getElementById("plot-env"));
+    if (!p) return;
+    const series = [];
+    let ymax = 20;
+    let xmin = Infinity;
+    let xmax = -Infinity;
+    const notes = [];
+    for (const slot of Object.keys(SLOTS)) {
+      const d = state.dev[slot];
+      const env = d && d.rec.envelope();
+      if (!env) continue;
+      const { a, d: dv } = d.rec.pairs;
+      const from = Math.max(d.rec.segments[d.rec.segment].from, a.length - 4000);
+      const pts = [];
+      for (let i = from; i < a.length; i++) pts.push([a[i] / 1000, a[i] - dv[i] - (env.c + env.s * dv[i])]);
+      if (!pts.length) continue;
+      const ys = pts.map((q) => q[1]).sort((u, v) => u - v);
+      ymax = Math.max(ymax, ys[Math.floor(0.98 * (ys.length - 1))] * 1.2);
+      xmin = Math.min(xmin, pts[0][0]);
+      xmax = Math.max(xmax, pts[pts.length - 1][0]);
+      series.push([SLOTS[slot].color, pts]);
+      notes.push(`${SLOTS[slot].label}: spread ${fmt(env.spread_ms, 1)} ms${env.locked ? " (locked)" : ""}`);
+    }
+    if (!series.length) {
+      axes(p, [0, 1], [0, 1], () => "", "page time (s)", "delay above the line (ms)");
+      return;
+    }
+    if (xmax - xmin < 1) xmax = xmin + 1;
+    const { x, y } = axes(p, [xmin, xmax], [-2, ymax], (v) => fmt(v, 0), "page time (s)", "delay above the line (ms)");
+    for (const [color, pts] of series) {
+      p.g.fillStyle = color;
+      for (const [u, v] of pts) if (v <= ymax) p.g.fillRect(x(u) - 1, y(v) - 1, 2, 2);
+    }
+    p.g.fillStyle = "#eee";
+    p.g.textAlign = "right";
+    p.g.textBaseline = "top";
+    p.g.fillText(notes.join("   "), p.W - p.m.r - 6, p.m.t + 4);
+  }
+
+  // ───────────────────────────── download ─────────────────────────────
+
+  function download() {
+    const lines = [{
+      type: "meta", page: "polar_sync_test", format: 1, created: new Date().toISOString(),
+      time_origin_ms: performance.timeOrigin, now_ms: performance.now(), user_agent: navigator.userAgent,
+      cross_origin_isolated: !!self.crossOriginIsolated,
+      clocks: {
+        t: "laptop ms: performance.now() of this page; Unix ms = time_origin_ms + t",
+        ts: "device clock: ns since 2000-01-01 (Unix ns = ts + 946684800000000000 only if the device time was set), time of the frame's last sample",
+        dev_ms: "(ts - device.t0_ns) / 1e6; sample i of a frame is at first_dev_ms + i * dt_ms",
+        mapping: "laptop ms = dev_ms + c + s * dev_ms, per device and clock segment (seg); first_laptop_ms applies it",
+      },
+    }];
+    const entries = [...state.retired.map((e, i) => ({ ...e, id: `${e.slot}_${i + 1}` }))];
+    for (const slot of Object.keys(SLOTS)) if (state.dev[slot]) entries.push({ slot, dev: state.dev[slot], cals: state.cals[slot], id: slot });
+    for (const { slot, dev, cals, id } of entries) {
+      const rec = dev.rec;
+      const env = rec.envelope(true);
+      const m = PP.chooseMapping(cals.filter((k) => k.seg === rec.segment), env);
+      if (m) m.seg = rec.segment;
+      lines.push({
+        type: "device", id, slot, name: dev.name, features: dev.features, sdk_mode: dev.sdkMode,
+        t0_ns: rec.t0 === null ? null : rec.t0.toString(), segments: rec.segments, gaps: rec.gaps,
+        mapping: m, envelope: env, calibrations: cals,
+      });
+      for (const f of rec.frames) lines.push(PP.frameRecord(id, f, m));
+      for (const h of dev.hr) {
+        const p = window.Polar ? window.Polar.parseHeartRate(new DataView(h.bytes.buffer)) : {};
+        lines.push({ type: "hr", dev: id, t: r3(h.t), hex: PP.toHex(h.bytes), hr: p.hr, rr_ms: p.rr_ms });
+      }
+      for (const e of rec.events) lines.push({ type: "event", dev: id, t: r3(e.t), event: e.event, detail: e.detail });
+    }
+    for (const k of state.keys) lines.push({ type: "key", t: r3(k.t), t_handler: r3(k.handler), block: k.block });
+    for (const b of state.blocks) lines.push({ type: "block", ...b });
+    lines.push({ type: "session", start_block: state.session.start, end_block: state.session.end, sensors: sessionRows() });
+    const text = lines.map((l) => JSON.stringify(l)).join("\n") + "\n";
+    const blob = new Blob([text], { type: "application/x-ndjson" });
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, "0");
+    const name = `polar_sync_${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.jsonl`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    state.downloadedAt = performance.now();
+    document.getElementById("dl-msg").textContent = `${name}: ${lines.length} lines, ${(blob.size / 1e6).toFixed(1)} MB`;
+  }
+
+  // ───────────────────────────── start ─────────────────────────────
+
+  const support = document.getElementById("support");
+  if (!navigator.bluetooth) {
+    support.textContent = "Web Bluetooth is not available here. Use Chrome or Edge on a desktop or Android, open this page over https or http://localhost, and on Linux enable chrome://flags/#enable-web-bluetooth.";
+  }
+  for (const slot of Object.keys(SLOTS)) buildCard(slot);
+  document.getElementById("btn-sync-start").onclick = () => startBlock("press", "start");
+  document.getElementById("btn-sync-end").onclick = () => startBlock("press", "end");
+  document.getElementById("btn-press").onclick = () => startBlock("press");
+  document.getElementById("btn-knock").onclick = () => startBlock("knock");
+  document.getElementById("btn-finish").onclick = () => finishBlock();
+  document.getElementById("btn-download").onclick = download;
+  renderBlocks();
+  renderValidation();
+  renderSession();
+  log(`Page ready. Timer resolution ${self.crossOriginIsolated ? "5 µs (cross-origin isolated)" : "0.1 ms"}.`);
+
+  // Watchdog (a link that is up but silent is dropped and reconnected), stats, envelope plot.
+  setInterval(() => {
+    const now = performance.now();
+    for (const slot of Object.keys(SLOTS)) {
+      const d = state.dev[slot];
+      if (d && d.linkUp && d.streaming && !state.busy[slot]) {
+        const since = Math.max(d.lastFrameAt || 0, ...Object.values(d.active).map((a) => a.t));
+        if (now - since > SILENCE_MS) {
+          d.log(`no frame for ${SILENCE_MS / 1000} s: dropping the link to reconnect.`);
+          d.drop("silent");
+        }
+      }
+      renderDevice(slot);
+    }
+    renderSession();
+    drawEnv();
+  }, 1000);
+
+  let lastLive = 0;
+  const frame = (t) => {
+    if (t - lastLive > 100) {
+      lastLive = t;
+      drawLive();
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  window.addEventListener("resize", () => {
+    drawOverlay();
+    drawEnv();
+  });
+
+  // Streams left running keep the H10 awake until its battery is empty: stop them on leaving.
+  window.addEventListener("beforeunload", (e) => {
+    let unsaved = false;
+    for (const d of Object.values(state.dev)) {
+      if (!d) continue;
+      if (d.linkUp) for (const mt of Object.keys(d.active)) d.command([PP.OP.STOP, Number(mt)], "stop").catch(() => {});
+      if (d.lastFrameAt && (state.downloadedAt === null || d.lastFrameAt > state.downloadedAt)) unsaved = true;
+    }
+    if (unsaved) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+})();
+</script>
+</body>
+</html>

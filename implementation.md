@@ -1550,8 +1550,10 @@ end with `postMessage` when embedded. With no band, the tutorial is the plain
 page change it always was.
 
 Lost band — a disconnect event, or 10 s without a packet (Chrome on Linux does
-not always report the loss): a notice is shown for 1.5 s, recording stops, and
-the game carries on. There is no automatic reconnection.
+not always report the loss): a notice is shown for 1.5 s and the game carries
+on while `PolarSession` reconnects in the background (1 s, then doubling up to
+10 s between tries; no click needed for a band the page already has). Packets
+sent while the link was down are lost; `connection_events` records both ends.
 
 ### Log schema
 Level summary, top level: `hr_measurements` — true once a trial of that level
@@ -1616,3 +1618,194 @@ Trial log, top level:
   nor `hr_measurements` notices; only a non-empty `rr_ms` means real beats.
 - The link ran at a 480 ms connection interval on Linux (arrivals in 480 ms
   steps, ~18 s from connect to first packet). The page cannot change this.
+
+---
+
+## 21. Polar H10 + Verity Sense clock sync test page (web only)
+
+A standalone test page, not part of the game: it streams a Polar H10 and a
+Polar Verity Sense over Web Bluetooth and measures each sensor's clock against
+the laptop's. It is the testbed for adding these sensors to the trial logs
+(§20 covers the H9, which has no clock and no accelerometer). Same browser
+support as §20.
+
+### Files
+- [deploy_frontend/polar_pmd.js](deploy_frontend/polar_pmd.js): the Polar
+  Measurement Data (PMD) protocol (control point, settings, frame decoding,
+  delta-compressed frames), `PmdRecorder` (every frame with its arrival time
+  and device timestamp), the sync estimates, and `PmdDevice` (Web Bluetooth,
+  automatic reconnection). Follows the Android sources of the official Polar
+  BLE SDK.
+- [deploy_frontend/polar_sync_test.html](deploy_frontend/polar_sync_test.html):
+  the page. Open `/polar_sync_test.html` on the hosted server, or locally with
+  `python3 -m http.server -d deploy_frontend` and http://localhost:8000/polar_sync_test.html.
+- [tools/tests/test_polar_pmd.js](tools/tests/test_polar_pmd.js): the SDK's
+  own parser test vectors, plus simulated sensors with known offset, drift and
+  Bluetooth delays: `node tools/tests/test_polar_pmd.js`.
+
+### Clock model
+Every PMD frame carries the device's timestamp (ns since 2000-01-01) of its
+last sample; the page spreads the frame's samples back to the previous frame's
+timestamp, as the SDK does. Device times are "dev ms" (since the device's
+first frame), laptop times are `performance.now()` ms (the clock of
+`KeyboardEvent.timeStamp`), and each device gets a mapping
+`laptop = dev + c + s·dev` (c offset, s drift; s·1e6 = ppm):
+- **Arrivals**: a frame never arrives before its last sample, so the lowest
+  points of arrival − dev lie on a line whose slope is the drift. Its offset
+  is late by the smallest Bluetooth delay (unknown). Its drift is wrong when
+  every frame waits the same time for a radio slot (frame period a multiple
+  of the connection interval): the wait then absorbs the drift until it
+  wraps. The page reports this as "locked" (median within-window delay
+  spread < 2 ms); the tests reproduce it.
+- **Press block**: 10 spacebar presses; each is a keydown time and an
+  accelerometer impact (largest sample-to-sample change, onset at half the
+  peak deviation from the level 30–150 ms before, interpolated). Offset =
+  median of keydown − onset. It includes the keyboard's own delay; that
+  delay cancels against the game's keypress times (same keyboard) but not
+  against what is on screen.
+- **Knock block**: knocks seen by both sensors give one sensor's offset
+  through the other's (normally the H10 through the Verity Sense, which is
+  worn on the pressing forearm).
+- **Session sync**: a press block at the start ("Start sync") and one at the
+  end ("End sync"), with whichever sensor feels the presses (the H10 pod held
+  between the fingers, or the forearm wearing the Verity Sense); every
+  connected sensor that feels them is synced. The session table gives per
+  sensor the drift between the syncs (± from their standard errors), the
+  precision between them (±½·√(se₁²+se₂²) mid-session) and the failure
+  modes: a sync that did not take, a clock jump between the syncs or since
+  the start, an implausible drift (> 100 ppm), undecoded frames; link losses
+  and locked arrivals are reported as information.
+- Offset from the latest block; drift from a line through the blocks once
+  they span at least 60 s, otherwise from the arrivals. A block sets an offset
+  only if at least half its presses (3 knocks) are found and their SD ≤ 15 ms.
+- **Clock jumps** (the H10 resets to 2019-01-01 after a shutdown) are found
+  from the arrivals (> 0.5 s early, or > 2 s late for 8 frames) and start a
+  new segment; calibrations never cross segments.
+- **Disconnections**: the page reconnects by itself (no click needed for a
+  device it already has) and restarts the streams; the device clock keeps
+  running, so the calibration still holds unless the clock jumped. A link that
+  is up but silent for 8 s is dropped and reconnected.
+
+### Download (.jsonl)
+One JSON object per line: `meta` (clock definitions, `time_origin_ms`),
+`device` (name, `t0_ns`, clock segments, final `mapping`, `envelope`,
+`calibrations`), `frame` (arrival `t`, device `ts` as a decimal string, raw
+`hex`, decoded values `v`, `first_dev_ms`/`dt_ms` for the samples,
+`first_laptop_ms` through the final mapping), `hr` (standard heart rate
+service), `event` (connections, streams, clock jumps), `key`, `block` (every
+press/knock with its onset and offset).
+
+### Checked so far (simulation only, no real sensor yet)
+Headless Chrome with a fake `navigator.bluetooth` (drift +400 / −250 ppm,
+random radio waits, jolts at each keypress/knock): both final mappings within
+1–2.6 ms of the true clocks (plus the 8 ms simulated keyboard delay) after two
+minutes; reconnection and clock-jump handling worked. A 52 Hz accelerometer
+misses about 1 knock in 5 and places each press within about ±9 ms
+(sampling phase); 200 Hz within about ±2 ms.
+
+## 22. Polar H10 + Verity Sense on the site (clock-synced heart rate)
+
+The band page of §20 also takes a Polar H10 or a Polar Verity Sense ("Polar
+Sense …" in the chooser). Their heart rate is recorded exactly like the H9's;
+in addition their accelerometer syncs the sensor's clock to the controller
+clock (§21's press method), and the H10's ECG times every beat on that clock.
+An H9's files are unchanged.
+
+### Files
+- [deploy_frontend/polar_hr.js](deploy_frontend/polar_hr.js) — `PolarSession`
+  opens the measurement service on the same link (a `PolarPmd.PmdDevice` with
+  its own reconnection and heart rate listener switched off), streams the
+  accelerometer (fastest rate, 8 g) and the ECG (H10, 130 Hz) or optical
+  signal (Verity, 55 Hz), runs the syncs (`sync()`), times beats
+  (`_timeBeats`), builds the trial-log block (`_pmdTrialLog`), keeps the trial
+  files for the re-send, and writes `hr_sync.json`.
+- [deploy_frontend/polar_pmd.js](deploy_frontend/polar_pmd.js) —
+  `detectRPeaks`, `matchBeats`, `pickSettings`, `bufferFromFrames`.
+- [deploy_frontend/index.html](deploy_frontend/index.html) — the sync box on
+  the band page and in the end popup, EN/DE texts, the space bar capture.
+- [controller_main.js](controller_main.js) — `saveTrialLog`: `useLogger`
+  (the controller's retrying queue and the session folder), `hr_ecg` /
+  `hr_ppg` in the log, `keepTrialFile` after sending.
+- Tests: `node tools/tests/test_polar_pmd.js` (R-peaks, matching, motion
+  spikes, regular hearts) and `node tools/tests/test_polar_hr_sync.js` (a
+  simulated H10 session: start sync, 80 trials, end sync, re-send; no end
+  sync; no sync; sensor switched off mid-session).
+
+### Flow
+1. Band page: connect; the sync box asks for 10 firm space bar presses about
+   a second apart with the sensor in the pressing hand (H10: unclipped, fingers
+   on both electrodes; Verity: on the arm of that hand). While presses are
+   collected the space bar does nothing else. Accepted when at least half of
+   the presses (and 3) were felt and their offsets' SD ≤ 15 ms; otherwise the
+   box says why and offers a retry. Not required to go back.
+2. Game: every trial log carries the beat times from the start sync (status
+   `start`).
+3. End popup (shown by the game): the same sync again; the save status waits
+   below it, with Skip. Once accepted, every trial file of the session is
+   re-timed with both syncs (drift corrected) and queued again under its own
+   path (the server overwrites it); the sensor's streams are stopped.
+
+### Trial log additions (H10 / Verity only)
+- `hr_meas[].beat_elapsed_secs` — the R-peak ending the packet's last RR, on
+  the controller clock; null without RR, without a sync, or unmatched.
+  `arrival_elapsed_secs` keeps its meaning.
+- `hr_info`: `firmware`, `hr_beat_source` (`ecg_r_peak`; null for the
+  Verity: its pulses are not timed on the page), `hr_beat_signal_hz`,
+  `hr_beats_reported`, `hr_beats_timed`, `hr_rr_check_sd_ms` (SD of ECG R–R
+  minus the band's RR over matched beats), `sync_info` { `status` (`start` |
+  `end` | `start+end` | null), `start` / `end` { `elapsed_secs` (first press),
+  `sensor`, `acc_hz`, `acc_range_g`, `presses_used`, `sd_ms` }, `drift_ppm`
+  (> 0: the sensor's clock runs fast), `precision_ms` (one standard error of
+  the clock mapping at the trial's middle; only with both syncs), `problems` }.
+  `units` documents every field.
+- `hr_ecg` (H10) / `hr_ppg` (Verity): every frame since the previous trial
+  log, as the heart rate rows are split: `arrival_elapsed_secs`,
+  `first_elapsed_secs` (first sample, synced; null when unsynced), `dt_ms`
+  (sample spacing on the sensor clock), `uV` or `ppg0..2`, `ambient`.
+- `<name>/<session>/hr_sync.json` — every sync attempt: presses (keydown,
+  impact onset, residual, used or why not) and the accelerometer from 3 s
+  before the first press to 1 s after the last (≈ 70 kB per H10 sync).
+
+### Beat timing
+R-peaks: slope-energy bursts ≥ 250 ms apart above 15 % of the local typical
+beat (the 4th largest within ±3 s, fewer at the ends of a stretch), refined
+to the extremum of the dominant polarity by a parabola. Matching: within one
+connection the band reports every beat, so its RR values added up place the
+beats up to one anchor; R-peaks on those places (±10 ms) confirm an anchor.
+The anchor supported by most of the ±8 neighbouring beats wins, ties (a very
+regular heart) going to the shortest beat-to-arrival delay over ±30 beats
+(an anchor one beat late puts some beat after its packet). A beat is timed
+only if that anchor has a peak at its place one RR after another peak, so a
+beat whose R-peak is lost under a motion spike stays null rather than taking
+a neighbour's.
+
+### Edge cases
+- **Link lost**: reconnected in the background; the streams restart (a stream
+  left running on the sensor is restarted). The sensor's clock keeps running,
+  so the syncs stay valid; beats during the gap are lost.
+- **Sensor switched off** (its clock restarts): detected as a clock jump; a
+  new clock segment, which only a later sync can time — the end sync times
+  the part after it (status `end`), the start sync the part before.
+- **Measurement service unusable** (e.g. the link drops while it opens): heart
+  rate rows as for an H9, status null, the reason in `problems`; retried at
+  the next connection.
+- **No end sync** (skipped, tab closed): files keep status `start`; their
+  times use the drift from packet arrival times and `precision_ms` is null.
+- **Re-send after midnight**: the server files by its own date, so the
+  re-timed copy lands in the next day's folder; the older copy keeps status
+  `start`.
+- **Memory**: the session's trial files stay in memory until the end sync
+  (≈ 200 kB each).
+
+### Checked (simulation only)
+Node: over 40 seeds × 4 noise levels (≈ 4,800 beats each), every matched
+beat within 0.7 ms of its true R-peak (4 ms at 120 µV noise); no beat
+matched to a neighbour's peak except 1 in ≈ 4,800 with a perfectly constant
+heart, motion spikes and 2–4 ms of detector disagreement together. A
+simulated session: 397 of 397 beats timed, drift 23.6 ppm (true 25).
+Headless Chrome, real `index.html` with a fake H10: start sync, 18 trials, a
+link drop and reconnection, end sync and re-send; 101 of 112 beats timed (the
+others during the in-hand presses and the drop), beat times a constant
+5.6 ± 0.3 ms after the true beats (the simulated 8 ms keyboard delay less the
+late impact pick), drift 39 ppm (true 40). Fake H9: files unchanged. Fake
+Verity: synced at 52 Hz (spread 6.4 ms), optical frames saved.

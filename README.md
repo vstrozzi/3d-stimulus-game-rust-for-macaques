@@ -172,6 +172,11 @@ standard heart rate service connect too, with a warning; only the H9 is tested.
 
 Details: [implementation.md](implementation.md) §20.
 
+Test page for the next sensors (Polar H10 + Verity Sense, clock sync from
+spacebar presses): `deploy_frontend/polar_sync_test.html`, see
+[implementation.md](implementation.md) §21. The game itself takes an H10 or
+Verity Sense too, synced at the start and end of a session: §22.
+
 
 ## Hosted web server
 

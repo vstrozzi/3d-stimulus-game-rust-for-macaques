@@ -450,7 +450,22 @@
   /* ── Heart rate band (optional) ───────────────────────────────────── */
   /* These carry a display rule, which would otherwise beat `hidden`. */
   #name-step[hidden], #hr-step[hidden], #hr-live[hidden], #hr-details[hidden],
-  #hr-toast[hidden] { display: none !important; }
+  #hr-toast[hidden], #hr-sync[hidden], #end-sync[hidden] { display: none !important; }
+  .hr-sync {
+    width: 100%;
+    max-width: 40rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 1rem;
+    border: 1px solid #333;
+    border-radius: 0.6rem;
+  }
+  .hr-sync h2 { font-size: 1em; margin: 0; }
+  .hr-sync p { margin: 0; line-height: 1.6; text-align: left; }
+  /* While the end sync is asked for, the save status waits below it. */
+  #end-popup.hr-syncing #end-title, #end-popup.hr-syncing #end-text { display: none; }
   .link-btn {
     padding: 0.45rem 1rem;
     font-size: 0.9em;
@@ -592,13 +607,13 @@
     <button class="lang-btn" id="hr-lang-toggle" type="button">Deutsch</button>
     <h1 data-i18n="hr_title">Heart rate band (optional)</h1>
     <div class="instructions">
-      <p data-i18n="hr_intro">You can record your heart rate during the game. The supported device is the Polar H9 chest band. This step is optional.</p>
+      <p data-i18n="hr_intro">You can record your heart rate during the game. Supported devices: the Polar H9 and H10 chest bands and the Polar Verity Sense. This step is optional.</p>
       <ul>
-        <li data-i18n="hr_s1">Moisten the two electrode areas on the inside of the strap with water</li>
-        <li data-i18n="hr_s2">Fasten the strap around your chest, just below the chest muscles, and snap the sensor onto it</li>
+        <li data-i18n="hr_s1">Chest band: moisten the two electrode areas on the inside of the strap with water</li>
+        <li data-i18n="hr_s2">Fasten the strap around your chest, just below the chest muscles, and snap the sensor onto it (Verity Sense: wear it on your forearm or upper arm, sensor against the skin)</li>
         <li data-i18n="hr_s3">Close any other app that is connected to the band (for example on your phone)</li>
-        <li data-i18n="hr_s4">Press &ldquo;Connect band&rdquo; and choose &ldquo;Polar H9 &hellip;&rdquo; in the browser window</li>
-        <li data-i18n="hr_s5">Wait until the heart rate appears below, then go back and continue</li>
+        <li data-i18n="hr_s4">Press &ldquo;Connect band&rdquo; and choose your device (&ldquo;Polar H9 &hellip;&rdquo;, &ldquo;Polar H10 &hellip;&rdquo; or &ldquo;Polar Sense &hellip;&rdquo;) in the browser window</li>
+        <li data-i18n="hr_s5">Wait until the heart rate appears below (H10 and Verity Sense: then synchronize as shown below), then go back and continue</li>
       </ul>
     </div>
     <div class="hr-msg" id="hr-msg" aria-live="polite"></div>
@@ -606,6 +621,14 @@
     <div class="hr-buttons">
       <button class="start-btn" id="hr-connect" type="button">Connect band</button>
       <button class="start-btn secondary" id="hr-back" type="button">Back</button>
+    </div>
+
+    <!-- H10 / Verity Sense: ten space bar presses tie the sensor's clock to this page's. -->
+    <div class="hr-sync" id="hr-sync" hidden>
+      <h2 data-i18n="sync_title">Synchronize the sensor's clock</h2>
+      <p id="hr-sync-how"></p>
+      <div class="hr-msg" id="hr-sync-msg" aria-live="polite"></div>
+      <button class="start-btn" id="hr-sync-btn" type="button">Synchronize</button>
     </div>
 
     <div id="hr-live" hidden>
@@ -647,7 +670,7 @@
         <span class="action-icon">&#9825;</span>
         <span class="action-text">
           <span class="action-title">Heart Rate Band</span>
-          <span class="action-desc" id="btn-hr-desc">Optional: connect a Polar H9 before playing</span>
+          <span class="action-desc" id="btn-hr-desc">Optional: connect a Polar H9, H10 or Verity Sense before playing</span>
         </span>
       </button>
 
@@ -747,6 +770,15 @@
       <div class="end-thanks">Thank you for playing!</div>
       <div id="end-title">Session complete</div>
       <div id="end-text">Saving your data…</div>
+      <!-- The end sync of an H10 / Verity Sense (index.html shows it). -->
+      <div class="hr-sync" id="end-sync" hidden>
+        <p id="end-sync-how"></p>
+        <div class="hr-msg" id="end-sync-msg" aria-live="polite"></div>
+        <div class="hr-buttons">
+          <button class="start-btn" id="end-sync-btn" type="button">Synchronize</button>
+          <button class="start-btn secondary" id="end-sync-skip" type="button" data-i18n="sync_skip">Skip</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -758,6 +790,7 @@
 
 <div id="hr-toast" role="status" hidden></div>
 
+<script src="./polar_pmd.js"></script>
 <script src="./polar_hr.js"></script>
 <script>
   const playerFlow = document.getElementById('player-flow');
@@ -884,7 +917,7 @@
   // plain page change it always was.
   function openTutorial() {
     sessionStorage.removeItem('tutorial_complete');
-    if (!hrSession || !(hrSession.connected || hrState === 'connecting')) {
+    if (!hrSession || !(hrSession.connected || hrState === 'connecting' || hrState === 'lost')) {
       window.location.assign('./tutorial.html');
       return;
     }
@@ -916,9 +949,11 @@
   });
 
   // ── Heart rate band (optional) ───────────────────────────────────────────
-  // A Polar H9 can be connected before playing. polar_hr.js records its
-  // packets; controller_main.js finds the session on `window.hrBand` and
-  // writes them into each trial log.
+  // A Polar H9, H10 or Verity Sense can be connected before playing.
+  // polar_hr.js records its packets (and, for an H10 / Verity Sense, its
+  // measurement streams and clock syncs); controller_main.js finds the session
+  // on `window.hrBand` and writes them into each trial log. A lost link is
+  // reconnected in the background.
   const HR_READY_MS = 5000;     // heartbeats must have been arriving this long before Back is offered
   const HR_SILENCE_MS = 10000;  // no packet for this long = the band is treated as disconnected
   const HR_TOAST_MS = 1500;
@@ -934,7 +969,7 @@
   const hrToastEl = document.getElementById('hr-toast');
   const hrSupported = !!(navigator.bluetooth && window.Polar);
   let hrSession = null;         // Polar.PolarSession once Connect was pressed
-  let hrState = 'idle';         // idle | connecting | live | lost | failed
+  let hrState = 'idle';         // idle | connecting | live | lost (reconnecting) | failed
   let hrLiveSinceMs = null;     // when the current link finished its setup
   let hrFirstPacketMs = null;   // first packet on the current link
   let hrFromAdmin = false;      // which landing Back returns to
@@ -978,6 +1013,11 @@
         if (hrPacketLines.length > HR_MAX_LINES) hrPacketLines.shift();
       };
       hrSession.onDisconnect = hrOnLost;
+      hrSession.onReconnect = () => {
+        hrState = 'live';
+        hrLiveSinceMs = performance.now();
+        hrRender();
+      };
     }
     hrState = 'connecting';
     hrLiveSinceMs = hrFirstPacketMs = null;
@@ -1041,8 +1081,9 @@
     const onText = `${txt('hr_open_on')} ✓${last ? `  ·  ${last.hr} bpm` : ''}`;
     hrOpenBtn.textContent = live ? onText : txt('hr_open');
     hrOpenBtn.classList.toggle('on', live);
-    document.getElementById('btn-hr-desc').textContent = live ? onText : 'Optional: connect a Polar H9 before playing';
+    document.getElementById('btn-hr-desc').textContent = live ? onText : 'Optional: connect a Polar H9, H10 or Verity Sense before playing';
     if (hrStep.hidden || playerFlow.hidden) return;
+    hrRenderSync();
 
     let key = null;
     let cls = '';
@@ -1091,15 +1132,16 @@
     // The browser does not always report a lost band, so a link that is up
     // but silent for too long is treated as a disconnection.
     if (hrState === 'live') {
-      const last = hrSession.hr.at(-1);
-      const since = Math.max(hrLiveSinceMs, last ? last.t_ms : 0);
+      const since = Math.max(hrLiveSinceMs, hrSession.lastDataMs);
       if (performance.now() - since > HR_SILENCE_MS) {
         hrLog(`No packet for ${HR_SILENCE_MS / 1000} s: treating the band as disconnected.`);
         hrSession.drop('silent');  // ends in hrOnLost
       }
     }
     if (!_gameBooted) hrRender();  // nothing of this page is visible during the game
+    else if (hrEndSync !== 'closed') hrRenderSync();
   }, 500);
+  window.addEventListener('pagehide', () => { if (hrSession) hrSession.stopStreams(); });
 
   function hrOpenPage(fromAdmin) {
     hrFromAdmin = fromAdmin;
@@ -1121,6 +1163,122 @@
   hrBackBtn.addEventListener('click', hrClosePage);
   hrConnectBtn.addEventListener('click', hrConnect);
   hrDetailsToggle.addEventListener('click', () => { hrDetails.hidden = !hrDetails.hidden; hrRender(); });
+
+  // ── Clock sync (H10 / Verity Sense) ──────────────────────────────────────
+  // Ten space bar presses, felt by the sensor's accelerometer, tie its clock
+  // to this page's: on this page before playing, and again in the end popup
+  // (the files written in between are then re-timed and sent again). While
+  // presses are collected, the space bar does nothing else.
+  const HR_SYNC_PRESSES = 10;
+  const HR_SYNC_MIN_GAP_MS = 300;  // a press sooner than this after the previous one is ignored
+  const endPopup = document.getElementById('end-popup');
+  const hrSyncUi = {};
+  for (const [kind, p] of [['start', 'hr'], ['end', 'end']]) {
+    hrSyncUi[kind] = {
+      box: document.getElementById(`${p}-sync`), how: document.getElementById(`${p}-sync-how`),
+      msg: document.getElementById(`${p}-sync-msg`), btn: document.getElementById(`${p}-sync-btn`),
+    };
+  }
+  let hrSyncRun = null;       // { kind, keys } while presses are collected
+  let hrSyncChecking = null;  // kind of the sync being analysed
+  let hrEndSync = 'closed';   // closed | open | saving (re-sent files on their way)
+
+  function hrSyncWhy(s) {
+    if (s.reason === 'few') return txt('why_few', { f: s.found, n: s.keys.length });
+    if (s.reason === 'irregular') return txt('why_irregular', { sd: s.sd === null ? '–' : s.sd.toFixed(0) });
+    return txt('why_nodata');
+  }
+
+  function hrRenderSync() {
+    const has = !!(hrSession && hrSession.pmd);
+    for (const kind of ['start', 'end']) {
+      const ui = hrSyncUi[kind];
+      ui.box.hidden = !has || (kind === 'end' && hrEndSync === 'closed');
+      if (ui.box.hidden) continue;
+      ui.how.textContent = txt(`sync_how_${kind}_${hrSession.kind === 'verity' ? 'verity' : 'h10'}`);
+      const last = hrSession.lastSync(kind);
+      let msg = '';
+      let cls = '';
+      let label = txt(last ? 'sync_again' : 'sync_btn');
+      let disabled = false;
+      if (kind === 'end' && hrEndSync === 'saving') { msg = txt('sync_saving'); cls = 'ok'; disabled = true; }
+      else if (hrSyncRun && hrSyncRun.kind === kind) { msg = txt('sync_press', { n: hrSyncRun.keys.length, of: HR_SYNC_PRESSES }); label = txt('sync_cancel'); }
+      else if (hrSyncChecking === kind) { msg = txt('sync_checking'); disabled = true; }
+      else if (hrSession.pmdError) { msg = txt('sync_unavailable', { err: hrSession.pmdError }); cls = 'warn'; disabled = true; }
+      else if (!hrSession.canSync) { msg = txt('sync_waiting'); disabled = true; }
+      else if (last && last.accepted) { msg = txt('sync_ok', { u: last.used, n: last.keys.length, sd: last.sd.toFixed(1) }); cls = 'ok'; }
+      else if (last) { msg = txt('sync_bad', { why: hrSyncWhy(last) }); cls = 'warn'; }
+      else if (kind === 'start') { msg = txt('sync_needed'); cls = 'warn'; }
+      ui.msg.textContent = msg;
+      ui.msg.className = 'hr-msg' + (cls ? ' ' + cls : '');
+      ui.btn.textContent = label;
+      ui.btn.disabled = disabled || (!!hrSyncRun && hrSyncRun.kind !== kind);
+    }
+    endPopup.classList.toggle('hr-syncing', hrEndSync !== 'closed');
+  }
+
+  function hrSyncClick(kind) {
+    if (hrSyncRun) { hrSyncRun = null; hrRenderSync(); return; }  // Cancel
+    if (!hrSession || !hrSession.canSync || hrSyncChecking) return;
+    // Focus off the button, or the space bar would press it.
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    hrSyncRun = { kind, keys: [] };
+    hrRenderSync();
+  }
+
+  async function hrSyncFinish() {
+    const run = hrSyncRun;
+    hrSyncRun = null;
+    hrSyncChecking = run.kind;
+    hrRenderSync();
+    let res = null;
+    try { res = await hrSession.sync(run.kind, run.keys); }
+    catch (err) { hrLog(`Sync failed: ${err.name}: ${err.message}`); }
+    hrSyncChecking = null;
+    if (run.kind === 'end' && res && res.accepted) {
+      // The sensor is no longer needed; the files written during the game
+      // are re-timed and queued again before the save status comes back.
+      hrSession.stopStreams();
+      hrEndSync = 'saving';
+      hrRenderSync();
+      while (hrSession.resending) await new Promise((r) => setTimeout(r, 200));
+      hrEndSync = 'closed';
+    }
+    hrRenderSync();
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (!hrSyncRun || e.code !== 'Space') return;
+    e.preventDefault();
+    e.stopImmediatePropagation();  // never reaches the game
+    if (e.repeat) return;
+    const keys = hrSyncRun.keys;
+    if (keys.length && e.timeStamp - keys[keys.length - 1] < HR_SYNC_MIN_GAP_MS) return;
+    keys.push(e.timeStamp);  // the same clock as performance.now() and the game's input times
+    if (keys.length >= HR_SYNC_PRESSES) hrSyncFinish();
+    else hrRenderSync();
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (hrSyncRun && e.code === 'Space') { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+
+  hrSyncUi.start.btn.addEventListener('click', () => hrSyncClick('start'));
+  hrSyncUi.end.btn.addEventListener('click', () => hrSyncClick('end'));
+  document.getElementById('end-sync-skip').addEventListener('click', () => {
+    hrSyncRun = null;
+    if (hrSession) hrSession.stopStreams();
+    hrEndSync = 'closed';
+    hrRenderSync();
+  });
+  // The game shows its end popup by itself; the end sync is asked for there
+  // when the sensor has a measurement service (and, unless it never worked, a sync to repeat).
+  new MutationObserver(() => {
+    if (endPopup.hidden || hrEndSync !== 'closed' || !hrSession || !hrSession.pmd) return;
+    if (hrSession.lastSync('end')) return;  // asked once
+    if (hrSession.pmdError && !hrSession.syncs.some((s) => s.accepted)) return;
+    hrEndSync = 'open';
+    hrRenderSync();
+  }).observe(endPopup, { attributes: true, attributeFilter: ['hidden'] });
 
   // ── Language switch (player pages only) ──────────────────────────────────
   // English is the markup, so it is the default and needs no table: the
@@ -1153,12 +1311,12 @@
 
     // Heart rate band page: static text ...
     hr_title: 'Herzfrequenz-Gurt (optional)',
-    hr_intro: 'Sie k\u00f6nnen w\u00e4hrend des Spiels Ihre Herzfrequenz aufzeichnen. Unterst\u00fctzt wird der Brustgurt Polar H9. Dieser Schritt ist freiwillig.',
-    hr_s1: 'Befeuchten Sie die beiden Elektrodenfl\u00e4chen auf der Innenseite des Gurts mit Wasser',
-    hr_s2: 'Legen Sie den Gurt direkt unterhalb der Brustmuskulatur um den Brustkorb und befestigen Sie den Sensor daran',
+    hr_intro: 'Sie k\u00f6nnen w\u00e4hrend des Spiels Ihre Herzfrequenz aufzeichnen. Unterst\u00fctzt werden die Brustgurte Polar H9 und H10 sowie der Polar Verity Sense. Dieser Schritt ist freiwillig.',
+    hr_s1: 'Brustgurt: Befeuchten Sie die beiden Elektrodenfl\u00e4chen auf der Innenseite des Gurts mit Wasser',
+    hr_s2: 'Legen Sie den Gurt direkt unterhalb der Brustmuskulatur um den Brustkorb und befestigen Sie den Sensor daran (Verity Sense: am Unter- oder Oberarm tragen, Sensor auf der Haut)',
     hr_s3: 'Schlie\u00dfen Sie alle anderen Apps, die mit dem Gurt verbunden sind (z. B. auf Ihrem Smartphone)',
-    hr_s4: 'Dr\u00fccken Sie \u201eGurt verbinden\u201c und w\u00e4hlen Sie im Browserfenster \u201ePolar H9 \u2026\u201c aus',
-    hr_s5: 'Warten Sie, bis unten die Herzfrequenz erscheint, gehen Sie dann zur\u00fcck und fahren Sie fort',
+    hr_s4: 'Dr\u00fccken Sie \u201eGurt verbinden\u201c und w\u00e4hlen Sie im Browserfenster Ihr Ger\u00e4t aus (\u201ePolar H9 \u2026\u201c, \u201ePolar H10 \u2026\u201c oder \u201ePolar Sense \u2026\u201c)',
+    hr_s5: 'Warten Sie, bis unten die Herzfrequenz erscheint (H10 und Verity Sense: dann wie unten gezeigt synchronisieren), gehen Sie dann zur\u00fcck und fahren Sie fort',
     hr_h_bpm: 'Herzfrequenz (Schl\u00e4ge/min)',
     hr_h_rr: 'RR-Intervalle (ms)',
     hr_h_gaps: 'Histogramm der Paketabst\u00e4nde',
@@ -1177,10 +1335,30 @@
     hr_waiting: 'Verbunden. Warten auf den ersten Herzschlag\u2026',
     hr_checking: 'Herzschl\u00e4ge werden empfangen. Das Signal wird gepr\u00fcft\u2026',
     hr_ok: 'Der Gurt ist verbunden und zeichnet auf. Sie k\u00f6nnen zur\u00fcckgehen.',
-    hr_lost: 'Der Gurt ist getrennt. Verbinden Sie ihn erneut oder gehen Sie zur\u00fcck und fahren Sie ohne ihn fort.',
+    hr_lost: 'Die Verbindung zum Gurt ist unterbrochen und wird automatisch wiederhergestellt\u2026 Sie k\u00f6nnen auch zur\u00fcckgehen und ohne ihn fortfahren.',
     hr_failed: 'Die Verbindung ist fehlgeschlagen. Pr\u00fcfen Sie, ob der Gurt angelegt ist und die Elektroden feucht sind, und versuchen Sie es erneut.',
-    hr_not_h9: 'Warnung: \u201e{name}\u201c ist kein Polar H9. Die Aufzeichnung ist f\u00fcr den Polar H9 ausgelegt und funktioniert mit diesem Ger\u00e4t m\u00f6glicherweise nicht korrekt.',
-    hr_toast: 'Herzfrequenz-Gurt getrennt. Starten Sie das Spiel neu, um ihn wieder zu verbinden, oder fahren Sie ohne ihn fort.',
+    hr_not_h9: 'Warnung: \u201e{name}\u201c ist kein Polar H9, H10 oder Verity Sense. Die Aufzeichnung ist f\u00fcr diese Ger\u00e4te ausgelegt und funktioniert mit diesem Ger\u00e4t m\u00f6glicherweise nicht korrekt.',
+    hr_toast: 'Herzfrequenz-Gurt getrennt; die Verbindung wird im Hintergrund wiederhergestellt. Sie k\u00f6nnen weiterspielen.',
+    sync_title: 'Uhr des Sensors synchronisieren',
+    sync_skip: '\u00dcberspringen',
+    sync_how_start_h10: 'L\u00f6sen Sie den Gurt und halten Sie den Sensor (am Gurt) in der Hand, mit der Sie die Tasten dr\u00fccken, mit den Fingern auf beiden Elektrodenfl\u00e4chen. Dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste mit dieser Hand, etwa einmal pro Sekunde. Legen Sie den Gurt danach wieder an.',
+    sync_how_start_verity: 'Lassen Sie den Sensor am Arm und benutzen Sie die Hand dieses Arms. Dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste, etwa einmal pro Sekunde.',
+    sync_how_end_h10: 'Ein letzter Schritt f\u00fcr den Herzfrequenz-Sensor: Nehmen Sie den Gurt ab und halten Sie den Sensor wie zu Beginn in der Hand, mit der Sie die Tasten dr\u00fccken, mit den Fingern auf beiden Elektrodenfl\u00e4chen. Dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste mit dieser Hand, etwa einmal pro Sekunde.',
+    sync_how_end_verity: 'Ein letzter Schritt f\u00fcr den Herzfrequenz-Sensor: Lassen Sie ihn am Arm, dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste mit der Hand dieses Arms, etwa einmal pro Sekunde.',
+    sync_btn: 'Synchronisieren',
+    sync_again: 'Erneut synchronisieren',
+    sync_cancel: 'Abbrechen',
+    sync_press: 'Dr\u00fccken Sie die Leertaste: {n} von {of}',
+    sync_checking: 'Wird gepr\u00fcft\u2026',
+    sync_waiting: 'Warten auf die Bewegungsdaten des Sensors\u2026',
+    sync_ok: 'Synchronisiert \u2713 ({u} von {n} Tastendr\u00fccken verwendet, Streuung {sd} ms)',
+    sync_bad: 'Nicht synchronisiert: {why}. Bitte versuchen Sie es erneut.',
+    sync_needed: 'Noch nicht synchronisiert. Bitte synchronisieren Sie, bevor Sie zur\u00fcckgehen.',
+    sync_unavailable: 'Dieser Sensor kann nicht synchronisiert werden ({err}). Die Herzfrequenz wird trotzdem aufgezeichnet.',
+    sync_saving: 'Synchronisiert \u2713. Die gespeicherten Daten werden aktualisiert\u2026',
+    why_few: 'der Sensor hat nur {f} der {n} Tastendr\u00fccke gesp\u00fcrt; halten Sie ihn fest in der dr\u00fcckenden Hand und dr\u00fccken Sie kr\u00e4ftiger',
+    why_irregular: 'die gemessenen Tastendr\u00fccke streuen zu stark ({sd} ms); dr\u00fccken Sie kr\u00e4ftig, eine Taste nach der anderen',
+    why_nodata: 'keine Bewegungsdaten vom Sensor',
     st_band: 'Gurt',
     st_conn: 'Verbindung',
     st_conn_on: 'verbunden',
@@ -1216,10 +1394,28 @@
     hr_waiting: 'Connected. Waiting for the first heartbeat\u2026',
     hr_checking: 'Receiving heartbeats. Checking the signal\u2026',
     hr_ok: 'The band is connected and recording. You can go back.',
-    hr_lost: 'The band is disconnected. Connect it again, or go back and continue without it.',
+    hr_lost: 'The connection to the band was lost and is being restored automatically\u2026 You can also go back and continue without it.',
     hr_failed: 'The connection failed. Check that the band is worn and the electrodes are wet, then try again.',
-    hr_not_h9: 'Warning: \u201c{name}\u201d is not a Polar H9. The recording is designed for the Polar H9 and may not work correctly with this device.',
-    hr_toast: 'Heart rate band disconnected. Restart the game to reconnect it, or continue without it.',
+    hr_not_h9: 'Warning: \u201c{name}\u201d is not a Polar H9, H10 or Verity Sense. The recording is designed for these and may not work correctly with this device.',
+    hr_toast: 'Heart rate band disconnected; reconnecting in the background. You can keep playing.',
+    sync_how_start_h10: 'Unclip the strap and hold the sensor (still on the strap) in the hand you press keys with, fingers on both electrode areas. Press \u201cSynchronize\u201d, then press the space bar 10 times with that hand, firmly, about once a second. Then fasten the strap again.',
+    sync_how_start_verity: 'Keep the sensor on your arm and use the hand of that arm. Press \u201cSynchronize\u201d, then press the space bar 10 times, firmly, about once a second.',
+    sync_how_end_h10: 'One last step for the heart rate sensor: take off the strap and hold the sensor in the hand you press keys with, fingers on both electrode areas, as at the start. Press \u201cSynchronize\u201d, then press the space bar 10 times with that hand, firmly, about once a second.',
+    sync_how_end_verity: 'One last step for the heart rate sensor: keep it on your arm, press \u201cSynchronize\u201d, then press the space bar 10 times with the hand of that arm, firmly, about once a second.',
+    sync_btn: 'Synchronize',
+    sync_again: 'Synchronize again',
+    sync_cancel: 'Cancel',
+    sync_press: 'Press the space bar: {n} of {of}',
+    sync_checking: 'Checking\u2026',
+    sync_waiting: 'Waiting for the sensor\'s movement data\u2026',
+    sync_ok: 'Synchronized \u2713 ({u} of {n} presses used, spread {sd} ms)',
+    sync_bad: 'Not synchronized: {why}. Please try again.',
+    sync_needed: 'Not synchronized yet. Please synchronize before going back.',
+    sync_unavailable: 'This sensor cannot be synchronized ({err}). Its heart rate is still recorded.',
+    sync_saving: 'Synchronized \u2713. Updating the saved data\u2026',
+    why_few: 'the sensor felt only {f} of the {n} presses; hold it firmly in the pressing hand and press harder',
+    why_irregular: 'the presses were felt too unevenly (spread {sd} ms); press firmly, one press at a time',
+    why_nodata: 'no movement data from the sensor',
     st_band: 'Band',
     st_conn: 'Connection',
     st_conn_on: 'connected',

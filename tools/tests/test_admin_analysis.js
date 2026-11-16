@@ -48,7 +48,7 @@ assert.equal(d.trials[3].timeout, true);
 assert.equal(A.metric(d.trials.slice(0, 2), 'percent'), 50);
 assert.equal(A.metric(d.trials.slice(0, 2), 'per_object'), 2);
 assert.equal(A.congruency({}), 'unknown');
-assert.equal(d.rr[0].t, 5, 'Timed beat uses sensor time');
+assert.equal(d.packets[0].t, 5, 'Timed beat uses sensor time');
 assert.equal(A.classify({ state_read: { current_alignment: -.5 } }, { target_door: 2, cosine_alignment_threshold: .95 }, null).status, 'position');
 for (let door = 0; door < 6; door++) {
   for (const orient of [0, .7, 5.8]) {
@@ -87,11 +87,10 @@ const missing = trial('Alice/run1', 99, [], { nr_attempts: 2 });
 assert.equal(A.normalize([missing], catalog).trials[0].mistakes, null);
 const packetOnly = trial('Alice/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs: 8, hr: 80, rr_ms: [750, 750] }, { arrival_elapsed_secs: 9, hr: 80, rr_ms: [] }] });
 const old = A.normalize([packetOnly], catalog);
-assert.deepEqual(old.rr.map(p => p.t), [7.25, 8]);
-assert.equal(A.figure(old, { ...base, plot: 'hr' }).panels[0].rows.length, 1, 'Stale HR without RR is excluded');
+assert.equal(A.figure(old, { ...base, plot: 'hr_summary' }).panels[0].rows[0].n_readings, 1, 'Stale chest-strap HR without RR is excluded');
+assert.equal(A.figure(old, { ...base, plot: 'hr_summary' }).panels[0].rows[0].value, 80);
 const optical = A.normalize([trial('Alice/run1', 1, [], { hr_info: { device: { name: 'Polar Sense' } }, hr_meas: [{ arrival_elapsed_secs: 8, hr: 80, rr_ms: [] }] })], catalog);
-assert.equal(A.figure(optical, { ...base, plot: 'hr' }).panels[0].rows.length, 1, 'Optical sensors can report HR without RR');
-assert.equal(optical.rr.length, 0, 'Never invent RR intervals from optical HR');
+assert.equal(A.figure(optical, { ...base, plot: 'hr_summary' }).panels[0].rows[0].value, 80, 'Optical sensors can report HR without RR');
 assert.equal(A.figure(d, { ...base, plot: 'first_choice', y: 'region' }).panels[0].traces.length, 8);
 const early = trial('Alice/run1', 1, [], { hr_info: { trial_start_elapsed_secs: 0, trial_end_elapsed_secs: 4 }, hr_meas: [] });
 const late = trial('Alice/run1', 2, [], { level_index: 1, hr_info: { trial_start_elapsed_secs: 5, trial_end_elapsed_secs: 9 },
@@ -99,4 +98,28 @@ const late = trial('Alice/run1', 2, [], { level_index: 1, hr_info: { trial_start
 const context = A.normalize([early, late], catalog);
 assert.deepEqual(context.packets.map(p => p.level), [0, 1], 'Delayed beats belong to their timestamped trial, not their save file');
 assert.deepEqual(context.packets.map(p => p.phase), ['trial', 'trial']);
+const simpleHR = A.normalize([
+  trial('Alice/run1', 1, [], { hr_info: { trial_start_elapsed_secs: 0, trial_end_elapsed_secs: 4 }, hr_meas: [
+    { beat_elapsed_secs: -1, hr: 200, rr_ms: [800] },
+    { beat_elapsed_secs: 1, hr: 60, rr_ms: [800] },
+    { beat_elapsed_secs: 2, hr: 80, rr_ms: [800] },
+    { beat_elapsed_secs: 4.5, hr: 200, rr_ms: [800] },
+  ] }),
+  trial('Alice/run1', 2, [], { hr_info: { trial_start_elapsed_secs: 5, trial_end_elapsed_secs: 9 }, hr_meas: [{ beat_elapsed_secs: 6, hr: 100, rr_ms: [800] }] }),
+  trial('Alice/run1', 3, [], { hr_info: { trial_start_elapsed_secs: 10, trial_end_elapsed_secs: 14 }, hr_meas: [] }),
+], catalog);
+f = A.figure(simpleHR, { ...base, plot: 'hr_summary', x: 'counter' });
+assert.deepEqual(f.panels[0].rows.map(r => r.value), [70, 100, null], 'One mean per trial; gaps stay null');
+assert.deepEqual(f.panels[0].rows.map(r => r.n_readings), [2, 1, 0], 'Exclude pre-game and between-trial samples');
+f = A.figure(simpleHR, { ...base, plot: 'hr_summary', x: 'level' });
+assert.equal(f.panels[0].rows[0].value, 80, 'Level mean includes all valid selected readings');
+const weightedHR = A.normalize([
+  trial('Alice/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs: 1, hr: 60, rr_ms: [800] }] }),
+  trial('Alice/run2', 1, [], { hr_meas: [{ arrival_elapsed_secs: 1, hr: 80, rr_ms: [800] }] }),
+  trial('Bob/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs: 1, hr: 100, rr_ms: [800] }] }),
+], catalog);
+assert.equal(A.figure(weightedHR, { ...base, plot: 'hr_summary' }).panels[0].traces.at(-1).y[0], 85);
+assert.equal(A.figure(weightedHR, { ...base, plot: 'hr_summary', weight: 'session' }).panels[0].traces.at(-1).y[0], 80);
+assert.deepEqual(Object.keys(A.PLOTS).filter(k => /hr|rr|poincare|waveform/.test(k)), ['hr_summary']);
+assert.throws(() => A.figure(d, { ...base, plot: 'histogram', y: 'hr' }), /duration or mistakes/);
 console.log('admin analysis: all tests passed');

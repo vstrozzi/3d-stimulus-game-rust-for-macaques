@@ -1,13 +1,11 @@
 /* Pure browser analysis, also loaded by the worker and Node verification. */
 (function (root) {
   'use strict';
-  const TAU = 2 * Math.PI;
   const COLORS = ['#5799ed', '#f56b3c', '#21b98a', '#eeaf23', '#dc75ab', '#9a80f6', '#71cbd0', '#cba57e'];
   const STATUS = { correct: '#19a66c', position: '#f0a900', kind: '#ed4337', unknown: '#999', none: '#999' };
   const finite = v => typeof v === 'number' && Number.isFinite(v);
   const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
   const sd = a => a.length > 1 ? Math.sqrt(a.reduce((s, v) => s + (v - mean(a)) ** 2, 0) / (a.length - 1)) : null;
-  const median = a => { const b = a.slice().sort((x, y) => x - y); return b.length ? (b[Math.floor((b.length - 1) / 2)] + b[Math.floor(b.length / 2)]) / 2 : null; };
   const groupBy = (a, fn) => { const m = new Map(); for (const v of a) { const k = fn(v); if (!m.has(k)) m.set(k, []); m.get(k).push(v); } return m; };
   const mod = (x, n) => ((x % n) + n) % n;
   function stable(v) {
@@ -53,7 +51,7 @@
       return d.session + '/' + (match ? match[1] + '/' + match[2] : d.path.split('/').slice(0, -1).join('/'));
     };
     for (const doc of docs) if (doc.kind === 'level') summaries.set(levelKey(doc), doc.data);
-    const trials = [], packets = [], waves = [], warnings = new Set();
+    const trials = [], packets = [], warnings = new Set();
     for (const document of docs) {
       if (document.kind !== 'trial') continue;
       const d = document.data, session = sessionMap.get(document.session) || { participant: 'unknown', date: 'unknown' };
@@ -102,7 +100,6 @@
           connection_events: index === 0 ? info.connection_events || [] : [],
         });
       }
-      for (const key of ['hr_ecg', 'hr_ppg']) for (const frame of d[key] || []) waves.push({ ...frame, signal: key, session: trial.session, participant: trial.participant, level, config: trial.config });
     }
     trials.sort((a, b) => a.session.localeCompare(b.session) || a.counter - b.counter || String(a.started).localeCompare(String(b.started)));
     const rounds = new Map(), prevPos = new Map();
@@ -132,19 +129,8 @@
       if (t) { p.file_trial = p.file_trial || p.trial; p.trial = t.id; p.level = t.level; p.config = t.config; }
     };
     for (const p of packets) assignContext(p);
-    const rr = [];
-    for (const p of packets) {
-      let back = 0;
-      for (let i = (p.rr_ms || []).length - 1; i >= 0; i--) {
-        const value = p.rr_ms[i];
-        if (finite(value) && value > 0 && finite(p.t)) rr.push({ ...p, rr: value, t: p.t - back, interval_index: i });
-        back += finite(value) ? value / 1000 : 0;
-      }
-    }
-    rr.sort((a, b) => a.session.localeCompare(b.session) || a.t - b.t);
-    for (const p of rr) assignContext(p);
     if (trials.some(t => t.remove_completed === null)) warnings.add('Some older logs omit remove_completed_chains and other fixed settings.');
-    return { trials, packets, rr, waves, warnings: [...warnings] };
+    return { trials, packets, warnings: [...warnings] };
   }
   function filter(dataset, options) {
     if (options.labelOverrides) dataset = { ...dataset, trials: dataset.trials.map(t => {
@@ -156,8 +142,7 @@
       && (!options.kind || t.kind === options.kind) && (!options.congruency || t.congruency === options.congruency)
       && (!options.completion || (options.completion === 'complete' ? t.level_complete : !t.level_complete));
     const trials = dataset.trials.filter(keep), ids = new Set(trials.map(t => t.id));
-    return { ...dataset, trials, packets: dataset.packets.filter(p => ids.has(p.trial)), rr: dataset.rr.filter(p => ids.has(p.trial)),
-      waves: dataset.waves.filter(w => trials.some(t => t.session === w.session && t.level === w.level && t.config === w.config)) };
+    return { ...dataset, trials, packets: dataset.packets.filter(p => ids.has(p.trial)) };
   }
   function metric(rows, measure) {
     if (measure === 'trials') return rows.length;
@@ -173,14 +158,14 @@
     trials: 'Object presentations', duration: 'Active trial duration (s)', first_correct: 'Correct first checks (%)',
     level: 'Level', object: 'Object', round: 'Object presentation number (round)', chain_pos: 'Chain position (0-based)',
     chain_delta: 'Change from previous chain position', counter: 'Session trial number', t: 'Session time (s)',
-    participant: 'Participant', date: 'Session date', hr: 'Heart rate (bpm)', rr: 'RR interval (ms)', config: 'Configuration', kind: 'Object type', congruency: 'Congruency', session: 'Session' };
+    participant: 'Participant', date: 'Session date', hr: 'Mean heart rate (bpm)', config: 'Configuration', kind: 'Object type', congruency: 'Congruency', session: 'Session' };
   const PLOTS = {
     mistakes_level: 'Mistakes per level', mistakes_object: 'Mistakes per object + first choices', timeline: 'Object timeline',
     trials: 'Trials / presentations per level', first_choice: 'First-choice distribution', duration: 'Trial duration',
-    chain: 'Chain progression', scatter: 'Custom scatter / line', hr: 'Heart-rate timeline', rr: 'RR timeline',
-    histogram: 'Distribution / histogram', hr_summary: 'Heart rate by level', event_hr: 'Event-aligned heart rate',
-    poincare: 'RR Poincaré plot', waveform: 'ECG / optical signal', hrv: 'RR variability by level',
+    chain: 'Chain progression', scatter: 'Custom scatter / line', histogram: 'Distribution / histogram',
+    hr_summary: 'Mean heart rate',
   };
+
   function groups(dataset, options) {
     if (options.compare) return ['A', 'B'].map(name => ({ name: 'Group ' + name, data: filterSessions(dataset, new Set(options['group' + name] || [])) }));
     return [{ name: 'Selection', data: dataset }];
@@ -323,42 +308,9 @@
     }
     return { traces, rows, x: LABELS[xkey], y: 'First choices (%)', layout: { barmode: 'stack' } };
   }
-  function series(d, field) {
-    const input = field === 'rr' ? d.rr : d.packets;
-    return input.filter(p => field === 'rr' || p.valid).filter(p => finite(p.t) && finite(p[field]));
-  }
-  function lowerBound(a, t) { let lo = 0, hi = a.length; while (lo < hi) { const mid = (lo + hi) >>> 1; if (a[mid].t < t) lo = mid + 1; else hi = mid; } return lo; }
-  function hrTimeline(d, o, field) {
-    const traces = [], rows = series(d, field); let i = 0;
-    for (const [session, a] of groupBy(rows, p => p.session)) {
-      const x = [], y = [], text = []; let start = 0, sum = 0;
-      for (let j = 0; j < a.length; j++) {
-        const p = a[j], prev = a[j - 1];
-        if (prev && p.t - prev.t > (field === 'rr' ? 3 : 5)) { x.push(null); y.push(null); text.push(''); }
-        x.push(p.t);
-        sum += p[field];
-        while (start < j && a[start].t < p.t - 10) sum -= a[start++][field];
-        y.push(o.smooth ? sum / (j - start + 1) : p[field]);
-        text.push(`${escaped(p.participant)}<br>${escaped(p.timing)} · ${escaped(p.sync_status)}<br>Sync precision: ${p.sync_precision_ms ?? 'unknown'} ms`);
-      }
-      traces.push(line(a[0].participant + ' · ' + session.split('/').pop(), x, y, COLORS[i++ % COLORS.length], { mode: field === 'rr' ? 'markers' : 'lines', text, hovertemplate: '%{x:.2f}s · %{y:.2f}<br>%{text}<extra></extra>' }));
-    }
-    const events = d.trials.flatMap(t => t.checks.map(c => ({ ...c, participant: t.participant, session: t.session, complete: t.complete && c === t.checks[t.checks.length - 1] })));
-    for (const status of ['correct', 'position', 'kind']) {
-      const a = events.filter(e => e.status === status && finite(e.t));
-      traces.push({ type: 'scatter', mode: 'markers', name: status + ' check', x: a.map(e => e.t), y: a.map(() => 0.02), yaxis: 'y2',
-        marker: { color: STATUS[status], size: 6, symbol: 'line-ns-open' }, text: a.map(e => escaped(e.participant)), hovertemplate: '%{x:.2f}s · %{text}<extra>%{fullData.name}</extra>' });
-    }
-    const completed = events.filter(e => e.complete && finite(e.t));
-    traces.push({ type: 'scatter', mode: 'markers', name: 'Chain completed', x: completed.map(e => e.t), y: completed.map(() => .02), yaxis: 'y2', marker: { color: '#fff', symbol: 'circle-open', size: 12 }, text: completed.map(e => escaped(e.participant)), hovertemplate: '%{x:.2f}s · %{text}<extra>Chain completed</extra>' });
-    const disconnects = d.packets.flatMap(p => p.connection_events.filter(e => /disconnect/i.test(e.event)).map(e => ({ t: e.elapsed_secs, participant: p.participant })));
-    traces.push({ type: 'scatter', mode: 'markers', name: 'Sensor disconnected', x: disconnects.map(e => e.t), y: disconnects.map(() => .04), yaxis: 'y2', marker: { color: '#aaa', symbol: 'x', size: 8 }, text: disconnects.map(e => escaped(e.participant)), hovertemplate: '%{x:.2f}s · %{text}<extra>Sensor disconnected</extra>' });
-    const shapes = [...groupBy(d.trials.filter(t => finite(t.t)), t => t.session + '/' + t.level).values()].map(a => ({ type: 'line', x0: a[0].t, x1: a[0].t, y0: 0, y1: 1, yref: 'paper', line: { color: '#444', dash: 'dot', width: 1 } }));
-    return { traces, rows: rows.map(p => ({ session: p.session, participant: p.participant, level: p.level, t: p.t, [field]: p[field], timing: p.timing, sync_status: p.sync_status })), x: LABELS.t, y: LABELS[field], shapes,
-      layout: { yaxis2: { overlaying: 'y', range: [0, 1], visible: false } }, note: 'Smoothing uses a trailing 10-second window. Gaps stay open. Packet arrival times are approximate; synchronized beats use their recorded sensor mapping.' };
-  }
   function distribution(d, o) {
-    const field = o.y || 'duration', input = ['hr', 'rr'].includes(field) ? series(d, field) : d.trials;
+    const field = o.y || 'duration', input = d.trials;
+    if (!['duration', 'mistakes'].includes(field)) throw new Error('Choose duration or mistakes for the gameplay distribution.');
     const traces = []; let i = 0;
     for (const [label, a] of groupBy(input, t => t[o.color || 'participant'])) {
       const values = a.map(t => t[field]).filter(finite), color = COLORS[i++ % COLORS.length];
@@ -368,82 +320,35 @@
     return { traces, rows: input.map(t => ({ participant: t.participant, session: t.session, level: t.level, value: t[field] })), x: ['box', 'violin'].includes(o.style) ? 'Group' : LABELS[field], y: ['box', 'violin'].includes(o.style) ? LABELS[field] : 'Probability density', layout: ['box', 'violin'].includes(o.style) ? {} : { barmode: 'overlay' } };
   }
   function hrSummary(d, o) {
-    const traces = [], rows = series(d, 'hr').filter(p => p.phase === 'trial' || p.phase === 'file bucket (timing unknown)'); let i = 0;
-    const observations = [...groupBy(rows, p => p.session + '/' + p.level).values()].map(a => ({ participant: a[0].participant, session: a[0].session, level: a[0].level, value: o.style === 'median' ? median(a.map(p => p.hr)) : mean(a.map(p => p.hr)) }));
-    if (['box', 'violin'].includes(o.style)) {
-      for (const [level, a] of groupBy(observations, p => p.level)) traces.push({ type: o.style, name: 'Level ' + level, y: a.map(p => p.value), [o.style === 'box' ? 'boxpoints' : 'points']: 'all', marker: { color: COLORS[i++ % COLORS.length] } });
-    } else {
-      if (o.individual) for (const [session, a] of groupBy(observations, p => p.session)) traces.push(line(a[0].participant + ' · ' + a[0].session.split('/').pop(), a.map(p => p.level), a.map(p => p.value), COLORS[i++ % COLORS.length]));
-      const levels = [...new Set(observations.map(p => p.level))].sort((a, b) => a - b);
-      const values = levels.map(l => {
-        const a = observations.filter(p => p.level === l);
-        return o.weight === 'session' ? a.map(p => p.value) : [...groupBy(a, p => p.participant).values()].map(b => mean(b.map(p => p.value)));
-      });
-      traces.push(line('Mean ± SD', levels, values.map(mean), '#fff', { error_y: { type: 'data', array: values.map(sd), visible: true }, line: { color: '#fff', width: 3 } }));
+    const xkey = o.x === 'counter' ? 'counter' : 'level';
+    const eligible = d.packets.filter(p => p.valid && finite(p.hr) && (p.phase === 'trial' || p.phase === 'file bucket (timing unknown)'));
+    const byTrial = groupBy(eligible, p => p.trial);
+    const selected = groupBy(d.trials, t => xkey === 'counter' ? t.id : t.session + '/' + t.level);
+    const observations = [...selected.values()].map(trials => {
+      const first = trials[0], packets = trials.flatMap(t => byTrial.get(t.id) || []);
+      return { participant: first.participant, session: first.session, level: first.level,
+        ...(xkey === 'counter' ? { counter: first.counter, object: first.object } : {}),
+        value: mean(packets.map(p => p.hr)), n_readings: packets.length };
+    });
+    const traces = [];
+    if (o.individual) for (const [session, rows] of groupBy(observations, p => p.session)) {
+      const sorted = rows.slice().sort((a, b) => a[xkey] - b[xkey]);
+      traces.push(line(rows[0].participant + ' · ' + session.split('/').pop(), sorted.map(p => p[xkey]), sorted.map(p => p.value), COLORS[traces.length % COLORS.length], {
+        customdata: sorted.map(p => [p.level, p.n_readings]),
+        hovertemplate: '%{x}: %{y:.2f} bpm<br>Level %{customdata[0]} · %{customdata[1]} readings<extra>%{fullData.name}</extra>',
+      }));
     }
-    return { traces, rows: observations, x: 'Level', y: 'Heart rate (bpm)', note: 'Uses samples within recorded trial boundaries. Pre-game and between-trial samples are excluded when those boundaries are available. Older files without boundaries use their file membership.' };
-  }
-  function eventHR(d, o) {
-    const observations = [], traces = [], events = [];
-    const bySession = groupBy(series(d, 'hr'), p => p.session);
-    const sums = new Map([...bySession].map(([key, a]) => { const p = [0]; for (const v of a) p.push(p[p.length - 1] + v.hr); return [key, p]; }));
-    for (const t of d.trials) for (const c of t.checks) {
-      if (o.event === 'completion' ? t.complete && c === t.checks[t.checks.length - 1] : o.event === 'correct' ? c.correct === true : c.correct === false) events.push({ ...c, session: t.session, participant: t.participant });
-    }
-    for (let sec = -10; sec <= 20; sec++) {
-      const points = [];
-      for (const e of events) {
-        const a = bySession.get(e.session) || [], prefix = sums.get(e.session);
-        const lo = lowerBound(a, e.t + sec - 0.5), hi = lowerBound(a, e.t + sec + 0.5);
-        if (hi > lo) points.push({ participant: e.participant, session: e.session, value: (prefix[hi] - prefix[lo]) / (hi - lo) });
-      }
-      const units = [...groupBy(points, p => o.weight === 'session' ? p.session : p.participant).values()].map(a => mean(a.map(p => p.value)));
-      observations.push({ seconds: sec, hr: mean(units), sd: sd(units), n: units.length });
-    }
-    traces.push(line('Mean ± SD', observations.map(p => p.seconds), observations.map(p => p.hr), '#fff', { error_y: { type: 'data', array: observations.map(p => p.sd), visible: true }, customdata: observations.map(p => p.n), hovertemplate: '%{x}s · %{y:.2f} bpm<br>n = %{customdata}<extra></extra>' }));
-    return { traces, rows: observations, x: 'Time from event (s)', y: 'Heart rate (bpm)', note: 'Aligned to recorded check time, in 1-second bins. Nearby events may overlap; packet-arrival recordings have approximate alignment. n counts participants (or sessions), not events.' };
-  }
-  function poincare(d) {
-    const traces = [], rows = []; let i = 0;
-    for (const [session, a] of groupBy(series(d, 'rr'), p => p.session)) {
-      const pairs = [];
-      for (let j = 1; j < a.length; j++) if (a[j].t - a[j - 1].t <= Math.max(3, a[j].rr / 1000 + 0.5) && !a[j].connection_events.some(e => /disconnect/i.test(e.event))) {
-        pairs.push({ session, participant: a[j].participant, rr: a[j - 1].rr, next_rr: a[j].rr });
-      }
-      rows.push(...pairs);
-      traces.push({ type: 'scattergl', mode: 'markers', name: a[0]?.participant + ' · ' + session.split('/').pop(), x: pairs.map(p => p.rr), y: pairs.map(p => p.next_rr), marker: { color: COLORS[i++ % COLORS.length], size: 5, opacity: 0.6 } });
-    }
-    return { traces, rows, x: 'RR interval (ms)', y: 'Next RR interval (ms)', note: 'Raw recorded intervals; gaps and session boundaries are excluded. No automatic artifact correction.' };
-  }
-  function waveform(d, o) {
-    const traces = [], rows = []; let color = 0;
-    for (const [key, a] of groupBy(d.waves, f => f.session + '/' + f.signal)) {
-      const first = a[0], channels = first.signal === 'hr_ecg' ? ['uV'] : ['ppg0', 'ppg1', 'ppg2', 'ambient'];
-      const frames = a.filter(f => finite(f.first_elapsed_secs)).sort((a, b) => a.first_elapsed_secs - b.first_elapsed_secs);
-      for (const channel of channels) {
-        const x = [], y = []; let previous = null;
-        for (const f of frames) {
-          const values = f[channel] || [];
-          if (previous !== null && f.first_elapsed_secs - previous > 2 * f.dt_ms / 1000) { x.push(null); y.push(null); }
-          for (let j = 0; j < values.length; j++) { x.push(f.first_elapsed_secs + j * f.dt_ms / 1000); y.push(values[j]); }
-          previous = x[x.length - 1];
-        }
-        rows.push(...x.map((t, j) => ({ session: first.session, signal: first.signal, channel, t, value: y[j] })));
-        traces.push({ type: 'scattergl', mode: 'lines', name: `${first.participant} · ${channel} · ${key.split('/').slice(-2).join('/')}`, x, y, line: { color: COLORS[color++ % COLORS.length], width: 1 }, connectgaps: false });
-      }
-    }
-    return { traces, rows, x: 'Synchronized session time (s)', y: 'ECG (µV) / optical signal (raw units)', note: 'Only signal frames with a recorded clock mapping are shown. Select a session/level to inspect full-resolution signals.' };
-  }
-  function hrv(d, o) {
-    const rows = [];
-    for (const a of groupBy(series(d, 'rr').filter(p => p.phase === 'trial' || p.phase === 'file bucket (timing unknown)'), p => p.session + '/' + p.level).values()) {
-      const diffs = [];
-      for (let i = 1; i < a.length; i++) if (a[i].t - a[i - 1].t <= Math.max(3, a[i].rr / 1000 + 0.5)) diffs.push((a[i].rr - a[i - 1].rr) ** 2);
-      rows.push({ participant: a[0].participant, session: a[0].session, level: a[0].level, n: a.length,
-        duration: a[a.length - 1].t - a[0].t, rmssd: diffs.length ? Math.sqrt(mean(diffs)) : null, sdnn: sd(a.map(p => p.rr)) });
-    }
-    const traces = [...groupBy(rows, r => r.session)].map(([session, a], i) => line(a[0].participant + ' · ' + session.split('/').pop(), a.map(p => p.level), a.map(p => p[o.y || 'rmssd']), COLORS[i % COLORS.length], { text: a.map(p => `${p.n} intervals · ${p.duration.toFixed(1)} seconds`), hovertemplate: '%{y:.2f} ms<br>%{text}<extra></extra>' }));
-    return { traces, rows, x: 'Level', y: (o.y || 'rmssd').toUpperCase() + ' (ms)', note: 'Descriptive RR variability from uncorrected intervals. Recording duration and interval count are shown on hover; short or interrupted recordings are not directly comparable.' };
+    const xs = [...new Set(observations.map(p => p[xkey]))].sort((a, b) => a - b);
+    const values = xs.map(x => {
+      const rows = observations.filter(p => p[xkey] === x && finite(p.value));
+      return [...groupBy(rows, p => o.weight === 'session' ? p.session : p.participant).values()].map(a => mean(a.map(p => p.value)));
+    });
+    traces.push(line('Mean ± SD', xs, values.map(mean), '#fff', {
+      error_y: { type: 'data', array: values.map(sd), visible: true }, line: { color: '#fff', width: 3 },
+      customdata: values.map(a => a.length), hovertemplate: '%{x}: %{y:.2f} bpm<br>n = %{customdata}<extra>Mean ± SD</extra>',
+    }));
+    return { traces, rows: observations, x: LABELS[xkey], y: 'Mean heart rate (bpm)',
+      note: 'Each point is the arithmetic mean of valid HR readings within the selected trial or level. Missing readings stay blank. Recorded trial boundaries exclude pre-game and between-trial readings; older files without boundaries use file membership. Group summaries average sessions within participant by default.' };
   }
   function figure(dataset, options) {
     const d = filter(dataset, options), o = options;
@@ -456,13 +361,8 @@
         case 'duration': return scatter(d, { ...o, y: 'duration' });
         case 'chain': return scatter(d, { ...o, y: o.y || 'chain_pos' });
         case 'scatter': return scatter(d, o);
-        case 'hr': case 'rr': return hrTimeline(d, o, o.plot);
         case 'histogram': return distribution(d, o);
         case 'hr_summary': return hrSummary(d, o);
-        case 'event_hr': return eventHR(d, o);
-        case 'poincare': return poincare(d);
-        case 'waveform': return waveform(d, o);
-        case 'hrv': return hrv(d, o);
         default: throw new Error('Unknown plot');
       }
     };
@@ -471,8 +371,7 @@
     const warnings = [...d.warnings];
     if (d.trials.some(t => t.congruency === 'unknown')) warnings.push('Some objects have unknown congruency. Add labels below or in the trial editor; labels are never guessed from level number.');
     if ([...groupBy(d.trials, t => t.level).values()].some(a => new Set(a.map(t => t.config)).size > 1)) warnings.push('The selection combines different configurations for the same level. Use the Configuration filter for a like-for-like comparison.');
-    if (['hr', 'rr', 'event_hr', 'poincare', 'hrv', 'hr_summary'].includes(o.plot) && d.packets.some(p => p.timing !== 'synchronized beat')) warnings.push('Some HR data uses packet arrival time, not synchronized beat time. Event alignment is approximate for these recordings.');
-    if (o.plot === 'waveform' && d.waves.some(w => !finite(w.first_elapsed_secs))) warnings.push('Unsynchronized waveform frames cannot be placed on session time and are omitted.');
+    if (o.plot === 'hr_summary' && d.packets.some(p => p.timing !== 'synchronized beat')) warnings.push('Some HR recordings use packet arrival time; assignment to trial boundaries is approximate.');
     return { panels, warnings, count: d.trials.length, sessions: new Set(d.trials.map(t => t.session)).size };
   }
   const api = { normalize, figure, classify, metric, congruency, kindOfDoor, hash, mean, sd, PLOTS, LABELS };

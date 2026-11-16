@@ -63,22 +63,16 @@
       x = ['round', 'level', 'counter', 'chain_pos', 'duration', 'mistakes', 't'];
       y = p === 'duration' ? ['duration'] : p === 'chain' ? ['chain_pos', 'chain_delta'] : ['duration', 'mistakes', 'chain_pos', 'chain_delta', 'level', 'round', 'attempts', 'first_correct'];
     }
-    if (['hr', 'rr', 'waveform'].includes(p)) { x = ['t']; y = [p === 'waveform' ? 'signal' : p]; }
-    if (p === 'histogram') { x = []; y = ['duration', 'mistakes', 'hr', 'rr']; style = [['histogram', 'Histogram'], ['box', 'Box plot'], ['violin', 'Violin plot']]; }
-    if (p === 'hr_summary') { x = ['level']; y = ['hr']; style = [['mean', 'Mean'], ['median', 'Median'], ['box', 'Box plot'], ['violin', 'Violin plot']]; }
-    if (p === 'hrv') { x = ['level']; y = ['rmssd', 'sdnn']; }
-    if (p === 'poincare') { x = ['rr']; y = ['rr']; }
-    if (p === 'event_hr') { x = ['t']; y = ['hr']; }
+    if (p === 'histogram') { x = []; y = ['duration', 'mistakes']; style = [['histogram', 'Histogram'], ['box', 'Box plot'], ['violin', 'Violin plot']]; }
+    if (p === 'hr_summary') { x = ['level', 'counter']; y = ['hr']; }
     if (p === 'timeline') { x = []; y = []; }
     single($('x'), x.length ? entries(x) : [['', 'Preset axis']]);
     single($('y'), y.length ? entries(y) : [['', 'Selected measure']]);
     single($('style'), style);
     $('x').disabled = x.length <= 1; $('y').disabled = y.length <= 1;
-    $('style-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram', 'hr_summary'].includes(p);
+    $('style-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram'].includes(p);
     $('measure-wrap').hidden = !['mistakes_level', 'mistakes_object'].includes(p);
     $('color-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram'].includes(p);
-    $('smooth-wrap').hidden = !['hr', 'rr'].includes(p);
-    $('event-wrap').hidden = p !== 'event_hr';
     $('matrix-wrap').hidden = p !== 'mistakes_object';
   }
   function settings() {
@@ -87,7 +81,7 @@
       kind: $('kind').value, congruency: $('congruency').value, completion: $('completion').value,
       config: $('config').value, levels: selected($('levels')).map(Number), individual: $('individual').checked,
       objects: selected($('objects')),
-      matrix: $('matrix').checked, smooth: $('smooth').checked, event: $('event').value,
+      matrix: $('matrix').checked,
       compare: $('compare').checked, groupA: selected($('group-a')), groupB: selected($('group-b')),
       labelOverrides: readOverrides(), swap: $('swap').checked,
     };
@@ -98,8 +92,7 @@
     const ids = selected($('sessions'));
     if (!ids.length) { status('Select at least one session.', true); return; }
     if ($('from').value && $('to').value && $('from').value > $('to').value) { status('The start date must precede the end date.', true); return; }
-    const waves = $('plot').value === 'waveform';
-    const key = JSON.stringify([ids.slice().sort(), waves]);
+    const key = JSON.stringify(ids.slice().sort());
     $('draw').disabled = true;
     try {
       if (key !== loadedKey) {
@@ -108,7 +101,7 @@
           let offset = 0;
           do {
             status(`Loading selected data… ${documents.length} files`);
-            const response = await fetch('/admin/analysis/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessions: ids.slice(batch, batch + 100), offset, waveforms: waves }) });
+            const response = await fetch('/admin/analysis/data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessions: ids.slice(batch, batch + 100), offset }) });
             if (!response.ok) throw new Error('Could not load data (' + response.status + '). Refresh and try again.');
             const data = await response.json();
             if (run !== generation) return;
@@ -237,7 +230,6 @@
         <label id="explorer-measure-wrap">Measure<select id="explorer-measure"><option value="mistakes">Raw mistakes</option><option value="per_object">Mistakes / presented object</option><option value="percent">Incorrect checks (%)</option><option value="first_correct">Correct first checks (%)</option></select></label>
         <label id="explorer-style-wrap">Style<select id="explorer-style"></select></label>
         <label id="explorer-color-wrap">Colour by<select id="explorer-color"><option value="participant">Participant</option><option value="session">Session</option><option value="kind">Object type</option><option value="congruency">Congruency</option><option value="level">Level</option><option value="first_status">First-check outcome</option></select></label>
-        <label id="explorer-event-wrap">Event<select id="explorer-event"><option value="incorrect">Incorrect check</option><option value="correct">Correct check</option><option value="completion">Chain completion</option></select></label>
       </div>
       <details><summary>Filter by level, object or configuration</summary><div class="explorer-controls">
         <label>Levels<select id="explorer-levels" multiple size="3" aria-label="Levels"><option value="" disabled>Load sessions first</option></select><button data-all="levels" type="button">All levels</button></label>
@@ -252,7 +244,6 @@
         <label class="check"><input id="explorer-individual" type="checkbox" checked>Individual observations</label>
         <label class="check"><input id="explorer-swap" type="checkbox">Swap axes</label>
         <label class="check" id="explorer-matrix-wrap"><input id="explorer-matrix" type="checkbox" checked>First-choice matrix</label>
-        <label class="check" id="explorer-smooth-wrap"><input id="explorer-smooth" type="checkbox">10-second smoothing</label>
         <button id="explorer-draw" type="button" class="primary">Plot</button><button id="explorer-export-settings" type="button" hidden>Save selection</button>
       </div>
       <output id="explorer-status" aria-live="polite"></output>

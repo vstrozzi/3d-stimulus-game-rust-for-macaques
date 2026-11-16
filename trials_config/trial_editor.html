@@ -1727,6 +1727,9 @@ function renderObject(obj, ci, N) {
   const isCustom = doorSelVal === 'custom';
 
   const doorSelect = `<span class="target-door-wrap">
+    <select class="analysis-congruency" data-ci="${ci}" aria-label="Object congruency" title="Analysis label only; does not change gameplay.">
+      ${[['unknown', 'Congruency: unknown'], ['no rule', 'No colour rule'], ['congruent', 'Congruent'], ['incongruent', 'Incongruent']].map(([value, label]) => `<option value="${value}"${(obj.analysis_congruency || 'unknown') === value ? ' selected' : ''}>${label}</option>`).join('')}
+    </select>
     <select class="door-sel" data-ci="${ci}" title="Type 1 and Type 2 apply the editor's shared-face rules. Custom leaves all three faces independent.">
       <option value="type1"${doorSelVal === 'type1' ? ' selected' : ''}>Type 1 (door ${EDITOR_TYPE1_DOOR})</option>
       <option value="type2"${doorSelVal === 'type2' ? ' selected' : ''}>Type 2 (door ${EDITOR_TYPE2_DOOR})</option>
@@ -2147,6 +2150,10 @@ function attachEvents() {
       applyShape(e.target.dataset.sid, +e.target.dataset.sv);
       renderLevelEditor(true);
     });
+  });
+
+  editor.querySelectorAll('.analysis-congruency').forEach(el => {
+    el.addEventListener('change', e => { levels[sel].objects[+e.target.dataset.ci].analysis_congruency = e.target.value; });
   });
 
   // Door selector

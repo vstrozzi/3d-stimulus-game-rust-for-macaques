@@ -885,6 +885,7 @@ class MonkeyGameController:
         os.makedirs(trials_dir, exist_ok=True)
         level = self.levels[self.current_level_index]
         level_cfg = {k: v for k, v in level.items() if k != "fixed"}
+        level_cfg["fixed"] = dict(level["fixed"])
         level_cfg["background"] = {k: level["fixed"].get(k) for k in BACKDROP_FIELDS}
         self.current_level_summary = {
             "participant": PARTICIPANT_NAME,
@@ -1073,6 +1074,8 @@ class MonkeyGameController:
         )
 
         log = {
+            "analysis_schema_version": 1,
+            "partial_trial": False,
             "level_index": self.current_level_index,
             "active_chain": self.active_chain,
             "trial_index_in_chain": self._trial_idx(),
@@ -1093,6 +1096,7 @@ class MonkeyGameController:
             # empty here so native and web trial logs share one schema.
             "hr_info": None,
             "hr_meas": [],
+            "check_events": [row for row in frames_compact.values() if row["commands_sent"].get("check")],
             "frames": frames_compact,
         }
         try:

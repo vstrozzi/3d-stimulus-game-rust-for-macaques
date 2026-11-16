@@ -1282,9 +1282,8 @@ function _startLevelRunIfNeeded() {
   const started = new Date();
   const filename = _summaryFilename(currentLevelIndex, started);
   const { fixed: _dropFixed, ...levelCfg } = currentLevel();
-  // The backdrop lives in `fixed`, dropped just above; keep it here under its
-  // own key (same field names) so an analysis can see which surfaces the level
-  // was played with.
+  // Keep the exact scheduling/visual settings for comparisons across runs.
+  levelCfg.fixed = { ..._dropFixed };
   levelCfg.background = Object.fromEntries(BACKDROP_FIELDS.map(k => [k, _dropFixed?.[k]]));
   currentLevelSummary = {
     participant: _participantName(),
@@ -1416,7 +1415,7 @@ function _updateEndPopup() {
   }
 }
 
-function saveTrialLog(outcome) {
+function saveTrialLog(outcome, partial = false) {
   _startLevelRunIfNeeded();
   const trialStartDt = new Date(trialStartTime);
   const trialEndDt = new Date();
@@ -1460,7 +1459,7 @@ function saveTrialLog(outcome) {
   // True when this run advanced out of the chain's last trial, i.e. the chain
   // is finished. Recorded per run so a later RETROCEED cannot erase the fact —
   // the trial index alone can no longer say it, now that it stays in [0, n-1].
-  const chainCompleted = trialProceeding === PROCEEDING.ADVANCE
+  const chainCompleted = !partial && trialProceeding === PROCEEDING.ADVANCE
     && _trialIdx() === currentLevel().trials.length - 1;
 
   // Optional heart rate band, connected on the landing page (polar_hr.js).
@@ -1477,6 +1476,8 @@ function saveTrialLog(outcome) {
   if (hr.hr_meas.length > 0) currentLevelSummary.hr_measurements = true;
 
   const log = {
+    analysis_schema_version: 1,
+    partial_trial: partial,
     level_index: currentLevelIndex,
     active_chain: activeChain,
     trial_index_in_chain: _trialIdx(),
@@ -1497,6 +1498,7 @@ function saveTrialLog(outcome) {
     hr_meas: hr.hr_meas,
     hr_ecg: hr.hr_ecg,  // H10 only; undefined keys are not written
     hr_ppg: hr.hr_ppg,  // Verity Sense only
+    check_events: Object.values(framesCompact).filter(row => row.commands_sent.check),
     frames: framesCompact,
   };
   // Serialize the trial log to a JSON string now and hand it to the sender.
@@ -1516,6 +1518,7 @@ function saveTrialLog(outcome) {
     active_chain: activeChain,
     trial_run_counter: trialRunCounter,
     outcome,
+    partial_trial: partial,
     nr_attempts: nrAttempts,
     elapsed_time_no_anim: elapsedNoAnim,
     elapsed_time_anim: elapsedAnim,
@@ -2003,6 +2006,11 @@ function controllerLoop() {
   // Session-duration cap: finalize the current level run and stop.
   if (sessionStartMs !== null && Date.now() - sessionStartMs >= MAX_SESSION_DURATION_MS) {
     console.log(`[SESSION] Reached ${MAX_SESSION_DURATION_MIN}-minute cap → finalizing`);
+    if (fsmState === FSM.TRIAL_COMPLETE) {
+      handleTrialComplete(state);
+    } else if (frameLogLen > 0 && [FSM.PLAYING, FSM.WAITING_ANIMATION_START, FSM.WAITING_ANIMATION_END].includes(fsmState)) {
+      saveTrialLog("timeout", true);
+    }
     _finalizeLevelRun("timeout");
     _running = false;
     showEndPopup();

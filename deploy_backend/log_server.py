@@ -31,6 +31,7 @@ from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from passlib.hash import argon2
+from deploy_backend.analysis_store import AnalysisStore
 
 # ── Config (env) ────────────────────────────────────────────────────────────
 REPO_ROOT = os.path.realpath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -66,6 +67,7 @@ _PUBLIC_PATHS = {"/login", "/favicon.ico"}
 _SAFE_REL = re.compile(r"^[A-Za-z0-9_\-/. ]*$")
 
 app = FastAPI()
+analysis_store = AnalysisStore(LOG_ROOT, os.environ.get("ANALYSIS_TIMEZONE", "Europe/Zurich"))
 
 
 # ── Auth helpers ────────────────────────────────────────────────────────────
@@ -193,12 +195,37 @@ def admin_list(path: str = ""):
         raise HTTPException(404, "not a directory")
     dirs, files = [], []
     for name in sorted(os.listdir(base)):
+        if name == ".explorer":
+            continue
         full = os.path.join(base, name)
         if os.path.isdir(full):
             dirs.append(name)
         else:
             files.append({"name": name, "size": os.path.getsize(full)})
     return {"path": path, "dirs": dirs, "files": files}
+
+
+@app.get("/admin/analysis/catalog")
+def analysis_catalog():
+    return analysis_store.catalog()
+
+
+@app.post("/admin/analysis/data")
+async def analysis_data(request: Request):
+    from starlette.concurrency import run_in_threadpool
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "Invalid JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected an object")
+    sessions = body.get("sessions")
+    offset = body.get("offset", 0)
+    if (not isinstance(sessions, list) or len(sessions) > 200
+            or any(not isinstance(s, str) or len(s) > 1024 for s in sessions)
+            or not isinstance(offset, int) or isinstance(offset, bool) or offset < 0):
+        raise HTTPException(400, "Invalid session selection or offset")
+    return await run_in_threadpool(analysis_store.data, list(dict.fromkeys(sessions)), offset, 25, body.get("waveforms") is True)
 
 
 @app.get("/admin/file")
@@ -238,6 +265,7 @@ def admin_zip(path: str = ""):
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, _dirs, names in os.walk(base):
+            _dirs[:] = [name for name in _dirs if name != ".explorer"]
             for n in names:
                 fp = os.path.join(root, n)
                 zf.write(fp, os.path.relpath(fp, base))

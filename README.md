@@ -126,6 +126,45 @@ python game_node/src/scripts/equalize_audio.py game_node/assets/sounds
 python tools/verify_trial_logs.py out/trial_logs/
 
 
+## Admin Data Explorer
+
+Open **Data Explorer** on the admin landing page. Select participants and dates
+(Ctrl/Cmd for multiple, Shift for a range), then press **Plot**. Sessions,
+comparison groups, level/object filters and configuration filters expand when
+needed. Plots stay centered on the black page; hover, zoom, swap axes, export
+PNG/CSV or open fullscreen. The three reference plots are included, together
+with presentation counts, first choices, durations, chain progression and HR/RR
+views, event alignment, Poincaré, descriptive RR variability and ECG/optical
+signals when recorded. Model-probability figures require the original model code.
+
+The server indexes existing JSON logs into a rebuildable SQLite catalog at
+`out/server_logs/.explorer/catalog.sqlite3`; there is no data migration. Refresh
+rescans changed/new/deleted logs, including HR files rewritten after end sync.
+`/admin/analysis/catalog` and `/admin/analysis/data` require the admin role.
+Only selected records are retrieved, in batches. The browser worker computes
+all metrics; no plotting/Python analysis packages are required on the server.
+Waveform samples load only for the signal view. Plotly.js is bundled locally.
+Dates use `ANALYSIS_TIMEZONE` (default `Europe/Zurich`), independent of upload
+folder dates. The catalog is excluded from data-browser listings and ZIPs.
+
+Group statistics give each participant equal weight by averaging their repeat
+sessions first; session weighting is also available. Missing checks are unknown,
+not zero. Congruency must be explicitly labeled in the trial editor, or assigned
+to old objects in the explorer (saved locally in that browser and included in
+selection exports). Historical omissions cannot be recovered automatically.
+Future logs retain fixed settings, raw check events and partial timeout trials.
+Raw HR timings and recording gaps are preserved; packet arrival times are
+identified as approximate, and RR variability is calculated without artifact
+correction. ECG/optical signals need a recorded clock mapping for display.
+
+Verification:
+
+```bash
+node tools/tests/test_admin_analysis.js
+node tools/tests/test_explorer_logging.js
+python -m pytest tools/tests/test_analysis_store.py tools/tests/test_run_analysis.py
+```
+
 ## Heart rate data (optional, Polar H9)
 
 In the web version a participant can connect a **Polar H9** chest band on the

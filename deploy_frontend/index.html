@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Object Manipulation</title>
+<link rel="stylesheet" href="./admin_explorer.css">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -707,9 +708,15 @@
           <span class="action-desc">Open the data folder; download any folder as .zip</span>
         </span>
       </button>
+      <button class="action-btn" id="btn-explorer" type="button">
+        <span class="action-icon">&#9637;</span>
+        <span class="action-text"><span class="action-title">Data Explorer</span>
+          <span class="action-desc">Plot gameplay and heart rate by participant, date or session</span></span>
+      </button>
     </div>
     <div class="loaded-info" id="loaded-info"></div>
   </div>
+  <section id="data-explorer" hidden aria-label="Data Explorer"></section>
 </div>
 
 <!-- ─────────────────── DATA BROWSER POPUP (admin) ─────────────────── -->
@@ -793,6 +800,7 @@
 
 <script src="./polar_pmd.js"></script>
 <script src="./polar_hr.js"></script>
+<script src="./admin_explorer.js"></script>
 <script>
   const playerFlow = document.getElementById('player-flow');
   const adminFlow = document.getElementById('admin-flow');

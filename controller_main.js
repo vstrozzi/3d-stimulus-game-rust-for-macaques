@@ -193,6 +193,13 @@ let _start = false;
 let _playingStartTime = 0;  // Date.now() when FSM enters PLAYING — used for tap grace period
 let sessionStartMs = null;  // Date.now() when the first trial starts; anchor for MAX_SESSION_DURATION_MS + the clock
 let _running = false;
+// Set by the page when the player confirms ending the session early (after
+// leaving fullscreen); the loop then ends it as at the time cap.
+let _quitRequested = false;
+window.gameSession = {
+  running: () => _running,
+  end: () => { if (_running) _quitRequested = true; },
+};
 let _sceneReadyPromptShown = false;
 let _instructionsShown = false;
 
@@ -2003,15 +2010,18 @@ function controllerLoop() {
 
   writeNoCommands();
 
-  // Session-duration cap: finalize the current level run and stop.
-  if (sessionStartMs !== null && Date.now() - sessionStartMs >= MAX_SESSION_DURATION_MS) {
-    console.log(`[SESSION] Reached ${MAX_SESSION_DURATION_MIN}-minute cap → finalizing`);
+  // Session-duration cap, or the player chose to end: finalize the current
+  // level run and stop.
+  const quit = _quitRequested;
+  if (quit || (sessionStartMs !== null && Date.now() - sessionStartMs >= MAX_SESSION_DURATION_MS)) {
+    const why = quit ? "quit" : "timeout";
+    console.log(quit ? "[SESSION] Ended by the player → finalizing" : `[SESSION] Reached ${MAX_SESSION_DURATION_MIN}-minute cap → finalizing`);
     if (fsmState === FSM.TRIAL_COMPLETE) {
       handleTrialComplete(state);
     } else if (frameLogLen > 0 && [FSM.PLAYING, FSM.WAITING_ANIMATION_START, FSM.WAITING_ANIMATION_END].includes(fsmState)) {
-      saveTrialLog("timeout", true);
+      saveTrialLog(why, true);
     }
-    _finalizeLevelRun("timeout");
+    _finalizeLevelRun(why);
     _running = false;
     showEndPopup();
     return;

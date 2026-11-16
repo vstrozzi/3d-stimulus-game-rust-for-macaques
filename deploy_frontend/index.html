@@ -380,7 +380,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── End-of-session upload status popup ──────────────────────────── */
-  #end-popup {
+  #end-popup, #exit-popup {
     display: flex;
     position: fixed;
     inset: 0;
@@ -389,7 +389,13 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.85);
   }
-  #end-popup[hidden] { display: none !important; }
+  #exit-popup { z-index: 210; }  /* above the game's overlays, below the rotate prompt */
+  #end-popup[hidden], #exit-popup[hidden] { display: none !important; }
+  #exit-text {
+    font-size: 0.95em;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.78);
+  }
   .end-card {
     display: flex;
     flex-direction: column;
@@ -786,6 +792,18 @@
           <button class="start-btn" id="end-sync-btn" type="button">Synchronize</button>
           <button class="start-btn secondary" id="end-sync-skip" type="button" data-i18n="sync_skip">Skip</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shown when fullscreen is left during the game (the game keeps running). -->
+  <div id="exit-popup" hidden>
+    <div class="end-card">
+      <div class="end-thanks" data-i18n="exit_title">End the session?</div>
+      <div id="exit-text" data-i18n="exit_text">You left full screen. The game time keeps running.</div>
+      <div class="hr-buttons">
+        <button class="start-btn" id="exit-no" type="button" data-i18n="exit_no">No, continue</button>
+        <button class="start-btn secondary" id="exit-yes" type="button" data-i18n="exit_yes">Yes, end the session</button>
       </div>
     </div>
   </div>
@@ -1292,6 +1310,50 @@
     hrRenderSync();
   }).observe(endPopup, { attributes: true, attributeFilter: ['hidden'] });
 
+  // ── Leaving fullscreen during the game ─────────────────────────────────
+  // Esc (or any other way out of fullscreen) asks whether to end the session;
+  // the game and its clock keep running meanwhile. No → back to fullscreen.
+  // Yes → the game ends as at its time cap; its end popup follows (with the
+  // end sync when a sensor records).
+  const exitPopup = document.getElementById('exit-popup');
+  const exitNo = document.getElementById('exit-no');
+  let fsElement = null;  // what was fullscreen (<html>, or the canvas on iPadOS)
+  function onFullscreenChange() {
+    const el = document.fullscreenElement || document.webkitFullscreenElement || null;
+    const left = !!fsElement && !el;
+    if (el) fsElement = el;
+    if (el) { exitPopup.hidden = true; return; }
+    if (!left || !_gameBooted || !endPopup.hidden || !window.gameSession || !window.gameSession.running()) return;
+    exitPopup.hidden = false;
+    exitNo.focus();  // Enter / space bar answer No, the safe choice
+  }
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+  exitNo.addEventListener('click', () => {
+    exitPopup.hidden = true;
+    const el = fsElement || document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) return;
+    try {
+      const p = req.call(el, { navigationUI: 'hide' });
+      if (p && p.catch) p.catch(() => {});
+    } catch (_) {}
+  });
+  document.getElementById('exit-yes').addEventListener('click', () => {
+    exitPopup.hidden = true;
+    if (window.gameSession) window.gameSession.end();
+  });
+  // While it is open, keys reach its buttons but not the game.
+  for (const type of ['keydown', 'keyup']) {
+    window.addEventListener(type, (e) => { if (!exitPopup.hidden) e.stopImmediatePropagation(); }, true);
+  }
+  // The game cancels touchstart on the window, which would also cancel the
+  // tap on these buttons; touches inside the popups stop before it.
+  for (const p of [exitPopup, endPopup]) p.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });
+  // The session ending by itself (time cap, last level) closes the question.
+  new MutationObserver(() => { if (!endPopup.hidden) exitPopup.hidden = true; })
+    .observe(endPopup, { attributes: true, attributeFilter: ['hidden'] });
+
   // ── Language switch (player pages only) ──────────────────────────────────
   // English is the markup, so it is the default and needs no table: the
   // English strings are captured from the DOM on load and restored on toggle.
@@ -1354,6 +1416,10 @@
     hr_toast: 'Herzfrequenz-Gurt getrennt; die Verbindung wird im Hintergrund wiederhergestellt. Sie k\u00f6nnen weiterspielen.',
     sync_title: 'Uhr des Sensors synchronisieren',
     sync_skip: '\u00dcberspringen',
+    exit_title: 'Sitzung beenden?',
+    exit_text: 'Sie haben den Vollbildmodus verlassen. Die Spielzeit l\u00e4uft weiter.',
+    exit_no: 'Nein, weiterspielen',
+    exit_yes: 'Ja, Sitzung beenden',
     sync_how_start_h10: 'L\u00f6sen Sie den Gurt und halten Sie den Sensor (am Gurt) in der Hand, mit der Sie die Tasten dr\u00fccken, mit den Fingern auf beiden Elektrodenfl\u00e4chen. Dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste mit dieser Hand, etwa einmal pro Sekunde. Legen Sie den Gurt danach wieder an.',
     sync_how_start_verity: 'Lassen Sie den Sensor am Arm und benutzen Sie die Hand dieses Arms. Dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste, etwa einmal pro Sekunde.',
     sync_how_end_h10: 'Ein letzter Schritt f\u00fcr den Herzfrequenz-Sensor: Nehmen Sie den Gurt ab und halten Sie den Sensor wie zu Beginn in der Hand, mit der Sie die Tasten dr\u00fccken, mit den Fingern auf beiden Elektrodenfl\u00e4chen. Dr\u00fccken Sie \u201eSynchronisieren\u201c und dann 10-mal kr\u00e4ftig die Leertaste mit dieser Hand, etwa einmal pro Sekunde.',

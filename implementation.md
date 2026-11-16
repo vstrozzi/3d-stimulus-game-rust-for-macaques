@@ -1791,8 +1791,15 @@ a neighbour's.
 - **Measurement service unusable** (e.g. the link drops while it opens): heart
   rate rows as for an H9, status null, the reason in `problems`; retried at
   the next connection.
-- **No end sync** (skipped, tab closed): files keep status `start`; their
-  times use the drift from packet arrival times and `precision_ms` is null.
+- **No end sync** (skipped, tab closed), or only an end sync: files keep
+  status `start` (or `end`); the drift is not corrected (the sensor's clock
+  is taken as exact), so times are off by about 1–3 ms per minute away from
+  the sync, and `precision_ms` is null. Drift from packet arrival times is
+  not used: in the 2026-11-13 test it was within 5 ppm on an H10 but off by
+  300 and 8000 ppm on a Verity Sense (true drift about 40 ppm).
+- **Presses too fast**: a press sooner than 500 ms after the previous one is
+  neither counted nor measured (the hand is still moving, and at 52 Hz the
+  jolts run together).
 - **Re-send after midnight**: the server files by its own date, so the
   re-timed copy lands in the next day's folder; the older copy keeps status
   `start`.

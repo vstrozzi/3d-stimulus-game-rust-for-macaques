@@ -1179,7 +1179,7 @@
   // (the files written in between are then re-timed and sent again). While
   // presses are collected, the space bar does nothing else.
   const HR_SYNC_PRESSES = 10;
-  const HR_SYNC_MIN_GAP_MS = 300;  // a press sooner than this after the previous one is ignored
+  const HR_SYNC_MIN_GAP_MS = Polar.SYNC_MIN_GAP_MS;  // a press sooner than this after the previous one is not counted
   const endPopup = document.getElementById('end-popup');
   const hrSyncUi = {};
   for (const [kind, p] of [['start', 'hr'], ['end', 'end']]) {

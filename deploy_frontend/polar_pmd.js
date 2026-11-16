@@ -512,13 +512,19 @@
    * from the latest calibration, otherwise from the envelope (late by the
    * Bluetooth delay floor).
    */
-  function chooseMapping(cals, env) {
+  function chooseMapping(cals, env, opts = {}) {
     if (cals.length >= 2) {
       const xs = cals.map((k) => k.x);
       if (Math.max(...xs) - Math.min(...xs) >= MIN_DRIFT_SPAN_MS) {
         const fit = linearFit(xs, cals.map((k) => k.o));
         return { c: fit.a, s: fit.b, offset_from: "blocks", drift_from: "blocks" };
       }
+    }
+    // `arrivalDrift: false`: without a drift from the blocks the clocks are
+    // taken to run at the same rate (the offset the mean of the blocks'),
+    // since arrival times can give a wildly wrong drift (jittery links).
+    if (opts.arrivalDrift === false && cals.length) {
+      return { c: cals.reduce((t, k) => t + k.o, 0) / cals.length, s: 0, offset_from: "blocks", drift_from: "none" };
     }
     if (!env) return null;
     if (cals.length) {

@@ -40,6 +40,10 @@
 
   const SYNC_MAX_SD_MS = 15;   // a sync whose press-offset SD exceeds this is not used
   const SYNC_SETTLE_MS = 4000; // longest wait for the accelerometer data of the last press
+  // A press sooner than this after the previous one is not measured: the
+  // hand is still moving, and on a 52 Hz accelerometer the jolts run together.
+  const SYNC_MIN_GAP_MS = 500;
+  const NO_DRIFT = "the clock drift is not corrected (the sensor's clock is taken as exact), so times are off by about 1–3 ms per minute";
   const BEAT_CONTEXT = 30;     // neighbouring beats used to match a beat to its R-peak
   // A beat is matched to its R-peak in the background once it arrived this
   // long ago (its ECG and its neighbours are in by then), a few per second, so
@@ -413,6 +417,7 @@
      * every trial file written so far and sends it again.
      */
     async sync(kind, keys) {
+      keys = keys.filter((k, i) => i === 0 || k - keys[i - 1] >= SYNC_MIN_GAP_MS);
       const pmd = this.pmd;
       const sel = pmd && pmd.active[MEAS.ACC] ? pmd.active[MEAS.ACC].sel : {};
       const res = {
@@ -631,7 +636,9 @@
       const start = this._syncIn(seg, "start");
       const end = this._syncIn(seg, "end");
       if (!start && !end) return null;
-      const m = PMD.chooseMapping([start, end].filter(Boolean).map((s) => ({ o: s.o, x: s.x })), this._env(seg));
+      // One sync: no drift correction. Drift from packet arrival times was
+      // fine on an H10 but off by 300–8000 ppm on a Verity Sense (real: ~40).
+      const m = PMD.chooseMapping([start, end].filter(Boolean).map((s) => ({ o: s.o, x: s.x })), this._env(seg), { arrivalDrift: false });
       return m && { ...m, seg, start, end };
     }
 
@@ -785,11 +792,11 @@
       let drift_ppm = null;
       let precision_ms = null;
       if (!status) problems.push("not synchronized: no successful sync covers this part of the recording, so nothing has a controller-clock time");
-      else if (status === "start") problems.push("no end sync (yet): the clock drift since the start sync is not corrected and the precision is unknown");
+      else if (status === "start") problems.push(`no end sync (yet): ${NO_DRIFT} since the start sync`);
       else if (status === "end") {
         problems.push(this.syncs.some((s) => s.accepted && s.kind === "start")
-          ? "the sensor's clock restarted after the start sync (the sensor was switched off): only the end sync applies, without drift correction"
-          : "no start sync: only the end sync applies, without drift correction");
+          ? `the sensor's clock restarted after the start sync (the sensor was switched off): only the end sync applies; ${NO_DRIFT} before it`
+          : `no start sync: only the end sync applies; ${NO_DRIFT} before it`);
       } else if (m.drift_from === "blocks") {
         drift_ppm = round((1 / (1 + m.s) - 1) * 1e6, 100); // > 0: the sensor's clock runs fast
         const a = PMD.toLaptop(m, start.x);
@@ -797,7 +804,7 @@
         const f = (midMs - a) / (b - a);
         precision_ms = round(Math.sqrt(((1 - f) * start.se) ** 2 + (f * end.se) ** 2), 100);
         if (Math.abs(drift_ppm) > 100) problems.push(`a drift of ${drift_ppm} ppm is implausible for the sensor's clock (expect within ±50): one of the syncs is off`);
-      } else problems.push("the two syncs are less than a minute apart: the drift comes from packet arrival times and the precision is unknown");
+      } else problems.push(`the two syncs are less than a minute apart: ${NO_DRIFT} away from them`);
       if (restarted) problems.push("the sensor's clock restarted during this trial");
       if (undecoded) problems.push(`${undecoded} frame(s) could not be decoded`);
       const one = (s) => s && {
@@ -1047,6 +1054,7 @@
     drawSeries,
     drawGapHistogram,
     PolarSession,
+    SYNC_MIN_GAP_MS,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Polar = api;

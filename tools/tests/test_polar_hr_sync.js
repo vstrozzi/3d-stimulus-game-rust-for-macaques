@@ -241,9 +241,21 @@ function beatErrors(sent, beats, from = 0, to = Infinity) {
   {
     const sim = run({ seed: 8 });
     sim.ev = sim.ev.filter((e) => e.sync !== "end");
-    const { sent } = await session(sim);
+    // A press 200 ms after another is not measured (here: one after each real press).
+    const st = sim.ev.find((e) => e.sync === "start");
+    st.keys = st.keys.flatMap((k) => [k, k + 200]);
+    const { sent, results } = await session(sim);
+    assert.strictEqual(results.start.keys.length, 10, "fast presses dropped");
+    assert.ok(results.start.accepted && results.start.used === 10);
     const log = JSON.parse(sent.get("tester/tester_session/level_000/120000/trials/trial_070.json"));
     assert.strictEqual(log.hr_info.sync_info.status, "start");
+    // One sync: no drift correction, so ECG sample spacing on the controller clock = on the sensor clock.
+    // (over the whole file: the elapsed seconds are float32, ~0.01 ms steps)
+    const fr = log.hr_ecg;
+    let devSpan = 0;
+    for (let i = 1; i < fr.length; i++) devSpan += fr[i].dt_ms + fr[i - 1].dt_ms * (fr[i - 1].uV.length - 1);
+    const lapSpan = (fr[fr.length - 1].first_elapsed_secs - fr[0].first_elapsed_secs) * 1000;
+    assert.ok(devSpan > 2000 && Math.abs(lapSpan / devSpan - 1) < 8e-6, `no drift with one sync (${((lapSpan / devSpan - 1) * 1e6).toFixed(1)} ppm; the clock drifts 25)`);
     assert.strictEqual(log.hr_info.sync_info.end, null);
     assert.strictEqual(log.hr_info.sync_info.precision_ms, null);
     assert.ok(log.hr_info.sync_info.problems[0].startsWith("no end sync"));

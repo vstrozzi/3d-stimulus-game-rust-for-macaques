@@ -231,6 +231,10 @@ for (const [name, sim, tol] of [["H10 200 Hz", h10, 3], ["Verity 52 Hz", vs, 10]
   sim.cal = m;
 }
 assert.deepStrictEqual(P.chooseMapping([], { c: 5, s: 1e-6 }), { c: 5, s: 1e-6, offset_from: "arrivals", drift_from: "arrivals" });
+// Without arrival drift: one block (or two close ones) → no drift, the blocks' mean offset.
+assert.deepStrictEqual(P.chooseMapping([{ o: 7, x: 1000 }], { c: 5, s: 9e-3 }, { arrivalDrift: false }), { c: 7, s: 0, offset_from: "blocks", drift_from: "none" });
+assert.deepStrictEqual(P.chooseMapping([{ o: 7, x: 1000 }, { o: 9, x: 30000 }], null, { arrivalDrift: false }).c, 8);
+assert.strictEqual(P.chooseMapping([{ o: 7, x: 0 }, { o: 13, x: 120000 }], null, { arrivalDrift: false }).drift_from, "blocks");
 
 // Knock block: the Verity's offset through the H10's press calibration.
 {

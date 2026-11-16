@@ -3,6 +3,9 @@
   'use strict';
   const COLORS = ['#5799ed', '#f56b3c', '#21b98a', '#eeaf23', '#dc75ab', '#9a80f6', '#71cbd0', '#cba57e'];
   const STATUS = { correct: '#19a66c', position: '#f0a900', kind: '#ed4337', unknown: '#999', none: '#999' };
+  // Mean lines, rings and cell shading follow the page theme (dark or white).
+  const ink = o => o?.theme === 'light' ? '#111' : '#fff';
+  const cellFill = (o, odd) => o?.theme === 'light' ? (odd ? '#f4f4f2' : '#ebebe8') : (odd ? '#151515' : '#222');
   const finite = v => typeof v === 'number' && Number.isFinite(v);
   const mean = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
   const sd = a => a.length > 1 ? Math.sqrt(a.reduce((s, v) => s + (v - mean(a)) ** 2, 0) / (a.length - 1)) : null;
@@ -183,7 +186,7 @@
     const categories = [...groupBy(observations, split)];
     for (const [categoryIndex, [category, cat]] of categories.entries()) {
       const shiftX = x => byObject && finite(x) ? x + (categoryIndex - (categories.length - 1) / 2) * Math.min(.12, .5 / Math.max(1, categories.length - 1)) : x;
-      const color = byObject ? cat[0].kind === 'corner' ? '#f56b3c' : '#5799ed' : '#fff';
+      const color = byObject ? cat[0].kind === 'corner' ? '#f56b3c' : '#5799ed' : ink(o);
       const xvalues = [...new Set(cat.map(t => t[xkey]))].sort((a, b) => typeof a === 'number' ? a - b : String(a).localeCompare(String(b)));
       // First average repeat sessions within participant, then across people.
       const values = xvalues.map(x => {
@@ -243,10 +246,10 @@
     }
     return { traces, rows: rows.map(({ checks, ...t }) => t), x: 'Level / object / congruency', y: 'Participant / session', height: Math.max(540, new Set(rows.map(t => t.session)).size * 22 + 300),
       yaxis: { domain: [0, .72], categoryorder: 'array', categoryarray: participants.map(id => rowLabel(rows.find(t => t.session === id))) },
-      layout: { barmode: 'stack', yaxis2: { domain: [.83, 1], title: 'First choice (%)', range: [0, 100], gridcolor: '#222' } },
+      layout: { barmode: 'stack', yaxis2: { domain: [.83, 1], title: 'First choice (%)', range: [0, 100], gridcolor: o.theme === 'light' ? '#e5e5e5' : '#222' } },
       note: 'First check on the first presentation of each object. Orange triangles: corner; blue squares: face; crosses: no/unknown check. Bars show choice proportions; any unfilled share represents no/unknown checks. Rows are ordered by progress.' };
   }
-  function timeline(d) {
+  function timeline(d, o = {}) {
     const traces = [], sessions = [...new Set(d.trials.map(t => t.session))];
     const side = Math.ceil(Math.sqrt(sessions.length || 1));
     const xpos = t => `L${t.level} · ${t.kind} ${t.object} · ${t.congruency}`;
@@ -265,11 +268,11 @@
     for (const [label, key, symbol] of [['Chain completed', 'complete', 'circle-open'], ['Last saved trial (timeout)', 'timeout', 'square-open']]) {
       const a = d.trials.filter(t => t[key]), xy = a.map(coordinate);
       traces.push({ type: 'scatter', mode: 'markers', name: label, x: xy.map(v => v[0]), y: xy.map(v => v[1]), text: a.map(hover),
-        marker: { color: '#fff', size: Math.max(8, Math.min(16, 34 / side)), symbol, line: { width: 1.5 } }, hovertemplate: '%{text}<extra>%{fullData.name}</extra>' });
+        marker: { color: ink(o), size: Math.max(8, Math.min(16, 34 / side)), symbol, line: { width: 1.5 } }, hovertemplate: '%{text}<extra>%{fullData.name}</extra>' });
     }
     return { traces, rows: d.trials.map(({ checks, ...t }) => t), x: 'Level / object', y: 'Round',
       axis: { tickmode: 'array', tickvals: categories.map((_, i) => i), ticktext: categories, tickangle: -45 },
-      shapes: categories.map((_, i) => ({ type: 'rect', x0: i - 0.45, x1: i + 0.45, y0: 0.5, y1: d.trials.reduce((n, t) => Math.max(n, t.round), 1) + 0.5, fillcolor: i % 2 ? '#151515' : '#222', line: { width: 0 }, layer: 'below' })),
+      shapes: categories.map((_, i) => ({ type: 'rect', x0: i - 0.45, x1: i + 0.45, y0: 0.5, y1: d.trials.reduce((n, t) => Math.max(n, t.round), 1) + 0.5, fillcolor: cellFill(o, i % 2), line: { width: 0 }, layer: 'below' })),
       note: 'One dot per object presentation; first-check outcome. Each session has a fixed position within a cell. Rings mark completion; squares mark the last saved timeout trial. Hover identifies the participant.',
     };
   }
@@ -339,8 +342,8 @@
       const rows = observations.filter(p => p[xkey] === x && finite(p.value));
       return [...groupBy(rows, p => o.weight === 'session' ? p.session : p.participant).values()].map(a => mean(a.map(p => p.value)));
     });
-    traces.push(line('Mean ± SD', xs, values.map(mean), '#fff', {
-      error_y: { type: 'data', array: values.map(sd), visible: true }, line: { color: '#fff', width: 3 },
+    traces.push(line('Mean ± SD', xs, values.map(mean), ink(o), {
+      error_y: { type: 'data', array: values.map(sd), visible: true, color: ink(o) }, line: { color: ink(o), width: 3 },
       customdata: values.map(a => a.length), hovertemplate: '%{x}: %{y:.2f} bpm<br>n = %{customdata}<extra>Mean ± SD</extra>',
     }));
     return { traces, rows: observations, x: LABELS[xkey], y: 'Mean heart rate (bpm)',
@@ -352,7 +355,7 @@
       switch (o.plot) {
         case 'mistakes_level': case 'trials': return levelFigure(d, o);
         case 'mistakes_object': return levelFigure(d, o, true);
-        case 'timeline': return timeline(d);
+        case 'timeline': return timeline(d, o);
         case 'first_choice': return firstChoice(d, o);
         case 'duration': return scatter(d, { ...o, y: 'duration' });
         case 'chain': return scatter(d, { ...o, y: o.y || 'chain_pos' });

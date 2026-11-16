@@ -2,7 +2,28 @@
   'use strict';
   const $ = id => document.getElementById('explorer-' + id);
   let mounted = false, catalog = [], worker, serial = 0, initialized, loadedKey = '', pending = new Map(), generation = 0;
-  let timezone = 'Europe/Zurich', catalogErrors = [], lastFigures = null;
+  let timezone = 'Europe/Zurich', catalogErrors = [], lastFigures = null, lastOptions = null;
+  let theme = (() => { try { return localStorage.getItem('explorer_theme') === 'light' ? 'light' : 'dark'; } catch (_) { return 'dark'; } })();
+  const PALETTE = {
+    dark: { bg: '#000', text: '#ddd', grid: '#292929', zero: '#444', hoverBg: '#171717', hoverText: '#fff', empty: '#aaa' },
+    light: { bg: '#fff', text: '#222', grid: '#e5e5e5', zero: '#999', hoverBg: '#fff', hoverText: '#111', empty: '#666' },
+  };
+  function applyTheme() {
+    const panel = document.getElementById('data-explorer');
+    panel.classList.toggle('light', theme === 'light');
+    document.body.classList.toggle('explorer-light', theme === 'light' && !panel.hidden);
+    const button = $('theme'); if (button) button.textContent = theme === 'light' ? 'Dark page' : 'White page';
+  }
+  async function toggleTheme() {
+    theme = theme === 'light' ? 'dark' : 'light';
+    try { localStorage.setItem('explorer_theme', theme); } catch (_) {}
+    applyTheme();
+    // Mean lines, rings and cell shading are computed per theme: redraw.
+    if (lastOptions) {
+      const o = { ...lastOptions, theme };
+      try { await render(await request({ type: 'figure', options: o }), o); } catch (error) { status(error.message, true); }
+    }
+  }
   const script = src => new Promise((resolve, reject) => {
     const el = document.createElement('script'); el.src = src; el.onload = resolve; el.onerror = () => { el.remove(); reject(new Error('Could not load ' + src)); }; document.head.append(el);
   });
@@ -83,7 +104,7 @@
       objects: selected($('objects')),
       matrix: $('matrix').checked,
       compare: $('compare').checked, groupA: selected($('group-a')), groupB: selected($('group-b')),
-      labelOverrides: readOverrides(), swap: $('swap').checked,
+      labelOverrides: readOverrides(), swap: $('swap').checked, theme,
     };
   }
   function readOverrides() { try { return JSON.parse(localStorage.getItem('analysis_congruency') || '{}'); } catch (_) { return {}; } }
@@ -153,7 +174,7 @@
     }
   }
   async function render(result, o) {
-    lastFigures = result;
+    lastFigures = result; lastOptions = o; const c = PALETTE[o.theme === 'light' ? 'light' : 'dark'];
     for (const node of $('plots').querySelectorAll('.plot')) Plotly.purge(node);
     $('plots').replaceChildren(); $('plots').classList.toggle('compare', o.compare);
     for (const panel of result.panels) {
@@ -161,7 +182,7 @@
       const title = document.createElement('h3'); title.textContent = panel.title; outer.append(title);
       const plot = document.createElement('div'); plot.className = 'plot'; outer.append(plot);
       $('plots').append(outer);
-      const traces = panel.traces, axis = { gridcolor: '#292929', zerolinecolor: '#444', automargin: true };
+      const traces = panel.traces, axis = { gridcolor: c.grid, zerolinecolor: c.zero, linecolor: c.zero, automargin: true };
       let xlabel = panel.x, ylabel = panel.y, xaxis = panel.axis || {}, yaxis = panel.yaxis || {};
       let shapes = panel.shapes || [];
       let extraLayout = { ...panel.layout };
@@ -179,11 +200,11 @@
         shapes = shapes.map(s => ({ ...s, x0: s.y0, x1: s.y1, y0: s.x0, y1: s.x1, xref: s.yref || 'x', yref: s.xref || 'y' }));
       }
       const topLegend = panel.matrix || o.plot === 'timeline';
-      const layout = { paper_bgcolor: '#000', plot_bgcolor: '#000', font: { color: '#ddd', family: 'system-ui, sans-serif', size: 12 },
+      const layout = { paper_bgcolor: c.bg, plot_bgcolor: c.bg, font: { color: c.text, family: 'system-ui, sans-serif', size: 12 },
         height: panel.height || 570, margin: { t: topLegend ? 85 : 30, l: 70, r: 25, b: topLegend ? 150 : 110 },
-        hoverlabel: { bgcolor: '#171717', font: { color: '#fff' } }, legend: { orientation: 'h', y: topLegend ? 1.05 : -0.25, yanchor: topLegend ? 'bottom' : 'top' },
+        hoverlabel: { bgcolor: c.hoverBg, bordercolor: c.zero, font: { color: c.hoverText } }, legend: { orientation: 'h', y: topLegend ? 1.05 : -0.25, yanchor: topLegend ? 'bottom' : 'top' },
         xaxis: { ...axis, title: xlabel, ...xaxis }, yaxis: { ...axis, title: ylabel, ...yaxis }, shapes, ...extraLayout };
-      if (!traces.some(t => (t.x?.length || t.y?.length))) layout.annotations = [{ text: 'No data for this plot and selection', xref: 'paper', yref: 'paper', x: .5, y: .5, showarrow: false, font: { color: '#aaa' } }];
+      if (!traces.some(t => (t.x?.length || t.y?.length))) layout.annotations = [{ text: 'No data for this plot and selection', xref: 'paper', yref: 'paper', x: .5, y: .5, showarrow: false, font: { color: c.empty } }];
       await Plotly.newPlot(plot, traces, layout, { responsive: true, displaylogo: false, toImageButtonOptions: { filename: o.plot, format: 'png', scale: 2 } });
       const tools = document.createElement('div'); tools.className = 'plot-tools';
       const csv = document.createElement('button'); csv.textContent = 'Download CSV'; csv.onclick = () => downloadCSV(panel.rows, o.plot + '.csv');
@@ -205,6 +226,7 @@
     document.querySelector('#admin-flow > .landing').hidden = true;
     const panel = document.getElementById('data-explorer'); panel.hidden = false;
     if (!mounted) { mount(panel); mounted = true; }
+    applyTheme();
     try {
       await resources();
       if (!$('plot').options.length) { single($('plot'), Object.entries(AdminAnalysis.PLOTS), 'mistakes_level'); axes(); await refresh(); }
@@ -212,7 +234,7 @@
   }
   function mount(panel) {
     panel.innerHTML = `
-      <header><h2>Data Explorer</h2><button id="explorer-back" type="button">Back</button></header>
+      <header><h2>Data Explorer</h2><div><button id="explorer-theme" type="button"></button><button id="explorer-back" type="button">Back</button></div></header>
       <div class="explorer-controls">
         <label class="wide">Participants<input id="explorer-search" type="search" placeholder="Search names"><select id="explorer-participants" multiple aria-label="Participants"></select><button data-all="participants" type="button">All participants</button></label>
         <label class="wide">Dates<select id="explorer-dates" multiple aria-label="Dates"></select><button data-all="dates" type="button">All dates</button></label>
@@ -251,7 +273,8 @@
       <details><summary>Congruency labels for older recordings</summary><p class="hint">Load sessions with Plot, then label each object here. Labels are saved in this browser and included in selection exports. Unknown labels stay unknown. For future recordings, set congruency in the trial editor.</p><div class="table-wrap"><table><thead><tr><th>Configuration</th><th>Level</th><th>Object</th><th>Congruency</th></tr></thead><tbody id="explorer-labels-body"></tbody></table></div></details>
       <div id="explorer-plots" class="plots"></div>
       <p class="hint">The three reference plots, gameplay summaries and HR views are computed here in your browser. Model-probability plots from the ZIP require the original model code.</p>`;
-    $('back').onclick = () => { panel.hidden = true; document.querySelector('#admin-flow > .landing').hidden = false; };
+    $('back').onclick = () => { panel.hidden = true; document.querySelector('#admin-flow > .landing').hidden = false; applyTheme(); };
+    $('theme').onclick = toggleTheme;
     $('refresh').onclick = () => refresh().catch(e => status(e.message, true));
     for (const id of ['participants', 'dates', 'from', 'to', 'paradigm', 'hr-only']) $(id).addEventListener('change', updateSessions);
     $('search').addEventListener('input', updateSessions);

@@ -1,38 +1,51 @@
 #admin-flow { width: 100%; }
 #admin-flow > .landing { margin: 2rem auto; }
 #admin-flow > .landing[hidden] { display: none !important; }
-#data-explorer { width: min(96%, 1380px); margin: 2rem auto; user-select: text; }
+#data-explorer {
+  --ex-bg: #000; --ex-text: #e0e0f0; --ex-muted: #999; --ex-label: #bbb; --ex-field: #111; --ex-field-text: #eee;
+  --ex-border: #444; --ex-rule: #222; --ex-selected: #463f79; --ex-selected-text: #fff; --ex-primary: #dcd7ff;
+  --ex-primary-text: #111; --ex-accent: #aaa0f9; --ex-link: #b1a7ff; --ex-error: #f69888;
+  width: min(96%, 1380px); margin: 2rem auto; user-select: text; color: var(--ex-text);
+}
+#data-explorer.light {
+  --ex-bg: #fff; --ex-text: #1a1a1a; --ex-muted: #5f5f5f; --ex-label: #444; --ex-field: #fff; --ex-field-text: #1a1a1a;
+  --ex-border: #c4c4c4; --ex-rule: #e3e3e3; --ex-selected: #d9d4ff; --ex-selected-text: #111; --ex-primary: #463f79;
+  --ex-primary-text: #fff; --ex-accent: #463f79; --ex-link: #463f79; --ex-error: #b3261e;
+}
+/* The page itself is black; in the white theme the whole page turns white while the explorer is open. */
+body.explorer-light { background: #fff; }
 #data-explorer[hidden], #data-explorer [hidden] { display: none !important; }
 #data-explorer header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; }
+#data-explorer header > div { display: flex; gap: .5rem; }
 #data-explorer h2 { font-size: 1.5rem; font-weight: 600; }
 #data-explorer h3 { font-size: 1rem; font-weight: 500; margin: 1rem 0 .5rem; }
 #data-explorer .explorer-controls { display: flex; flex-wrap: wrap; gap: .8rem; align-items: end; margin: .9rem 0; }
-#data-explorer label { display: flex; flex-direction: column; gap: .35rem; color: #bbb; font-size: .9rem; min-width: 9rem; }
+#data-explorer label { display: flex; flex-direction: column; gap: .35rem; color: var(--ex-label); font-size: .9rem; min-width: 9rem; }
 #data-explorer label.wide { flex: 1; min-width: 13rem; }
-#data-explorer input, #data-explorer select, #data-explorer button { font: inherit; color: #eee; background: #111; border: 1px solid #444; border-radius: 4px; padding: .45rem .6rem; max-width: 100%; }
+#data-explorer input, #data-explorer select, #data-explorer button { font: inherit; color: var(--ex-field-text); background: var(--ex-field); border: 1px solid var(--ex-border); border-radius: 4px; padding: .45rem .6rem; max-width: 100%; }
 #data-explorer select { min-width: 0; }
 #data-explorer select[multiple] { width: 100%; min-height: 7rem; }
 #data-explorer option { padding: .2rem; }
-#data-explorer option:checked { background: #463f79; color: #fff; }
+#data-explorer option:checked { background: var(--ex-selected); color: var(--ex-selected-text); }
 #data-explorer button { cursor: pointer; }
 #data-explorer button:disabled { opacity: .5; cursor: default; }
-#data-explorer button.primary { background: #dcd7ff; border-color: #dcd7ff; color: #111; }
+#data-explorer button.primary { background: var(--ex-primary); border-color: var(--ex-primary); color: var(--ex-primary-text); }
 #data-explorer label.check { flex-direction: row; align-items: center; min-width: auto; padding-bottom: .45rem; }
-#data-explorer input[type=checkbox] { accent-color: #aaa0f9; }
-#data-explorer .hint, #data-explorer output, #data-explorer .plot-note { color: #999; font-size: .85rem; line-height: 1.6; }
+#data-explorer input[type=checkbox] { accent-color: var(--ex-accent); }
+#data-explorer .hint, #data-explorer output, #data-explorer .plot-note { color: var(--ex-muted); font-size: .85rem; line-height: 1.6; }
 #data-explorer output { display: block; margin: .6rem 0; white-space: pre-line; }
-#data-explorer output.error { color: #f69888; }
+#data-explorer output.error { color: var(--ex-error); }
 #data-explorer details { margin: .8rem 0; }
-#data-explorer summary { color: #bbb; cursor: pointer; }
+#data-explorer summary { color: var(--ex-label); cursor: pointer; }
 #data-explorer .plots { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 #data-explorer .plots.compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 #data-explorer .plot-panel { min-width: 0; }
 #data-explorer .plot { width: 100%; min-height: 460px; }
 #data-explorer .plot-tools { display: flex; gap: .5rem; margin: .3rem 0; }
-#data-explorer .plot-panel:fullscreen { background: #000; padding: 1rem; overflow: auto; }
+#data-explorer .plot-panel:fullscreen { background: var(--ex-bg); padding: 1rem; overflow: auto; }
 #data-explorer .plot-panel:fullscreen .plot { height: 85vh; }
 #data-explorer table { border-collapse: collapse; font-size: .85rem; }
-#data-explorer th, #data-explorer td { padding: .4rem .65rem; text-align: left; border-bottom: 1px solid #222; }
+#data-explorer th, #data-explorer td { padding: .4rem .65rem; text-align: left; border-bottom: 1px solid var(--ex-rule); }
 #data-explorer .table-wrap { overflow: auto; max-height: 20rem; }
-#data-explorer a { color: #b1a7ff; }
+#data-explorer a { color: var(--ex-link); }
 @media (max-width: 850px) { #data-explorer .plots.compare { grid-template-columns: minmax(0, 1fr); } }

@@ -186,7 +186,7 @@
       let xlabel = panel.x, ylabel = panel.y, xaxis = panel.axis || {}, yaxis = panel.yaxis || {};
       let shapes = panel.shapes || [];
       let extraLayout = { ...panel.layout };
-      if (o.swap && !panel.matrix) {
+      if (o.swap && !panel.matrix && !panel.noSwap) {
         for (const t of traces) {
           [t.x, t.y] = [t.y, t.x];
           const errorX = t.error_x, errorY = t.error_y; delete t.error_x; delete t.error_y;
@@ -201,11 +201,12 @@
       }
       const topLegend = panel.matrix || o.plot === 'timeline';
       const layout = { paper_bgcolor: c.bg, plot_bgcolor: c.bg, font: { color: c.text, family: 'system-ui, sans-serif', size: 12 },
-        height: panel.height || 570, margin: { t: topLegend ? 85 : 30, l: 70, r: 25, b: topLegend ? 150 : 110 },
+        height: panel.height || 570, margin: panel.margin || { t: topLegend ? 85 : 30, l: 70, r: 25, b: topLegend ? 150 : 110 },
         hoverlabel: { bgcolor: c.hoverBg, bordercolor: c.zero, font: { color: c.hoverText } }, legend: { orientation: 'h', y: topLegend ? 1.05 : -0.25, yanchor: topLegend ? 'bottom' : 'top' },
         xaxis: { ...axis, title: xlabel, ...xaxis }, yaxis: { ...axis, title: ylabel, ...yaxis }, shapes, ...extraLayout };
-      if (!traces.some(t => (t.x?.length || t.y?.length))) layout.annotations = [{ text: 'No data for this plot and selection', xref: 'paper', yref: 'paper', x: .5, y: .5, showarrow: false, font: { color: c.empty } }];
+      if (!traces.some(t => (t.x?.length || t.y?.length))) layout.annotations = [...(layout.annotations || []), { text: 'No data for this plot and selection', xref: 'paper', yref: 'paper', x: .5, y: .5, showarrow: false, font: { color: c.empty } }];
       await Plotly.newPlot(plot, traces, layout, { responsive: true, displaylogo: false, toImageButtonOptions: { filename: o.plot, format: 'png', scale: 2 } });
+      if (panel.fit) { plot.on('plotly_relayout', () => fitDots(plot, panel.fit)); await fitDots(plot, panel.fit); }
       const tools = document.createElement('div'); tools.className = 'plot-tools';
       const csv = document.createElement('button'); csv.textContent = 'Download CSV'; csv.onclick = () => downloadCSV(panel.rows, o.plot + '.csv');
       const full = document.createElement('button'); full.textContent = 'Fullscreen'; full.onclick = async () => { try { await outer.requestFullscreen(); } catch (_) {} Plotly.Plots.resize(plot); };
@@ -213,6 +214,17 @@
       if (panel.note) { const note = document.createElement('p'); note.className = 'plot-note'; note.textContent = panel.note; outer.append(note); }
     }
     $('export-settings').hidden = false;
+  }
+  // Grid plots: size dots so each session's spot fits inside its cell at the
+  // current zoom and plot size (Plotly marker sizes are in pixels).
+  function fitDots(plot, fit) {
+    const { xaxis: xa, yaxis: ya } = plot._fullLayout;
+    const pxX = xa._length / Math.abs(xa.range[1] - xa.range[0]), pxY = ya._length / Math.abs(ya.range[1] - ya.range[0]);
+    const pitch = Math.min(pxX * fit.w / fit.cols, pxY * fit.h / fit.rows), dot = Math.max(2.5, Math.min(14, pitch * 0.62));
+    const scale = { dot: 1, ring: 1.45, stop: 1.45 }, idx = [], sizes = [];
+    plot.data.forEach((t, i) => { if (scale[t.meta]) { idx.push(i); sizes.push(+(dot * scale[t.meta]).toFixed(1)); } });
+    const same = idx.every((i, k) => plot.data[i].marker.size === sizes[k]);
+    return idx.length && !same ? Plotly.restyle(plot, { 'marker.size': sizes }, idx) : Promise.resolve();
   }
   function download(content, name, type) {
     const url = URL.createObjectURL(new Blob([content], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

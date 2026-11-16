@@ -142,7 +142,9 @@ rescans changed/new/deleted logs, including HR files rewritten after end sync.
 `/admin/analysis/catalog` and `/admin/analysis/data` require the admin role.
 Only selected records are retrieved, in batches. The browser worker computes
 all metrics; no plotting/Python analysis packages are required on the server.
-The explorer does not load raw ECG/optical samples. Plotly.js is bundled locally.
+The only HR plot is mean heart rate per trial or level; the explorer computes no
+RR, HRV or waveform metrics and never loads raw ECG/optical samples (RR is used
+only to drop chest-strap readings taken with the strap off). Plotly.js is bundled locally.
 Dates use `ANALYSIS_TIMEZONE` (default `Europe/Zurich`), independent of upload
 folder dates. The catalog is excluded from data-browser listings and ZIPs.
 

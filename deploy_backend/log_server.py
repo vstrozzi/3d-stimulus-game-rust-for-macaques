@@ -225,7 +225,7 @@ async def analysis_data(request: Request):
             or any(not isinstance(s, str) or len(s) > 1024 for s in sessions)
             or not isinstance(offset, int) or isinstance(offset, bool) or offset < 0):
         raise HTTPException(400, "Invalid session selection or offset")
-    return await run_in_threadpool(analysis_store.data, list(dict.fromkeys(sessions)), offset, 25, body.get("waveforms") is True)
+    return await run_in_threadpool(analysis_store.data, list(dict.fromkeys(sessions)), offset, 25)
 
 
 @app.get("/admin/file")

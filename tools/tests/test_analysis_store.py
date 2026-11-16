@@ -34,8 +34,7 @@ def test_retrieval_updates_pagination_and_deletion(tmp_path):
     data = second["documents"][0]["data"]
     assert "frames" not in data and "hr_ecg" not in data
     assert len(data["check_frames"]) == 1
-    assert data["waveforms"] == ["hr_ecg"]
-    assert store.data([session["id"]], offset=1, waveforms=True)["documents"][0]["data"]["hr_ecg"] == trial["hr_ecg"]
+    assert "waveforms" not in data
     trial["hr_meas"] = [{"hr": 90}]
     file.write_text(json.dumps(trial))
     store.catalog()

@@ -19,7 +19,7 @@ function trial(session, counter, checks, extra = {}) {
     timestamp_start: `2026-11-16T12:00:${String(counter).padStart(2, '0')}Z`, elapsed_time_no_anim: 3,
     check_frames: checks, hr_info: { device: { name: 'H10' }, trial_start_elapsed_secs: counter * 5, sync_info: { status: 'start+end', precision_ms: 1 } },
     hr_meas: Array.from({ length: 6 }, (_, i) => ({ arrival_elapsed_secs: counter * 5 + i + 1, beat_elapsed_secs: counter * 5 + i, hr: 70 + i, rr_ms: [800] })),
-    hr_ecg: [{ first_elapsed_secs: counter * 5, dt_ms: 10, uV: [0, 1, -1] }], ...extra,
+    ...extra,
   } };
 }
 function summary(session, complete = true) {
@@ -89,7 +89,7 @@ const packetOnly = trial('Alice/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs
 const old = A.normalize([packetOnly], catalog);
 assert.equal(A.figure(old, { ...base, plot: 'hr_summary' }).panels[0].rows[0].n_readings, 1, 'Stale chest-strap HR without RR is excluded');
 assert.equal(A.figure(old, { ...base, plot: 'hr_summary' }).panels[0].rows[0].value, 80);
-const optical = A.normalize([trial('Alice/run1', 1, [], { hr_info: { device: { name: 'Polar Sense' } }, hr_meas: [{ arrival_elapsed_secs: 8, hr: 80, rr_ms: [] }] })], catalog);
+const optical = A.normalize([trial('Alice/run1', 1, [], { hr_info: { device: 'Polar Sense 1234' }, hr_meas: [{ arrival_elapsed_secs: 8, hr: 80, rr_ms: [] }] })], catalog);
 assert.equal(A.figure(optical, { ...base, plot: 'hr_summary' }).panels[0].rows[0].value, 80, 'Optical sensors can report HR without RR');
 assert.equal(A.figure(d, { ...base, plot: 'first_choice', y: 'region' }).panels[0].traces.length, 8);
 const early = trial('Alice/run1', 1, [], { hr_info: { trial_start_elapsed_secs: 0, trial_end_elapsed_secs: 4 }, hr_meas: [] });
@@ -121,5 +121,6 @@ const weightedHR = A.normalize([
 assert.equal(A.figure(weightedHR, { ...base, plot: 'hr_summary' }).panels[0].traces.at(-1).y[0], 85);
 assert.equal(A.figure(weightedHR, { ...base, plot: 'hr_summary', weight: 'session' }).panels[0].traces.at(-1).y[0], 80);
 assert.deepEqual(Object.keys(A.PLOTS).filter(k => /hr|rr|poincare|waveform/.test(k)), ['hr_summary']);
+assert.deepEqual(Object.keys(context.packets[0]).sort(), ['config', 'hr', 'level', 'packet', 'phase', 'session', 't', 'timing', 'trial', 'valid'], 'Packets carry only mean-HR inputs');
 assert.throws(() => A.figure(d, { ...base, plot: 'histogram', y: 'hr' }), /duration or mistakes/);
 console.log('admin analysis: all tests passed');

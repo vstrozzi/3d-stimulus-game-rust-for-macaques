@@ -54,7 +54,6 @@ class AnalysisStore:
             rows = frames.values() if isinstance(frames, dict) else frames
             if "check_events" not in doc:
                 payload["check_frames"] = [row for row in rows if row.get("commands_sent", {}).get("check")]
-            payload["waveforms"] = [key for key in ("hr_ecg", "hr_ppg") if doc.get(key)]
         return payload
 
     def refresh(self):
@@ -133,7 +132,7 @@ class AnalysisStore:
             errors = [dict(r) for r in db.execute("SELECT path, error FROM documents WHERE error IS NOT NULL")]
         return {"sessions": sessions, "errors": errors, "timezone": self.timezone}
 
-    def data(self, sessions, offset=0, limit=25, waveforms=False):
+    def data(self, sessions, offset=0, limit=25):
         if not sessions:
             return {"documents": [], "next_offset": None, "total": 0}
         placeholders = ",".join("?" for _ in sessions)
@@ -144,12 +143,6 @@ class AnalysisStore:
                               [*sessions, limit, offset]).fetchall()
             documents = []
             for row in rows:
-                payload = json.loads(row["payload"])
-                if waveforms and row["kind"] == "trial" and payload.get("waveforms"):
-                    file = (self.root / row["path"]).resolve()
-                    if file.is_relative_to(self.root) and not (self.root / row["path"]).is_symlink():
-                        raw = json.loads(file.read_text(encoding="utf-8"))
-                        payload.update({key: raw[key] for key in payload["waveforms"] if key in raw})
-                documents.append({"path": row["path"], "session": row["session"], "kind": row["kind"], "data": payload})
+                documents.append({"path": row["path"], "session": row["session"], "kind": row["kind"], "data": json.loads(row["payload"])})
         next_offset = offset + len(documents)
         return {"documents": documents, "total": total, "next_offset": next_offset if next_offset < total else None}

@@ -83,21 +83,17 @@
         partial: d.partial_trial === true,
       };
       trials.push(trial);
+      // Only what the mean-HR plot needs: the bpm value, its time and validity.
       const info = d.hr_info || {};
-      const deviceName = String(info.device?.name || info.device || 'unknown');
-      const optical = /sense|verity/i.test(deviceName) || (d.waveforms || []).includes('hr_ppg') || !!d.hr_ppg?.length;
+      // Chest straps repeat the last bpm with no RR when the strap is off;
+      // optical sensors never send RR, so for them any positive bpm counts.
+      const optical = /sense|verity/i.test(String(info.device?.name || info.device || ''));
       for (const [index, p] of (d.hr_meas || []).entries()) {
         const timed = finite(p.beat_elapsed_secs);
-        const arrival = p.arrival_elapsed_secs;
-        packets.push({ ...p, session: trial.session, participant: trial.participant, date: trial.date,
-          trial: trial.id, packet: index, level, config: trial.config,
-          device: deviceName,
+        packets.push({ session: trial.session, trial: trial.id, packet: index, level, config: trial.config, hr: p.hr,
           timing: timed ? 'synchronized beat' : 'packet arrival (approximate)',
-          sync_status: info.sync_info?.status || 'unsynchronized',
-          sync_precision_ms: info.sync_info?.precision_ms ?? null,
-          t: timed ? p.beat_elapsed_secs : arrival,
+          t: timed ? p.beat_elapsed_secs : p.arrival_elapsed_secs,
           valid: finite(p.hr) && p.hr > 0 && (optical || (p.rr_ms || []).some(r => finite(r) && r > 0)),
-          connection_events: index === 0 ? info.connection_events || [] : [],
         });
       }
     }
@@ -126,7 +122,7 @@
       while (lo < hi) { const mid = (lo + hi) >>> 1; if (a[mid].start_t <= p.t) lo = mid + 1; else hi = mid; }
       const t = a[lo - 1];
       p.phase = !a.length ? 'file bucket (timing unknown)' : !t ? 'before first trial' : p.t <= t.end_t ? 'trial' : 'between trials';
-      if (t) { p.file_trial = p.file_trial || p.trial; p.trial = t.id; p.level = t.level; p.config = t.config; }
+      if (t) { p.trial = t.id; p.level = t.level; p.config = t.config; }
     };
     for (const p of packets) assignContext(p);
     if (trials.some(t => t.remove_completed === null)) warnings.add('Some older logs omit remove_completed_chains and other fixed settings.');

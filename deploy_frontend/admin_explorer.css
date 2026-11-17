@@ -53,3 +53,23 @@ body.explorer-light { background: #fff; }
 #data-explorer .name-tip { position: fixed; z-index: 30; pointer-events: none; padding: 3px 7px; border: 1px solid var(--ex-border);
   border-radius: 4px; background: var(--ex-field); color: var(--ex-field-text); font: 12px Arial, Helvetica, sans-serif; white-space: nowrap; }
 #data-explorer .name-tip[hidden] { display: none; }
+/* Comparison groups: ticked sessions keep the group's colour through every filter change. */
+#data-explorer { --ex-group-a: #24406b; --ex-group-a-tag: #5b9cf0; --ex-group-b: #5c3517; --ex-group-b-tag: #f08a3c; }
+#data-explorer.light { --ex-group-a: #dce9fb; --ex-group-a-tag: #2a78d6; --ex-group-b: #fde3cf; --ex-group-b-tag: #d4601f; }
+#data-explorer .group-picks { align-items: stretch; }
+#data-explorer .group-pick { flex: 1; min-width: 16rem; display: flex; flex-direction: column; gap: .45rem; }
+#data-explorer .group-tools { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; color: var(--ex-muted); font-size: .85rem; }
+#data-explorer .group-tools span { flex: 1; }
+#data-explorer .group-tools button { padding: .25rem .5rem; font-size: .85rem; }
+#data-explorer .group-list { border: 1px solid var(--ex-border); border-radius: 4px; background: var(--ex-field); max-height: 15rem; overflow-y: auto; padding: .2rem; }
+#data-explorer .group-list .hint { margin: .4rem; }
+#data-explorer label.group-row { flex-direction: row; align-items: center; gap: .45rem; min-width: 0; padding: .2rem .35rem; border-radius: 3px;
+  color: var(--ex-field-text); font-size: .85rem; cursor: pointer; }
+#data-explorer label.group-row span { flex: 1; overflow-wrap: anywhere; }
+#data-explorer label.group-row.in-a { background: var(--ex-group-a); }
+#data-explorer label.group-row.in-b { background: var(--ex-group-b); }
+#data-explorer label.group-row.taken { opacity: .5; cursor: default; }
+#data-explorer .group-tag { display: inline-block; min-width: 1.3rem; text-align: center; border-radius: 3px; color: #fff; font-size: .75rem; padding: 0 .25rem; }
+#data-explorer .group-tag.tag-a { background: var(--ex-group-a-tag); }
+#data-explorer .group-tag.tag-b { background: var(--ex-group-b-tag); }
+#data-explorer .group-list input[type=checkbox] { margin: 0; }

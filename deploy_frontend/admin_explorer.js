@@ -3,6 +3,9 @@
   const $ = id => document.getElementById('explorer-' + id);
   let mounted = false, catalog = [], worker, serial = 0, initialized, loadedKey = '', pending = new Map(), generation = 0;
   let timezone = 'Europe/Zurich', catalogErrors = [], lastFigures = null, lastOptions = null;
+  // Comparison groups are kept apart from the filters: a session stays in its group until it is unticked.
+  const groups = { a: new Set(), b: new Set() };
+  let matching = new Set();
   // White like the analysis figures unless this browser chose the dark page.
   let theme = (() => { try { return localStorage.getItem('explorer_theme') === 'dark' ? 'dark' : 'light'; } catch (_) { return 'light'; } })();
   function applyTheme() {
@@ -65,12 +68,47 @@
     const from = $('from').value, to = $('to').value, paradigm = $('paradigm').value;
     const sessions = catalog.filter(s => people.has(s.participant) && dates.has(s.date) && (!search || s.participant.toLowerCase().includes(search))
       && (!from || s.date >= from) && (!to || s.date <= to) && (!$('hr-only').checked || s.has_hr) && (!paradigm || s.paradigms.includes(paradigm)));
-    const entries = sessions.map(s => [s.id, `${s.label} · ${s.date} · ${s.time || ''} · ${s.trials} trials${s.has_hr ? ' · HR' : ''} · ${s.id.split('/').pop()}`]);
-    options($('sessions'), entries);
-    options($('group-a'), entries, sessions.slice(0, Math.ceil(sessions.length / 2)).map(s => s.id));
-    options($('group-b'), entries, sessions.slice(Math.ceil(sessions.length / 2)).map(s => s.id));
+    options($('sessions'), sessions.map(s => [s.id, sessionText(s)]));
+    matching = new Set(sessions.map(s => s.id));
+    const known = new Set(catalog.map(s => s.id));
+    for (const g of Object.values(groups)) for (const id of g) if (!known.has(id)) g.delete(id);   // deleted after a refresh
+    renderGroups();
     loadedKey = ''; $('selection-count').textContent = sessions.length + ' matching sessions';
   }
+  const sessionText = s => `${s.label} · ${s.date} · ${s.time || ''} · ${s.trials} trials${s.has_hr ? ' · HR' : ''} · ${s.id.split('/').pop()}`;
+  // Each list shows the sessions that pass the filters above plus its own name filter, and always its ticked sessions.
+  function renderGroups() {
+    for (const [g, other] of [['a', 'b'], ['b', 'a']]) {
+      const list = $('group-' + g), top = list.scrollTop, find = $('find-' + g).value.trim().toLowerCase();
+      const rows = catalog.filter(s => groups[g].has(s.id) || (matching.has(s.id) && (!find || sessionText(s).toLowerCase().includes(find) || s.id.toLowerCase().includes(find))));
+      list.replaceChildren(...rows.map(s => {
+        const row = document.createElement('label'), box = document.createElement('input'), text = document.createElement('span');
+        const taken = groups[other].has(s.id);
+        box.type = 'checkbox'; box.value = s.id; box.checked = groups[g].has(s.id); box.disabled = taken;
+        text.textContent = sessionText(s);
+        row.className = 'group-row' + (box.checked ? ' in-' + g : '') + (taken ? ' taken' : '');
+        row.title = taken ? `Already in group ${other.toUpperCase()}` : s.id;
+        row.append(box, text);
+        if (taken) { const tag = document.createElement('b'); tag.className = 'group-tag tag-' + other; tag.textContent = other.toUpperCase(); row.append(tag); }
+        return row;
+      }));
+      if (!rows.length) { const empty = document.createElement('p'); empty.className = 'hint'; empty.textContent = 'No session matches the filters.'; list.append(empty); }
+      list.scrollTop = top;
+      const hidden = [...groups[g]].filter(id => !matching.has(id)).length;
+      $('count-' + g).textContent = `${groups[g].size} ticked` + (hidden ? ` (${hidden} outside the filters, kept)` : '');
+    }
+  }
+  function toggleGroup(g, id, on) {
+    if (on) groups[g].add(id); else groups[g].delete(id);
+    generation++; $('draw').disabled = false; renderGroups();
+  }
+  function addShown(g) {
+    const other = g === 'a' ? 'b' : 'a';
+    for (const box of $('group-' + g).querySelectorAll('input')) if (!groups[other].has(box.value)) groups[g].add(box.value);
+    generation++; renderGroups();
+  }
+  // Compare mode plots exactly the two groups, whatever the session filters currently show.
+  const plotIds = () => $('compare').checked ? [...new Set([...groups.a, ...groups.b])] : selected($('sessions'));
   const NUMERIC = ['y', 'trial_nr_global', 'level_nr', 'chain__step', 'clock__trial_duration', 'wrong', 'nr_attempts', 'object_rep_nr', 'pos_in_round', 'clock__trial_start_time'];
   function axes() {
     const p = $('plot').value, labels = AdminAnalysis.LABELS;
@@ -95,13 +133,13 @@
     return { plot: $('plot').value, x: $('x').value || undefined, y: $('y').value || undefined, style: $('style').value, color: $('color').value,
       kind: $('kind').value, congruency: $('congruency').value, completion: $('completion').value,
       levels: selected($('levels')).map(Number), individual: $('individual').checked, matrix: $('matrix').checked,
-      compare: $('compare').checked, groupA: selected($('group-a')), groupB: selected($('group-b')),
+      compare: $('compare').checked, groupA: [...groups.a], groupB: [...groups.b],
       nameA: $('name-a').value.trim(), nameB: $('name-b').value.trim(), swap: $('swap').checked, theme };
   }
   async function plot() {
     const run = ++generation;
-    const ids = selected($('sessions'));
-    if (!ids.length) { status('Select at least one session.', true); return; }
+    const ids = plotIds();
+    if (!ids.length) { status($('compare').checked ? 'Tick sessions for groups A and B.' : 'Select at least one session.', true); return; }
     if ($('from').value && $('to').value && $('from').value > $('to').value) { status('The start date must precede the end date.', true); return; }
     const key = JSON.stringify(ids.slice().sort());
     $('draw').disabled = true;
@@ -226,7 +264,7 @@
     download([keys.map(quote).join(','), ...rows.map(r => keys.map(k => quote(r[k])).join(','))].join('\r\n'), name, 'text/csv;charset=utf-8');
   }
   async function downloadTables() {
-    const ids = selected($('sessions'));
+    const ids = plotIds();
     if (!ids.length) { status('Select at least one session.', true); return; }
     $('tables').disabled = true; status('Building trials.csv and positions.csv with build_dataset.py…');
     try {
@@ -261,9 +299,14 @@
         <label>Trial set<select id="explorer-paradigm"></select></label><label class="check"><input id="explorer-hr-only" type="checkbox">With HR only</label><button data-all="sessions" type="button">All matching sessions</button></div>
       </details>
       <details><summary>Compare two groups (panels A and B)</summary><label class="check"><input id="explorer-compare" type="checkbox">Show A and B side by side</label>
-        <div class="explorer-controls">
-          <label class="wide">Group A name<input id="explorer-name-a" type="text" placeholder="e.g. pilot_Gymer" maxlength="60"><select id="explorer-group-a" multiple aria-label="Group A sessions"></select></label>
-          <label class="wide">Group B name<input id="explorer-name-b" type="text" placeholder="e.g. kjpp" maxlength="60"><select id="explorer-group-b" multiple aria-label="Group B sessions"></select></label></div></details>
+        <p class="hint">Tick sessions into each group. Ticked sessions stay in their group (and stay highlighted) when you change any filter, until you untick them. Compare mode plots the two groups, not the session list above.</p>
+        <div class="explorer-controls group-picks">${['a', 'b'].map(g => `
+          <div class="group-pick">
+            <label>Group ${g.toUpperCase()} name<input id="explorer-name-${g}" type="text" placeholder="${g === 'a' ? 'e.g. pilot_Gymer' : 'e.g. kjpp'}" maxlength="60"></label>
+            <input id="explorer-find-${g}" type="search" placeholder="Filter names, e.g. kjpp" aria-label="Filter group ${g.toUpperCase()} list">
+            <div class="group-tools"><b class="group-tag tag-${g}">${g.toUpperCase()}</b><span id="explorer-count-${g}"></span><button data-add="${g}" type="button">Tick all shown</button><button data-clear="${g}" type="button">Untick all</button></div>
+            <div id="explorer-group-${g}" class="group-list" role="group" aria-label="Group ${g.toUpperCase()} sessions"></div>
+          </div>`).join('')}</div></details>
       <div class="explorer-controls">
         <label class="wide">Plot<select id="explorer-plot"></select></label><label>X axis<select id="explorer-x"></select></label><label>Y axis<select id="explorer-y"></select></label>
         <label id="explorer-style-wrap">Style<select id="explorer-style"></select></label>
@@ -294,6 +337,12 @@
     $('search').addEventListener('input', updateSessions);
     $('sessions').addEventListener('change', () => { generation++; loadedKey = ''; $('draw').disabled = false; });
     $('plot').addEventListener('change', axes);
+    for (const g of ['a', 'b']) {
+      $('find-' + g).addEventListener('input', renderGroups);
+      $('group-' + g).addEventListener('change', e => toggleGroup(g, e.target.value, e.target.checked));
+      panel.querySelector(`[data-add="${g}"]`).onclick = () => addShown(g);
+      panel.querySelector(`[data-clear="${g}"]`).onclick = () => { groups[g].clear(); generation++; renderGroups(); };
+    }
     $('draw').onclick = plot;
     $('tables').onclick = downloadTables;
     for (const button of panel.querySelectorAll('[data-all]')) button.onclick = () => {

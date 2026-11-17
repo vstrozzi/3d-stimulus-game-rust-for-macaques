@@ -18,7 +18,8 @@ body.explorer-light { background: #fff; }
 #data-explorer header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.2rem; }
 #data-explorer header > div { display: flex; gap: .5rem; }
 #data-explorer h2 { font-size: 1.5rem; font-weight: 600; }
-#data-explorer h3 { font-size: 1rem; font-weight: 500; margin: 1rem 0 .5rem; }
+#data-explorer h3 { font-family: Arial, Helvetica, sans-serif; font-size: 1rem; font-weight: 400; margin: 1rem 0 .5rem; }
+#data-explorer h3 .panel-letter { font-size: 1.35rem; font-weight: 700; margin-right: .35rem; }
 #data-explorer .explorer-controls { display: flex; flex-wrap: wrap; gap: .8rem; align-items: end; margin: .9rem 0; }
 #data-explorer label { display: flex; flex-direction: column; gap: .35rem; color: var(--ex-label); font-size: .9rem; min-width: 9rem; }
 #data-explorer label.wide { flex: 1; min-width: 13rem; }
@@ -40,7 +41,7 @@ body.explorer-light { background: #fff; }
 #data-explorer .plots { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
 #data-explorer .plots.compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 #data-explorer .plot-panel { min-width: 0; }
-#data-explorer .plot { width: 100%; min-height: 460px; }
+#data-explorer .plot { width: 100%; min-height: 300px; }
 #data-explorer .plot-tools { display: flex; gap: .5rem; margin: .3rem 0; }
 #data-explorer .plot-panel:fullscreen { background: var(--ex-bg); padding: 1rem; overflow: auto; }
 #data-explorer .plot-panel:fullscreen .plot { height: 85vh; }

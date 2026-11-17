@@ -1,126 +1,109 @@
 // node tools/tests/test_admin_analysis.js
+// The browser only groups the server's script table per figure, as make_MAIN_figures.py does.
 'use strict';
 const assert = require('node:assert/strict');
 const A = require('../../deploy_frontend/admin_analysis.js');
-const catalog = [
-  { id: 'Alice/run1', participant: 'Alice', date: '2026-11-15' },
-  { id: 'Alice/run2', participant: 'Alice', date: '2026-11-16' },
-  { id: 'Bob/run1', participant: 'Bob', date: '2026-11-16' },
+
+const columns = ['participant_id', 'session', 'trial_run_counter', 'level_nr', 'object_id', 'object_type', 'object_type_nr',
+  'features_congruent', 'cong_key', 'object_id_order_by_type', 'trial_nr_global', 'trial_nr_in_level', 'round', 'pos_in_round', 'y',
+  'completes', 'wrong', 'ok', 'type_ok', 'noguess', 'level_done', 'first_attempt_type', 'first_attempt_position', 'nr_attempts',
+  'outcome__success', 'outcome__chain_action', 'chain__step', 'clock__trial_duration', 'clock__trial_start_time', 'object_rep_nr',
+  'object_rep_nr_x_level', 'starting_position', 'nr_position_visits', 'loaded_feature', 'train_test'];
+let counter = 0;
+function row(pid, level, object, { wrong = 0, round = 0, first = 'corner', done = true, cong = '', ok = true, type_ok = true, completes = false } = {}) {
+  const typ = object % 2 === 0 ? 1 : 2;
+  const r = { participant_id: pid, session: pid + '/s', trial_run_counter: counter, level_nr: level, object_id: level * 10 + object,
+    object_type: typ === 1 ? 'corner' : 'face', object_type_nr: typ, features_congruent: cong, cong_key: cong === 'False' ? 1 : 0,
+    object_id_order_by_type: object + 1, trial_nr_global: counter++, trial_nr_in_level: 0, round, pos_in_round: object + 1, y: round + 1,
+    completes, wrong, ok, type_ok, noguess: first === '', level_done: done, first_attempt_type: first, first_attempt_position: first === 'corner' ? 0 : first === 'face' ? 1 : '',
+    nr_attempts: wrong + 1, outcome__success: true, outcome__chain_action: 'advance', chain__step: 0, clock__trial_duration: 2 + wrong,
+    clock__trial_start_time: counter, object_rep_nr: round, object_rep_nr_x_level: round, starting_position: 2, nr_position_visits: 3,
+    loaded_feature: 'shape', train_test: 'train' };
+  return columns.map(c => r[c]);
+}
+const rows = [
+  // Alice: two levels, both finished.
+  row('Alice', 0, 0, { wrong: 2, first: 'face', ok: false, type_ok: false }), row('Alice', 0, 0, { wrong: 1, round: 1, completes: true }),
+  row('Alice', 5, 0, { wrong: 1, cong: 'True' }), row('Alice', 5, 1, { wrong: 0, cong: 'False', first: 'face' }),
+  // Bob: level 0 only, time limit in level 5.
+  row('Bob', 0, 0, { wrong: 5, first: 'corner', ok: false }), row('Bob', 5, 0, { wrong: 3, cong: 'True', first: '', done: false }),
+  // kjpp-style names are shortened in labels.
+  row('kjpp_vrsafe_bl_pilot_001', 0, 0, { wrong: 0 }),
 ];
-function check(door, correct, t = 2) {
-  const theta = door * Math.PI / 3 + Math.PI / 2 + Math.PI / 6;
-  return { state_read: { camera_x: Math.cos(theta), camera_z: Math.sin(theta), current_alignment: correct ? 1 : -1, present_elapsed_secs: t }, commands_sent: { check: true }, check_input_event_elapsed_secs: t };
-}
-function trial(session, counter, checks, extra = {}) {
-  return { session, kind: 'trial', path: `2026-11-16/${session}/level_000/120000/trials/trial_${counter}.json`, data: {
-    level_index: 0, active_chain: 0, trial_run_counter: counter, trial_index_in_chain: counter - 1,
-    trial_config: { target_door: 2, cosine_alignment_threshold: .95, analysis_congruency: 'congruent' },
-    start_orient: 0, outcome: 'stay', trial_chain_completed: counter === 2, nr_attempts: checks.length,
-    timestamp_start: `2026-11-16T12:00:${String(counter).padStart(2, '0')}Z`, elapsed_time_no_anim: 3,
-    check_frames: checks, hr_info: { device: { name: 'H10' }, trial_start_elapsed_secs: counter * 5, sync_info: { status: 'start+end', precision_ms: 1 } },
-    hr_meas: Array.from({ length: 6 }, (_, i) => ({ arrival_elapsed_secs: counter * 5 + i + 1, beat_elapsed_secs: counter * 5 + i, hr: 70 + i, rr_ms: [800] })),
-    ...extra,
-  } };
-}
-function summary(session, complete = true) {
-  return { session, kind: 'level', path: `2026-11-16/${session}/level_000/120000/level_000_summary.json`, data: {
-    level_index: 0, level_completed: complete ? 'completed' : 'timeout', level_config: { objects: [{ target_door: 2 }], trials: [{}, {}], fixed: { remove_completed_chains: true } }, trials_runs: [],
-  } };
-}
-const documents = [
-  ...catalog.map(s => summary(s.id, s.participant !== 'Bob')),
-  trial('Alice/run1', 1, [check(2, true)]),
-  trial('Alice/run1', 2, [check(0, false), check(1, false), check(2, true)]),
-  trial('Alice/run2', 1, [check(2, true)]),
-  trial('Bob/run1', 1, [check(1, false), check(1, false), check(1, false), check(2, true)]),
+const heart = [
+  { session: 'Alice/s', trial_run_counter: 0, start: 0, end: 4, device: 'Polar H10', readings: [[1, 1.5, 60, true], [2, 2.5, 80, true], [3, 3.5, 200, false], [5, 6, 90, true]] },
+  { session: 'Alice/s', trial_run_counter: 1, start: 4.5, end: 9, device: 'Polar H10', readings: [] },
+  { session: 'Bob/s', trial_run_counter: 4, start: null, end: null, device: 'Polar Sense 1', readings: [[null, 1, 70, false]] },
 ];
-let d = A.normalize(documents, catalog);
-assert.equal(d.trials.length, 4);
-assert.equal(d.trials[0].mistakes, 0, 'Correct STAY is not a mistake');
-assert.equal(d.trials[0].level_complete, true, 'Join summaries by directory, even when the filename begins with level_');
-assert.equal(d.trials[1].mistakes, 2);
-assert.equal(d.trials[1].checks[0].status, 'position');
-assert.equal(d.trials[1].checks[1].status, 'kind');
-assert.equal(d.trials[1].checks[0].door, 0);
-assert.equal(d.trials[1].round, 2);
-assert.equal(d.trials[1].first_sighting, false);
-assert.equal(d.trials[3].timeout, true);
-assert.equal(A.metric(d.trials.slice(0, 2), 'percent'), 50);
-assert.equal(A.metric(d.trials.slice(0, 2), 'per_object'), 2);
-assert.equal(A.congruency({}), 'unknown');
-assert.equal(d.packets[0].t, 5, 'Timed beat uses sensor time');
-assert.equal(A.classify({ state_read: { current_alignment: -.5 } }, { target_door: 2, cosine_alignment_threshold: .95 }, null).status, 'position');
-for (let door = 0; door < 6; door++) {
-  for (const orient of [0, .7, 5.8]) {
-    const row = check(door, door === 2), theta = door * Math.PI / 3 + Math.PI / 2 + Math.PI / 6 + orient;
-    row.state_read.camera_x = Math.cos(theta); row.state_read.camera_z = Math.sin(theta);
-    assert.equal(A.classify(row, { target_door: 2, cosine_alignment_threshold: .95 }, orient).door, door);
-  }
-}
-const base = { measure: 'mistakes', weight: 'participant', individual: true, levels: [0] };
-let f = A.figure(d, { ...base, plot: 'mistakes_level' });
-assert.equal(f.panels[0].traces.at(-1).y[0], 2, 'Alice: mean 1; Bob: 3; equal participant mean = 2');
-f = A.figure(d, { ...base, plot: 'mistakes_level', weight: 'session' });
-assert.equal(f.panels[0].traces.at(-1).y[0], 5 / 3);
+const payload = { columns, rows, participants: ['Alice', 'Bob', 'kjpp_vrsafe_bl_pilot_001'], heart, warnings: [] };
+const d = A.load(payload);
+const base = { theme: 'light', levels: [0, 5], individual: true };
+
+assert.equal(d.T.length, 7);
+assert.deepEqual(d.T[2].slot, [1, 0, 1], 'slot = (type, congruency, object order)');
+assert.equal(A.short('kjpp_vrsafe_bl_pilot_001'), 'pilot 001');
+assert.equal(A.short('kjpp_vrsafe_003'), '003');
+
+// Heart rate: assigned by recorded boundaries; strap-off readings (no RR) dropped; optical sensors need no RR.
+assert.deepEqual(d.packets.filter(p => p.session === 'Alice/s').map(p => [p.trial, p.phase, p.valid]),
+  [['Alice/s|0', 'trial', true], ['Alice/s|0', 'trial', true], ['Alice/s|0', 'trial', false], ['Alice/s|1', 'trial', true]]);
+assert.equal(d.packets.find(p => p.session === 'Bob/s').valid, true);
+let f = A.figure(d, { ...base, plot: 'hr_summary', x: 'trial' });
+assert.deepEqual(f.panels[0].rows.filter(r => r.participant_id === 'Alice').map(r => r.value), [70, 90, null, null], 'trials without readings stay blank');
+
+// O and progress order (make_MAIN_figures.load()).
+const O = A.objects(d.T);
+assert.equal(O.find(r => r.participant_id === 'Alice' && r.level_nr === 0).wrong, 3, 'mistakes summed over presentations');
+assert.equal(O.find(r => r.participant_id === 'Alice' && r.level_nr === 0).first_choice, 'face', 'first sighting = first row');
+assert.deepEqual(A.progressOrder(d.T), ['Alice', 'Bob', 'kjpp_vrsafe_bl_pilot_001'], 'levels completed, furthest level, then fewer trials');
+
+// 1. Mistakes per level: one value per participant x level; mean ± SD (ddof 1) shifted 0.2 right.
+f = A.figure(d, { ...base, plot: 'mistakes_level' });
+const mean = f.panels[0].traces.find(t => t.name === 'Mean ± SD');
+assert.deepEqual(mean.x, [0.2, 5.2]);
+assert.deepEqual(mean.y, [8 / 3, 2]);
+assert.ok(Math.abs(mean.error_y.array[0] - A.std([3, 5, 0])) < 1e-12);
+assert.equal(f.panels[0].yaxis.range[0], 0, 'y axis starts at 0');
+assert.deepEqual(f.panels[0].traces.find(t => t.name === 'Bob').marker.color, [A.COLORS[1], '#ffffff'], 'open marker = level not finished');
+assert.equal(f.panels[0].traces.find(t => t.name === 'pilot 001').line.dash, 'solid');
+
+// 2. Mistakes per object: level total at +0.37, corner share among corner/face choices only.
+f = A.figure(d, { ...base, plot: 'mistakes_object' });
+const total = f.panels[0].traces.find(t => t.name === 'Level total, mean ± SD');
+assert.deepEqual(total.x, [0.37, 5.37]);
+assert.deepEqual(total.y, [8 / 3, 2]);
+const bars = f.panels[0].shapes.filter(s => s.yref === 'y2' && s.type === 'rect' && s.xref === 'x');
+assert.ok(Math.abs(bars[0].y1 - bars[0].y0 - 2 / 3) < 1e-12, 'level 0: 2 of 3 first checks on a corner');
+assert.equal(f.panels[0].layout.yaxis2.ticktext.length, 4, 'corner share + one row per participant');
+
+// 3. Timeline: script layout (width = max(objects, 1.6), gap 0.3), stops by time limit.
+const lay = A.timelineLayout(d.T);
+assert.deepEqual(lay.bounds.map(b => b.map(v => +v.toFixed(2))), [[0, 0, 1.6], [5, 1.9, 3.9]]);
+f = A.figure(d, { ...base, plot: 'timeline' });
+assert.deepEqual(f.panels[0].traces.find(t => t.name === 'Last trial (time limit)').text.length, 1, 'Bob stopped by the time limit');
+assert.equal(f.panels[0].traces.find(t => t.name === 'No check').x.length, 1);
+
+// Filters map to the script's columns.
+assert.equal(A.figure(d, { ...base, plot: 'timeline', congruency: 'incongruent' }).count, 1);
+assert.equal(A.figure(d, { ...base, plot: 'timeline', congruency: 'no rule' }).count, 4);
+assert.equal(A.figure(d, { ...base, plot: 'timeline', completion: 'incomplete' }).count, 1);
+
+// Comparison: named panels, shared y axis, same strip spacing.
+f = A.figure(d, { ...base, plot: 'mistakes_object', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s', 'kjpp_vrsafe_bl_pilot_001/s'], nameA: 'pilot_Gymer', nameB: 'kjpp' });
+assert.deepEqual(f.panels.map(p => [p.letter, p.title]), [['A', 'pilot_Gymer  (n = 1)'], ['B', 'kjpp  (n = 2)']]);
+assert.deepEqual(f.panels[0].yaxis.range, f.panels[1].yaxis.range);
+assert.equal(f.panels[0].layout.yaxis2.range[1], f.panels[1].layout.yaxis2.range[1]);
+assert.equal(f.panels[0].layout.showlegend, false, 'one legend, right of panel B');
+
+// Every plot draws, exports rows and survives an empty selection.
 for (const plot of Object.keys(A.PLOTS)) {
-  const options = { ...base, plot };
-  const fig = A.figure(d, options);
-  assert(fig.panels.length, plot);
-  for (const panel of fig.panels) {
-    assert(Array.isArray(panel.rows), plot + ': export table');
-    assert(Array.isArray(panel.traces), plot + ': traces');
-    for (const trace of panel.traces) if (trace.x && trace.y) assert.equal(trace.x.length, trace.y.length, plot + ': coordinate lengths');
+  for (const o of [{ ...base, plot }, { ...base, plot, theme: 'dark', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s'] }]) {
+    const fig = A.figure(d, o);
+    for (const panel of fig.panels) {
+      assert(Array.isArray(panel.rows), plot);
+      for (const t of panel.traces) if (t.x && t.y) assert.equal(t.x.length, t.y.length, plot + ': coordinate lengths');
+    }
   }
-  assert.doesNotThrow(() => A.figure(A.normalize([], []), options), plot + ': empty selection');
+  assert.doesNotThrow(() => A.figure(A.load({ columns, rows: [], participants: [], heart: [] }), { ...base, plot }), plot + ': empty selection');
 }
-const config = d.trials[0].config;
-f = A.figure(d, { ...base, plot: 'mistakes_object', labelOverrides: { [`${config}|0|0`]: 'incongruent' }, congruency: 'incongruent' });
-assert.equal(f.count, 4);
-assert.equal(d.trials[0].congruency, 'congruent', 'Local labeling must not mutate the raw dataset');
-f = A.figure(d, { ...base, plot: 'timeline', compare: true, groupA: ['Alice/run1'], groupB: ['Bob/run1'] });
-assert.equal(f.panels.length, 2);
-assert.equal(f.panels[0].rows.length, 2);
-assert.equal(f.panels[1].rows.length, 1);
-const midnight = { ...documents[3], path: documents[3].path.replace('2026-11-16', '2026-11-17') };
-assert.equal(A.normalize([...documents, midnight], catalog).trials.length, 4, 'Re-upload across midnight is not a new trial');
-const missing = trial('Alice/run1', 99, [], { nr_attempts: 2 });
-assert.equal(A.normalize([missing], catalog).trials[0].mistakes, null);
-const packetOnly = trial('Alice/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs: 8, hr: 80, rr_ms: [750, 750] }, { arrival_elapsed_secs: 9, hr: 80, rr_ms: [] }] });
-const old = A.normalize([packetOnly], catalog);
-assert.equal(A.figure(old, { ...base, plot: 'hr_summary' }).panels[0].rows[0].n_readings, 1, 'Stale chest-strap HR without RR is excluded');
-assert.equal(A.figure(old, { ...base, plot: 'hr_summary' }).panels[0].rows[0].value, 80);
-const optical = A.normalize([trial('Alice/run1', 1, [], { hr_info: { device: 'Polar Sense 1234' }, hr_meas: [{ arrival_elapsed_secs: 8, hr: 80, rr_ms: [] }] })], catalog);
-assert.equal(A.figure(optical, { ...base, plot: 'hr_summary' }).panels[0].rows[0].value, 80, 'Optical sensors can report HR without RR');
-assert.equal(A.figure(d, { ...base, plot: 'first_choice', y: 'region' }).panels[0].traces.length, 8);
-const early = trial('Alice/run1', 1, [], { hr_info: { trial_start_elapsed_secs: 0, trial_end_elapsed_secs: 4 }, hr_meas: [] });
-const late = trial('Alice/run1', 2, [], { level_index: 1, hr_info: { trial_start_elapsed_secs: 5, trial_end_elapsed_secs: 9 },
-  hr_meas: [{ arrival_elapsed_secs: 6, beat_elapsed_secs: 3, hr: 90, rr_ms: [800] }, { arrival_elapsed_secs: 7, beat_elapsed_secs: 6, hr: 95, rr_ms: [800] }] });
-const context = A.normalize([early, late], catalog);
-assert.deepEqual(context.packets.map(p => p.level), [0, 1], 'Delayed beats belong to their timestamped trial, not their save file');
-assert.deepEqual(context.packets.map(p => p.phase), ['trial', 'trial']);
-const simpleHR = A.normalize([
-  trial('Alice/run1', 1, [], { hr_info: { trial_start_elapsed_secs: 0, trial_end_elapsed_secs: 4 }, hr_meas: [
-    { beat_elapsed_secs: -1, hr: 200, rr_ms: [800] },
-    { beat_elapsed_secs: 1, hr: 60, rr_ms: [800] },
-    { beat_elapsed_secs: 2, hr: 80, rr_ms: [800] },
-    { beat_elapsed_secs: 4.5, hr: 200, rr_ms: [800] },
-  ] }),
-  trial('Alice/run1', 2, [], { hr_info: { trial_start_elapsed_secs: 5, trial_end_elapsed_secs: 9 }, hr_meas: [{ beat_elapsed_secs: 6, hr: 100, rr_ms: [800] }] }),
-  trial('Alice/run1', 3, [], { hr_info: { trial_start_elapsed_secs: 10, trial_end_elapsed_secs: 14 }, hr_meas: [] }),
-], catalog);
-f = A.figure(simpleHR, { ...base, plot: 'hr_summary', x: 'counter' });
-assert.deepEqual(f.panels[0].rows.map(r => r.value), [70, 100, null], 'One mean per trial; gaps stay null');
-assert.deepEqual(f.panels[0].rows.map(r => r.n_readings), [2, 1, 0], 'Exclude pre-game and between-trial samples');
-f = A.figure(simpleHR, { ...base, plot: 'hr_summary', x: 'level' });
-assert.equal(f.panels[0].rows[0].value, 80, 'Level mean includes all valid selected readings');
-const weightedHR = A.normalize([
-  trial('Alice/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs: 1, hr: 60, rr_ms: [800] }] }),
-  trial('Alice/run2', 1, [], { hr_meas: [{ arrival_elapsed_secs: 1, hr: 80, rr_ms: [800] }] }),
-  trial('Bob/run1', 1, [], { hr_meas: [{ arrival_elapsed_secs: 1, hr: 100, rr_ms: [800] }] }),
-], catalog);
-assert.equal(A.figure(weightedHR, { ...base, plot: 'hr_summary' }).panels[0].traces.at(-1).y[0], 85);
-assert.equal(A.figure(weightedHR, { ...base, plot: 'hr_summary', weight: 'session' }).panels[0].traces.at(-1).y[0], 80);
-assert.deepEqual(Object.keys(A.PLOTS).filter(k => /hr|rr|poincare|waveform/.test(k)), ['hr_summary']);
-assert.deepEqual(Object.keys(context.packets[0]).sort(), ['config', 'hr', 'level', 'packet', 'phase', 'session', 't', 'timing', 'trial', 'valid'], 'Packets carry only mean-HR inputs');
-assert.throws(() => A.figure(d, { ...base, plot: 'histogram', y: 'hr' }), /duration or mistakes/);
 console.log('admin analysis: all tests passed');

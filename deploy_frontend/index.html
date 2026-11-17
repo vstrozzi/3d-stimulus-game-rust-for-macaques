@@ -247,6 +247,9 @@
     border-radius: 0.4rem;
     cursor: pointer;
   }
+  .browse-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; }
+  #browse-parsed-wrap { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85em; color: rgba(255,255,255,0.8); cursor: pointer; }
+  #browse-parsed { accent-color: #7c6ff7; }
   #browse-list, #trials-list { overflow: auto; }
   #browse-list .row, #trials-list .row {
     display: flex;
@@ -732,7 +735,11 @@
       <span id="browse-path">/</span>
       <button id="browse-close" type="button" title="Close">&#10005;</button>
     </div>
-    <button id="browse-zip" type="button">&#11015; Download this folder (.zip)</button>
+    <div class="browse-actions">
+      <button id="browse-zip" type="button">&#11015; Download this folder (.zip)</button>
+      <label id="browse-parsed-wrap" title="Adds out_rebuilt/trials.csv and positions.csv, built with build_dataset.py for every session in this folder">
+        <input type="checkbox" id="browse-parsed"> Include parsed tables (trials.csv, positions.csv)</label>
+    </div>
     <div id="browse-list"></div>
   </div>
 </div>
@@ -1699,7 +1706,8 @@
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.hidden = true; });
     // Download the folder we're currently viewing, recursively zipped server-side.
     document.getElementById('browse-zip').addEventListener('click', () => {
-      window.location = '/admin/zip?path=' + encodeURIComponent(browseCurrent);
+      window.location = '/admin/zip?path=' + encodeURIComponent(browseCurrent)
+        + (document.getElementById('browse-parsed').checked ? '&parsed=1' : '');
     });
   }
 

@@ -210,22 +210,52 @@ def analysis_catalog():
     return analysis_store.catalog()
 
 
-@app.post("/admin/analysis/data")
-async def analysis_data(request: Request):
-    from starlette.concurrency import run_in_threadpool
+async def _session_selection(request: Request):
     try:
         body = await request.json()
     except ValueError:
         raise HTTPException(400, "Invalid JSON")
-    if not isinstance(body, dict):
-        raise HTTPException(400, "Expected an object")
-    sessions = body.get("sessions")
-    offset = body.get("offset", 0)
-    if (not isinstance(sessions, list) or len(sessions) > 200
-            or any(not isinstance(s, str) or len(s) > 1024 for s in sessions)
-            or not isinstance(offset, int) or isinstance(offset, bool) or offset < 0):
-        raise HTTPException(400, "Invalid session selection or offset")
-    return await run_in_threadpool(analysis_store.data, list(dict.fromkeys(sessions)), offset, 25)
+    sessions = body.get("sessions") if isinstance(body, dict) else None
+    if (not isinstance(sessions, list) or len(sessions) > 5000
+            or any(not isinstance(s, str) or len(s) > 1024 for s in sessions)):
+        raise HTTPException(400, "Invalid session selection")
+    return list(dict.fromkeys(sessions))
+
+
+@app.post("/admin/analysis/data")
+async def analysis_data(request: Request):
+    """The analysis scripts' figure table for the selected sessions (built and cached
+    per session on first use), plus heart-rate readings per trial."""
+    from starlette.concurrency import run_in_threadpool
+    sessions = await _session_selection(request)
+    return await run_in_threadpool(analysis_store.data, sessions)
+
+
+def _parsed_tables_zip(zf, sessions, prefix=""):
+    """Add build_dataset.py's trials.csv and positions.csv for these sessions."""
+    trials, positions, errors = analysis_store.tables(sessions)
+    with tempfile.TemporaryDirectory() as tmp:
+        from deploy_backend.analysis.dataset import write_tables
+        write_tables(trials, positions, tmp)
+        for name in ("trials.csv", "positions.csv"):
+            zf.write(os.path.join(tmp, name), prefix + name)
+    if errors:
+        zf.writestr(prefix + "not_analysed.txt", "\n".join(f"{s}: {e}" for s, e in errors.items()) + "\n")
+
+
+@app.post("/admin/analysis/tables")
+async def analysis_tables(request: Request):
+    """trials.csv + positions.csv (build_dataset.py format) for the selected sessions."""
+    from starlette.concurrency import run_in_threadpool
+    sessions = await _session_selection(request)
+
+    def make():
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            _parsed_tables_zip(zf, sessions)
+        return buf.getvalue()
+    return Response(await run_in_threadpool(make), media_type="application/zip",
+                    headers={"Content-Disposition": 'attachment; filename="parsed_tables.zip"'})
 
 
 @app.get("/admin/file")
@@ -255,10 +285,12 @@ async def admin_rmdir(request: Request):
 
 
 @app.get("/admin/zip")
-def admin_zip(path: str = ""):
+def admin_zip(path: str = "", parsed: bool = False):
     """Recursively compress the selected folder on the fly (path='' → the whole
     data root). Nothing is stored zipped; compression happens at download time.
-    The zip's internal layout matches the previous web version's session ZIP."""
+    The zip's internal layout matches the previous web version's session ZIP.
+    parsed=1 adds out_rebuilt/trials.csv and positions.csv, as build_dataset.py
+    writes them, for every session with files in this folder."""
     base = _safe_under(LOG_ROOT, path) if path else LOG_ROOT
     if not os.path.isdir(base):
         raise HTTPException(404, "not a directory")
@@ -269,6 +301,11 @@ def admin_zip(path: str = ""):
             for n in names:
                 fp = os.path.join(root, n)
                 zf.write(fp, os.path.relpath(fp, base))
+        if parsed:
+            analysis_store.refresh()
+            sessions = analysis_store.sessions_under(os.path.relpath(base, LOG_ROOT) if base != LOG_ROOT else "")
+            if sessions:
+                _parsed_tables_zip(zf, sessions, "out_rebuilt/")
     name = (path.rstrip("/").split("/")[-1] or "server_logs") + ".zip"
     return Response(
         buf.getvalue(), media_type="application/zip",

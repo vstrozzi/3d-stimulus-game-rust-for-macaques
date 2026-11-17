@@ -4,3 +4,5 @@ passlib[argon2]
 itsdangerous
 python-multipart
 tzdata
+numpy
+pandas

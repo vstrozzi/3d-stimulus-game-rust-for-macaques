@@ -129,34 +129,41 @@ python tools/verify_trial_logs.py out/trial_logs/
 ## Admin Data Explorer
 
 Open **Data Explorer** on the admin landing page. Select participants and dates
-(Ctrl/Cmd for multiple, Shift for a range), then press **Plot**. Sessions,
-comparison groups, level/object filters and configuration filters expand when
-needed. Plots stay centered on the black page; hover, zoom, swap axes, export
-PNG/CSV or open fullscreen. The three reference plots are included, together
-with presentation counts, first choices, durations, chain progression and mean
-heart rate by trial or level. Model-probability figures require the original model code.
+(Ctrl/Cmd for multiple, Shift for a range), then press **Plot**. The three main
+figures are drawn as `make_MAIN_figures.py` draws them: **Mistakes per level**,
+**Mistakes per object + first checks** and the **Object timeline**. Further views:
+trials per level, first check on first sighting, duration, chain progression,
+custom scatter, distributions and mean heart rate. **Compare two groups** shows
+panels A and B with their own names (e.g. pilot_Gymer and kjpp) on a shared y
+axis. The page is white like the figures; **Dark page** switches it.
 
-The server indexes existing JSON logs into a rebuildable SQLite catalog at
-`out/server_logs/.explorer/catalog.sqlite3`; there is no data migration. Refresh
-rescans changed/new/deleted logs, including HR files rewritten after end sync.
-`/admin/analysis/catalog` and `/admin/analysis/data` require the admin role.
-Only selected records are retrieved, in batches. The browser worker computes
-all metrics; no plotting/Python analysis packages are required on the server.
-The only HR plot is mean heart rate per trial or level; the explorer computes no
-RR, HRV or waveform metrics and never loads raw ECG/optical samples (RR is used
-only to drop chest-strap readings taken with the strap off). Plotly.js is bundled locally.
-Dates use `ANALYSIS_TIMEZONE` (default `Europe/Zurich`), independent of upload
-folder dates. The catalog is excluded from data-browser listings and ZIPs.
+All numbers come from the analysis team's scripts in `deploy_backend/analysis/`:
 
-Group statistics give each participant equal weight by averaging their repeat
-sessions first; session weighting is also available. Missing checks are unknown,
-not zero. Congruency must be explicitly labeled in the trial editor, or assigned
-to old objects in the explorer (saved locally in that browser and included in
-selection exports). Historical omissions cannot be recovered automatically.
-Future logs retain fixed settings, raw check events and partial timeout trials.
-Mean HR uses valid recorded readings within trial boundaries, with file
-membership as a fallback for older logs. Missing HR remains blank; group means
-use the selected participant/session weighting. Raw sensor recording is unchanged.
+- `build_dataset.py` is kept unchanged. The server runs it once per session
+  (game version detected per session instead of `--legacy-game`; a session that
+  crosses midnight is read from both day folders) and caches the result in
+  `out/server_logs/.explorer/catalog.sqlite3` until a file of that session
+  changes. Selected sessions are combined exactly as the script combines
+  participants, so the tables are identical to running it on the same folders.
+- `dataset.py` holds that wrapper and the data part of `make_MAIN_figures.py`
+  (`add_rounds()`, `load()`); chain length and `remove_completed_chains` are read
+  from each level summary. The browser only groups these values per figure.
+- Congruency is the script's `features_congruent` (colour rule vs. shape rule);
+  nothing has to be labelled by hand.
+- A participant with several sessions appears once per session (`name #1`, `#2`).
+
+**Download parsed tables** (explorer) and the **Include parsed tables**
+checkbox in the data browser's folder download give `trials.csv` and
+`positions.csv` exactly as `build_dataset.py` writes them (ids are relative to
+the sessions included, as when running the script on one project folder).
+
+`/admin/analysis/catalog`, `/admin/analysis/data` and `/admin/analysis/tables`
+require the admin role. The server needs numpy and pandas. The only HR plot is
+mean heart rate per trial or level: valid readings within recorded trial
+boundaries (file membership for older logs; chest-strap readings without RR are
+dropped). No RR, HRV or waveform metrics; raw ECG/optical samples are never
+loaded. Plotly.js is bundled locally. Dates use `ANALYSIS_TIMEZONE` (default
+`Europe/Zurich`). The catalog is excluded from data-browser listings and ZIPs.
 
 Verification:
 
@@ -164,6 +171,7 @@ Verification:
 node tools/tests/test_admin_analysis.js
 node tools/tests/test_explorer_logging.js
 python -m pytest tools/tests/test_analysis_store.py tools/tests/test_run_analysis.py
+# compare with the original: python deploy_backend/analysis/build_dataset.py --project <folder>
 ```
 
 ## Heart rate data (optional, Polar H9)

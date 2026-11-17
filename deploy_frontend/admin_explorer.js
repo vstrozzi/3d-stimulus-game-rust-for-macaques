@@ -192,6 +192,7 @@
       if (!traces.some(hasData)) layout.annotations = [...(layout.annotations || []), { text: 'No data for this plot and selection', xref: 'paper', yref: 'paper', x: .5, y: .5, showarrow: false, font: { color: c.MUTED } }];
       await Plotly.newPlot(plot, traces, layout, { responsive: true, displaylogo: false, toImageButtonOptions: { filename: o.plot, format: 'png', scale: 3 } });
       if (panel.fit) { plot.on('plotly_relayout', () => fitDots(plot, panel.fit)); await fitDots(plot, panel.fit); }
+      nameTips(plot, panel.names);
       const tools = document.createElement('div'); tools.className = 'plot-tools';
       const csv = document.createElement('button'); csv.textContent = 'Download plotted values (CSV)'; csv.onclick = () => downloadCSV(panel.rows, o.plot + '.csv');
       const full = document.createElement('button'); full.textContent = 'Fullscreen'; full.onclick = async () => { try { await outer.requestFullscreen(); } catch (_) {} Plotly.Plots.resize(plot); };
@@ -199,6 +200,22 @@
       if (panel.note) { const note = document.createElement('p'); note.className = 'plot-note'; note.textContent = panel.note; outer.append(note); }
     }
     $('export-settings').hidden = false;
+  }
+  // Shortened participant names (legend, strip rows, timeline key) show the full id on hover. Plotly's drag and
+  // legend-toggle layers sit above the text, so the check uses the label's box instead of the label's own events.
+  function nameTips(plot, names) {
+    const full = Object.fromEntries(Object.entries(names || {}).filter(([shown, id]) => shown !== id));
+    if (!Object.keys(full).length) return;
+    const tip = document.createElement('div'); tip.className = 'name-tip'; tip.hidden = true; plot.parentElement.append(tip);
+    let nodes = [];
+    const collect = () => { nodes = [...plot.querySelectorAll('text, tspan')].filter(n => Object.hasOwn(full, n.textContent.trim())); };
+    collect(); plot.on('plotly_afterplot', collect);
+    plot.addEventListener('mousemove', e => {
+      const hit = nodes.find(n => { const r = n.getBoundingClientRect(); return r.width && e.clientX >= r.left - 2 && e.clientX <= r.right + 2 && e.clientY >= r.top - 2 && e.clientY <= r.bottom + 2; });
+      tip.hidden = !hit;
+      if (hit) { tip.textContent = full[hit.textContent.trim()]; tip.style.left = e.clientX + 12 + 'px'; tip.style.top = e.clientY + 14 + 'px'; }
+    });
+    plot.addEventListener('mouseleave', () => { tip.hidden = true; });
   }
   function download(content, name, type) {
     const url = URL.createObjectURL(content instanceof Blob ? content : new Blob([content], { type })); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

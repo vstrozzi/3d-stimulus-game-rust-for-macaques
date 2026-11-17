@@ -15,7 +15,7 @@ function row(pid, level, object, { wrong = 0, round = 0, first = 'corner', done 
   const r = { participant_id: pid, session: pid + '/s', trial_run_counter: counter, level_nr: level, object_id: level * 10 + object,
     object_type: typ === 1 ? 'corner' : 'face', object_type_nr: typ, features_congruent: cong, cong_key: cong === 'False' ? 1 : 0,
     object_id_order_by_type: object + 1, trial_nr_global: counter++, trial_nr_in_level: 0, round, pos_in_round: object + 1, y: round + 1,
-    completes, wrong, ok, type_ok, noguess: first === '', level_done: done, first_attempt_type: first, first_attempt_position: first === 'corner' ? 0 : first === 'face' ? 1 : '',
+    completes, wrong, ok, type_ok, noguess: first === '', level_done: done, first_attempt_type: first, first_attempt_position: first === 'corner' ? '0' : first === 'face' ? '1' : '',   // text, as the server sends it (pandas reads the blanks as text)
     nr_attempts: wrong + 1, outcome__success: true, outcome__chain_action: 'advance', chain__step: 0, clock__trial_duration: 2 + wrong,
     clock__trial_start_time: counter, object_rep_nr: round, object_rep_nr_x_level: round, starting_position: 2, nr_position_visits: 3,
     loaded_feature: 'shape', train_test: 'train' };
@@ -43,6 +43,9 @@ assert.equal(d.T.length, 7);
 assert.deepEqual(d.T[2].slot, [1, 0, 1], 'slot = (type, congruency, object order)');
 assert.equal(A.short('kjpp_vrsafe_bl_pilot_001'), 'pilot 001');
 assert.equal(A.short('kjpp_vrsafe_003'), '003');
+assert.equal(A.label('kjpp_vrsafe_003'), '003');
+assert.equal(A.label('test_polar_verity_full_short #1'), 'test_pola…short #1', 'long names: start…end');
+assert.equal(A.label('test_disconnet_hr #3').length, 18, 'every shortened name has the same length');
 
 // Heart rate: assigned by recorded boundaries; strap-off readings (no RR) dropped; optical sensors need no RR.
 assert.deepEqual(d.packets.filter(p => p.session === 'Alice/s').map(p => [p.trial, p.phase, p.valid]),
@@ -82,6 +85,14 @@ assert.deepEqual(lay.bounds.map(b => b.map(v => +v.toFixed(2))), [[0, 0, 1.6], [
 f = A.figure(d, { ...base, plot: 'timeline' });
 assert.deepEqual(f.panels[0].traces.find(t => t.name === 'Last trial (time limit)').text.length, 1, 'Bob stopped by the time limit');
 assert.equal(f.panels[0].traces.find(t => t.name === 'No check').x.length, 1);
+
+// First check by position: positions arrive as text.
+f = A.figure(d, { ...base, plot: 'first_choice', y: 'position' });
+assert.ok(f.panels[0].traces.find(t => t.name === 'Position 0 (corner)').y.some(v => v > 0), 'position shares are not empty');
+// Whole-number columns get integer ticks; participants without heart rate get no legend entry.
+assert.equal(A.figure(d, { ...base, plot: 'chain' }).panels[0].yaxis.dtick, 1);
+assert.deepEqual(A.figure(d, { ...base, plot: 'hr_summary' }).panels[0].traces.map(t => t.name), ['Alice', 'Bob', 'Mean ± SD']);
+assert.equal(A.figure(d, { ...base, plot: 'timeline' }).panels[0].names['pilot 001'], 'kjpp_vrsafe_bl_pilot_001', 'shown name → full id for hover');
 
 // Filters map to the script's columns.
 assert.equal(A.figure(d, { ...base, plot: 'timeline', congruency: 'incongruent' }).count, 1);

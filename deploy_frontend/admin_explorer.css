@@ -50,3 +50,6 @@ body.explorer-light { background: #fff; }
 #data-explorer .table-wrap { overflow: auto; max-height: 20rem; }
 #data-explorer a { color: var(--ex-link); }
 @media (max-width: 850px) { #data-explorer .plots.compare { grid-template-columns: minmax(0, 1fr); } }
+#data-explorer .name-tip { position: fixed; z-index: 30; pointer-events: none; padding: 3px 7px; border: 1px solid var(--ex-border);
+  border-radius: 4px; background: var(--ex-field); color: var(--ex-field-text); font: 12px Arial, Helvetica, sans-serif; white-space: nowrap; }
+#data-explorer .name-tip[hidden] { display: none; }

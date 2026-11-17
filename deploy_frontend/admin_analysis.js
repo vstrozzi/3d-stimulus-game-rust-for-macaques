@@ -28,6 +28,8 @@
   const cmpTuple = (a, b) => { for (let i = 0; i < a.length; i++) { const c = cmp(a[i], b[i]); if (c) return c; } return 0; };
   const short = p => String(p).replace('kjpp_vrsafe_bl_pilot_', 'pilot ').replace('kjpp_vrsafe_', '');
   const escaped = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const LABEL_MAX = 18;
+  const label = p => { const s = short(p); return s.length > LABEL_MAX ? s.slice(0, 9) + '…' + s.slice(-8) : s; };
   function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   const legendOnly = (name, marker, extra = {}) => ({ type: 'scatter', mode: 'markers', name, x: [null], y: [null], marker, hoverinfo: 'skip', ...extra });
   const trialId = (session, counter) => session + '|' + counter;
@@ -110,7 +112,7 @@
     const M = groupBy(rows, r => r.participant_id);
     if (o.individual !== false) d.participants.forEach((pid, i) => {
       const pts = (M.get(pid) || []).slice().sort((a, b) => a.level_nr - b.level_nr), color = COLORS[i % 8];
-      traces.push({ type: 'scatter', mode: 'lines+markers', name: escaped(short(pid)),
+      traces.push({ type: 'scatter', mode: 'lines+markers', name: escaped(label(pid)),
         x: pts.map(p => p.level_nr), y: pts.map(p => p.value), opacity: 0.8,
         line: { color, width: 1.4, dash: i < 8 ? 'solid' : DASH },
         marker: { size: 6, color: pts.map(p => p.level_done ? color : c.SURF), line: { color, width: 1.3 } },
@@ -126,7 +128,9 @@
     return { traces, rows, y: o.plot === 'trials' ? 'Trials per level' : 'Mistakes per level (wrong checks)', x: 'Level',
       axis: { ...xaxisStyle(c), ...nTicks(levels, L => st.find(s => s.L === L).n, c), range: [Math.min(0, ...levels) - 0.4, Math.max(8, ...levels) + 0.5] },
       yaxis: { ...yaxisStyle(c), range: [0, top(traces)] },
-      layout: { legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.2, yanchor: 'top', entrywidth: 82, entrywidthmode: 'pixels', title: { text: 'Participant', side: 'top center' } },
+      // Equal columns as wide as the longest name (≈7 px per character plus the line sample), so long test names never overlap.
+      layout: { legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.2, yanchor: 'top', entrywidthmode: 'pixels',
+        entrywidth: Math.max(82, 44 + 7 * Math.max(0, ...d.participants.map(p => label(p).length))), title: { text: 'Participant', side: 'top center' } },
         legend2: { orientation: 'h', x: 1, xanchor: 'right', y: 1.02, yanchor: 'bottom' } },
       note: 'Mistake: a wrong check (in a won trial, the checks before the winning one; otherwise every check). Open markers: level not finished (time limit). Mean ± SD across participants, drawn just right of each level; n = participants who played the level.' };
   }
@@ -207,12 +211,12 @@
       layout.legend2 = { orientation: 'v', x: 1.02, xanchor: 'left', y: stripPx / total, yanchor: 'top', font: { size: 11 },
         title: { text: 'Same colour as the object<br>= right kind of position', font: { size: 10, color: c.MUTED } } };
       layout.yaxis2 = { domain: [0, stripPx / total], range: [-0.6, meanY + 0.6], tickmode: 'array', tickvals: [meanY, ...order.map(p => rowOf.get(p))],
-        ticktext: [`<span style="color:${c.MUTED}">corner share</span>`, ...order.map(p => escaped(short(p)))], tickfont: { size: 10 },
+        ticktext: [`<span style="color:${c.MUTED}">corner share</span>`, ...order.map(p => escaped(label(p)))], tickfont: { size: 10 },
         showgrid: false, zeroline: false, showline: false, ticks: '', title: { text: 'First check on<br>first sighting', font: { size: 11 } } };
     }
     return { traces, rows: O.map(({ slot, slotKey, ...r }) => r), x: '', y: '', noSwap: true, height, shapes, yaxis, layout,
       axis: { ...xaxisStyle(c), ...nTicks(levels, L => tot.find(t => t.L === L).n, c), ticks: '', range: [Math.min(0, ...levels) - 0.5, Math.max(8, ...levels) + 0.5], title: { text: '<b>Level</b>' } },
-      margin: { t: 20, l: 95, r: 250, b: 50 },
+      margin: { t: 20, l: strip ? Math.max(95, 45 + 6.2 * Math.max(0, ...order.map(p => label(p).length))) : 95, r: 250, b: 50 },
       note: 'Top: mistakes per object, mean ± SD across participants. Bottom: first check on the first presentation of each object in the level, one row per participant (ordered by progress, top = furthest); bar (top row) = share who checked a corner first. n = participants who played the level.' };
   }
 
@@ -260,12 +264,12 @@
     const rings = shown.filter(t => t.completes);
     traces.push({ type: 'scatter', mode: 'markers', name: 'Chain completed', meta: 'ring', x: rings.length ? rings.map(px) : [null], y: rings.length ? rings.map(py) : [null], hoverinfo: 'skip',
       marker: { symbol: 'circle-open', size: 11, color: c.INK, line: { color: c.INK, width: 0.9 } } });
-    const stops = [...stopped.values()], stopY = t => t.y <= CAP ? py(t) : CAP + 0.78;   // stops after round CAP sit in the >CAP row
+    const stops = [...stopped.values()], stopY = t => t.y <= CAP ? py(t) : CAP + 0.68;   // stops after round CAP sit in the >CAP row
     traces.push({ type: 'scatter', mode: 'markers', name: 'Last trial (time limit)', meta: 'ring', x: stops.length ? stops.map(px) : [null], y: stops.length ? stops.map(stopY) : [null],
       marker: { symbol: 'square-open', size: 11, color: c.INK, line: { color: c.INK, width: 1.6 } },
       text: stops.map(t => `${escaped(t.participant_id)} stopped by the time limit<br>level ${t.level_nr}, round ${t.y}`), hovertemplate: '%{text}<extra></extra>' });
     const late = stops.filter(t => t.y > CAP);
-    if (late.length) traces.push({ type: 'scatter', mode: 'text', meta: 'num', showlegend: false, hoverinfo: 'skip', x: late.map(px), y: late.map(() => CAP + 0.78),
+    if (late.length) traces.push({ type: 'scatter', mode: 'text', meta: 'num', showlegend: false, hoverinfo: 'skip', x: late.map(px), y: late.map(() => CAP + 0.68),
       text: late.map(t => String(t.y)), textfont: { color: c.INK, size: 7 } });
     for (const [kind, color, bold] of [['white', '#ffffff', true], ['ink', '#222222', true], ['muted', c.MUTED, false]]) {
       const a = numbers[kind];
@@ -274,8 +278,8 @@
     }
     traces.push({ type: 'scatter', mode: 'text', name: '2 = order within the round', x: [null], y: [null], text: ['2'], textfont: { color: c.INK }, hoverinfo: 'skip' });
     for (const a of groupBy(T.filter(t => t.y > CAP), t => t.level_nr + '/' + t.slotKey).values()) {      // overflow row
-      annotations.push({ x: x.get(a[0].level_nr + '/' + a[0].slotKey), y: CAP + 1.18, showarrow: false, font: { size: 9, color: c.MUTED },
-        text: `${new Set(a.map(t => t.participant_id)).size} p. · ${a.length} tr.<br>${Math.round(100 * a.filter(t => t.ok).length / a.length)}%` });
+      annotations.push({ x: x.get(a[0].level_nr + '/' + a[0].slotKey), y: CAP + 1.72, yanchor: 'top', showarrow: false, font: { size: 8, color: c.MUTED },   // one short line each: neighbours never collide
+        text: `${new Set(a.map(t => t.participant_id)).size} p.<br>${a.length} tr.<br>${Math.round(100 * a.filter(t => t.ok).length / a.length)}%` });
     }
     shapes.push({ type: 'line', x0: -0.2, x1: xmax + 0.2, y0: CAP + 0.5, y1: CAP + 0.5, line: { color: c.FAINT, width: 1, dash: '3px,3px' } });
     for (const [L, a, b] of bounds) {
@@ -283,17 +287,20 @@
       annotations.push({ x: (a + b) / 2, y: CAP + 1.85, yanchor: 'bottom', showarrow: false, text: `<b>Level ${L}</b>`, font: { size: 12, color: c.INK } });
     }
     // Key: position of each participant inside a cell, to the right of the levels.
-    const keyName = p => escaped(short(p)).replace('pilot ', 'pilot<br>');
-    const cw = Math.max(1, Math.min(2.4, 0.13 * Math.max(3, ...order.flatMap(p => short(p).replace('pilot ', 'pilot\n').split('\n').map(l => l.length)))));
-    const kx0 = xmax + 0.9, ky1 = CAP + 1.5, ky0 = ky1 - g;
+    // Long session names wrap at '_' (at most 3 lines); the key's columns and rows grow to fit them.
+    const keyLines = new Map(order.map(p => [p, short(p).startsWith('pilot ') ? short(p).split(' ') : [label(p)]]));
+    const longest = Math.max(3, ...[...keyLines.values()].flat().map(l => l.length)), lines = Math.max(1, ...[...keyLines.values()].map(l => l.length));
+    const cw = Math.max(1, Math.min(3.4, 0.18 * longest)), kh = Math.max(1, 0.3 * (lines + (stopped.size ? 1 : 0)));
+    const kx0 = xmax + 0.9, ky1 = CAP + 1.5, ky0 = ky1 - g * kh;
     shapes.push({ type: 'path', path: roundedRect(kx0, ky0, kx0 + g * cw, ky1, 0.25), fillcolor: c.TILE, line: { width: 0 }, layer: 'below' });
-    const keyX = p => kx0 + (spot.get(p)[0] + 0.5) * cw, keyY = p => ky0 + spot.get(p)[1];
+    const keyX = p => kx0 + (spot.get(p)[0] + 0.5) * cw, keyY = p => ky0 + (spot.get(p)[1] + 0.5) * kh;
+    const keyText = p => keyLines.get(p).map(escaped).join('<br>') + (stopped.has(p) ? `<br><span style="font-size:8px">stop L${stopped.get(p).level_nr}</span>` : '');
     const done = order.filter(p => !stopped.has(p)), stop = order.filter(p => stopped.has(p));
-    if (done.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: done.map(keyX), y: done.map(p => keyY(p) + 0.5),
-      text: done.map(p => `<b>${keyName(p)}</b>`), textfont: { size: 10, color: c.INK } });
-    if (stop.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: [...stop.map(keyX), ...stop.map(keyX)],
-      y: [...stop.map(p => keyY(p) + 0.6), ...stop.map(p => keyY(p) + 0.25)],
-      text: [...stop.map(keyName), ...stop.map(p => `<span style="font-size:8px">stop L${stopped.get(p).level_nr}</span>`)], textfont: { size: 10, color: c.MUTED } });
+    const keySize = lines > 2 || longest > 12 ? 9 : 10;
+    if (done.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: done.map(keyX), y: done.map(keyY),
+      text: done.map(p => `<b>${keyText(p)}</b>`), textfont: { size: keySize, color: c.INK } });
+    if (stop.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: stop.map(keyX), y: stop.map(keyY),
+      text: stop.map(keyText), textfont: { size: keySize, color: c.MUTED } });
     annotations.push({ x: kx0 + g * cw / 2, y: ky1 + 0.1, yanchor: 'bottom', showarrow: false, text: 'Participant<br>position in a cell', font: { size: 10, color: c.INK } },
       { x: kx0 + g * cw / 2, y: ky0 - 0.15, yanchor: 'top', showarrow: false, text: 'furthest progress bottom left<br>bold = finished all levels<br>grey = stopped by time limit', font: { size: 9, color: c.MUTED } });
     const xr = [-0.2, kx0 + g * cw + 0.3], yr = [0.45, CAP + 2.6];
@@ -317,7 +324,7 @@
     scatter: 'Custom scatter / line', histogram: 'Distribution / histogram', hr_summary: 'Mean heart rate' };
   function colourOf(d, o) {
     const by = o.color || 'participant_id';
-    if (by === 'participant_id') { const i = new Map(d.participants.map((p, k) => [p, k])); return t => ({ key: t.participant_id, name: short(t.participant_id), color: COLORS[i.get(t.participant_id) % 8], dash: i.get(t.participant_id) < 8 ? 'solid' : DASH }); }
+    if (by === 'participant_id') { const i = new Map(d.participants.map((p, k) => [p, k])); return t => ({ key: t.participant_id, name: label(t.participant_id), color: COLORS[i.get(t.participant_id) % 8], dash: i.get(t.participant_id) < 8 ? 'solid' : DASH, symbol: i.get(t.participant_id) < 8 ? 'circle' : 'diamond' }); }
     if (by === 'object_type') return t => ({ key: t.object_type, name: `${t.object_type} object ${TY[t.object_type_nr]}`, color: TYPE_COL[t.object_type_nr] });
     if (by === 'features_congruent') return t => ({ key: t.features_congruent, name: { True: 'congruent', False: 'incongruent', '': 'no colour rule' }[t.features_congruent], color: { True: COLORS[0], False: COLORS[7], '': '#6f6f6f' }[t.features_congruent] });
     if (by === 'first') return t => { const k = t.noguess ? 'none' : t.ok ? 'correct' : t.type_ok ? 'kind' : 'wrong'; return { key: k, name: { correct: 'First check correct', kind: 'Wrong position, right kind', wrong: 'Wrong kind', none: 'No check' }[k], color: { correct: GREEN, kind: YELLOW, wrong: RED, none: '#999999' }[k] }; };
@@ -329,12 +336,16 @@
     for (const a of groupBy(d.T, t => K(col(t).key, t.participant_id)).values()) {
       const s = col(a[0]), sorted = a.slice().sort((p, q) => p.trial_nr_global - q.trial_nr_global);
       traces.push({ type: 'scatter', mode: o.style === 'line' ? 'lines+markers' : 'markers', name: escaped(s.name), legendgroup: String(s.key), showlegend: !seen.has(s.key),
-        x: sorted.map(t => t[xk]), y: sorted.map(t => t[yk]), line: { color: s.color, width: 1.2, dash: s.dash || 'solid' }, marker: { color: s.color, size: 5, opacity: 0.8 },
+        x: sorted.map(t => t[xk]), y: sorted.map(t => t[yk]), line: { color: s.color, width: 1.2, dash: s.dash || 'solid' }, marker: { color: s.color, size: 5, opacity: 0.8, symbol: s.symbol || 'circle' },
         text: sorted.map(t => `${escaped(t.participant_id)} · level ${t.level_nr}`), hovertemplate: '%{text}<br>%{x}, %{y}<extra></extra>' });
       seen.add(s.key);
     }
     return { traces, rows: d.T.map(t => ({ participant_id: t.participant_id, level_nr: t.level_nr, [xk]: t[xk], [yk]: t[yk] })), x: LABELS[xk], y: LABELS[yk],
-      axis: xaxisStyle(c), yaxis: { ...yaxisStyle(c), rangemode: 'normal' } };
+      axis: { ...xaxisStyle(c), ...intTicks(d.T.map(t => t[xk])) }, yaxis: { ...yaxisStyle(c), rangemode: 'normal', ...intTicks(d.T.map(t => t[yk])) } };
+  }
+  function intTicks(values) {
+    const v = values.filter(finite);
+    return v.length && v.every(Number.isInteger) && Math.max(...v) - Math.min(...v) <= 12 ? { dtick: 1, tick0: 0 } : {};
   }
   function firstChoice(d, o) {
     const c = palette(o.theme), O = objects(d.T), traces = [], rows = [];
@@ -344,7 +355,7 @@
     const cats = byPosition ? [0, 1, 2, 3, 4, 5, ''] : ['corner', 'face', ''];
     cats.forEach((k, i) => {
       const y = levels.map(L => {
-        const props = [...groupBy(O.filter(r => r.level_nr === L), r => r.participant_id).values()].map(a => a.filter(r => choice(r) === k).length / a.length);
+        const props = [...groupBy(O.filter(r => r.level_nr === L), r => r.participant_id).values()].map(a => a.filter(r => String(choice(r) ?? '') === String(k)).length / a.length);
         const v = 100 * mean(props); rows.push({ level_nr: L, choice: k === '' ? 'no check' : k, percent: v, n: props.length }); return v;
       });
       traces.push({ type: 'bar', name: k === '' ? 'No check' : byPosition ? `Position ${k} (${k % 2 ? 'face' : 'corner'})` : `Checked a ${k} first`, x: levels, y,
@@ -355,14 +366,17 @@
   }
   function distribution(d, o) {
     const c = palette(o.theme), field = o.y || 'clock__trial_duration', col = colourOf(d, o), traces = [], boxed = ['box', 'violin'].includes(o.style);
+    const all = d.T.map(t => t[field]).filter(finite), lo = Math.min(...all), hi = Math.max(...all);
+    const size = all.every(Number.isInteger) ? Math.max(1, Math.ceil((hi - lo + 1) / 30)) : (hi - lo) / 30 || 1;
+    const xbins = { start: all.every(Number.isInteger) ? lo - 0.5 : lo, end: hi + size, size };
     for (const a of groupBy(d.T, t => col(t).key).values()) {
       const s = col(a[0]), v = a.map(t => t[field]).filter(finite);
       traces.push(boxed
-        ? { type: o.style, name: escaped(s.name), y: v, marker: { color: s.color }, line: { color: s.color }, [o.style === 'box' ? 'boxpoints' : 'points']: o.individual !== false ? 'all' : false, ...(o.style === 'violin' ? { box: { visible: true } } : {}) }
-        : { type: 'histogram', name: escaped(s.name), x: v, histnorm: 'probability density', opacity: 0.6, marker: { color: s.color }, nbinsx: 30 });
+        ? { type: o.style, name: escaped(s.name), y: v, line: { color: s.color }, [o.style === 'box' ? 'boxpoints' : 'points']: o.individual !== false ? 'all' : false, jitter: 0.5, pointpos: -1.6, marker: { color: s.color, size: 4, opacity: 0.6 }, ...(o.style === 'violin' ? { box: { visible: true } } : {}) }
+        : { type: 'histogram', name: escaped(s.name), x: v, histnorm: 'probability density', opacity: 0.6, marker: { color: s.color }, xbins, autobinx: false });
     }
     return { traces, rows: d.T.map(t => ({ participant_id: t.participant_id, level_nr: t.level_nr, [field]: t[field] })), x: boxed ? '' : LABELS[field], y: boxed ? LABELS[field] : 'Probability density',
-      layout: boxed ? {} : { barmode: 'overlay' }, axis: xaxisStyle(c), yaxis: yaxisStyle(c) };
+      layout: boxed ? {} : { barmode: 'overlay' }, axis: { ...xaxisStyle(c), ...(boxed ? { type: 'category' } : {}) }, yaxis: yaxisStyle(c) };
   }
   function hrSummary(d, o) {
     const c = palette(o.theme), xkey = o.x === 'trial' ? 'trial' : 'level_nr', traces = [];
@@ -373,12 +387,13 @@
     });
     const index = new Map(d.participants.map((p, k) => [p, k]));
     if (o.individual !== false) for (const a of groupBy(obs, r => r.participant_id).values()) {
+      if (!a.some(r => finite(r.value))) continue;
       const i = index.get(a[0].participant_id), sorted = a.slice().sort((p, q) => p[xkey] - q[xkey]), color = COLORS[i % 8];
-      traces.push({ type: 'scatter', mode: 'lines+markers', name: escaped(short(a[0].participant_id)), x: sorted.map(r => r[xkey]), y: sorted.map(r => r.value), opacity: 0.8,
+      traces.push({ type: 'scatter', mode: 'lines+markers', name: escaped(label(a[0].participant_id)), x: sorted.map(r => r[xkey]), y: sorted.map(r => r.value), opacity: 0.8,
         line: { color, width: 1.4, dash: i < 8 ? 'solid' : DASH }, marker: { color, size: 5 }, connectgaps: false,
         customdata: sorted.map(r => [r.level_nr, r.n_readings]), hovertemplate: '%{x}: %{y:.1f} bpm<br>level %{customdata[0]} · %{customdata[1]} readings<extra>%{fullData.name}</extra>' });
     }
-    const xs = [...new Set(obs.map(r => r[xkey]))].sort((a, b) => a - b);
+    const xs = [...new Set(obs.filter(r => finite(r.value)).map(r => r[xkey]))].sort((a, b) => a - b);
     const st = xs.map(x => { const v = [...groupBy(obs.filter(r => r[xkey] === x && finite(r.value)), r => r.participant_id).values()].map(a => mean(a.map(r => r.value))); return { mean: mean(v), sd: std(v), n: v.length }; });
     traces.push({ type: 'scatter', mode: 'lines+markers', name: 'Mean ± SD', x: xs.map(x => xkey === 'level_nr' ? x + 0.2 : x), y: st.map(s => s.mean), line: { color: c.INK, width: 2.4 },
       marker: { size: 8, color: c.INK, line: { color: c.SURF, width: 1.2 } }, error_y: { type: 'data', array: st.map(s => s.sd), visible: true, color: c.INK, thickness: 1.4, width: 4 },
@@ -409,7 +424,8 @@
         default: throw new Error('Unknown plot');
       }
     };
-    const panels = groups.map(g => ({ ...make(g.data), letter: g.letter, title: `${escaped(g.name)}  (n = ${g.data.participants.length})` }));
+    const panels = groups.map(g => ({ ...make(g.data), letter: g.letter, title: `${escaped(g.name)}  (n = ${g.data.participants.length})`,
+      names: Object.fromEntries(g.data.participants.map(p => [label(p), p])) }));   // shown name → full id, for hover
     if (o.compare && o.plot === 'mistakes_object') {                     // one legend, right of panel B
       panels[0].layout = { ...panels[0].layout, showlegend: false };
       panels[0].margin = { ...panels[0].margin, r: 20 };
@@ -431,7 +447,7 @@
   function meta(dataset) {
     return { levels: [...new Set(dataset.T.map(t => t.level_nr))].sort((a, b) => a - b), participants: dataset.participants };
   }
-  const api = { load, figure, meta, palette, objects, progressOrder, timelineLayout, short, mean, std, PLOTS, LABELS, COLORS };
+  const api = { load, figure, meta, palette, objects, progressOrder, timelineLayout, short, label, mean, std, PLOTS, LABELS, COLORS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AdminAnalysis = api;
 })(typeof self !== 'undefined' ? self : globalThis);

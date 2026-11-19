@@ -133,12 +133,12 @@ Open **Data Explorer** on the admin landing page. Select participants and dates
 figures are drawn as `make_MAIN_figures.py` draws them: **Mistakes per level**,
 **Mistakes per object + first checks** and the **Object timeline**. Further views:
 trials per level, first check on first sighting, duration, chain progression,
-custom scatter, distributions and mean heart rate. **How the objects were turned**
-shows the figures of `make_MAIN_sampling_figures.py`, drawn on the server by the
+custom scatter, distributions and mean heart rate. **Rotation Strategy** (how the
+objects were turned) shows the figures of `make_MAIN_sampling_figures.py`, drawn on the server by the
 script itself (300 dpi PNG; click to open full size, **Download PNG** saves it):
 one participant (every trial as a spiral, rotated so the reward points up), the
 group as object × round cells, and participants × levels. The name in their title
-is the group name in compare mode, otherwise "Selection". **Compare two groups** shows panels A and B with their
+is the group name in compare mode, otherwise "Selection". Where a plot has a fixed axis, the X / Y selects show its name. **Compare two groups** shows panels A and B with their
 own names (e.g. pilot_Gymer and kjpp) on a shared y axis; tick sessions into each
 group (they stay in their group through any filter change until unticked). The page is white like the figures; **Dark page** switches it.
 

@@ -125,7 +125,7 @@
       error_y: { type: 'data', array: st.map(s => s.sd), visible: true, color: c.INK, thickness: 1.4, width: 4 },
       customdata: st.map(s => s.n), hovertemplate: 'mean %{y:.2f}<br>n = %{customdata}<extra>Mean ± SD</extra>' });
     traces.push(legendOnly('Level not finished (time limit)', { size: 6, color: c.SURF, line: { color: c.MUTED, width: 1.3 } }, { legend: 'legend2' }));
-    return { traces, rows, y: o.plot === 'trials' ? 'Trials per level' : 'Mistakes per level (wrong checks)', x: 'Level',
+    return { traces, rows, y: AXES[o.plot === 'trials' ? 'trials' : 'mistakes_level'].y, x: AXES.mistakes_level.x,
       axis: { ...xaxisStyle(c), ...nTicks(levels, L => st.find(s => s.L === L).n, c), range: [Math.min(0, ...levels) - 0.4, Math.max(8, ...levels) + 0.5] },
       yaxis: { ...yaxisStyle(c), range: [0, top(traces)] },
       // Equal columns as wide as the longest name (≈7 px per character plus the line sample), so long test names never overlap.
@@ -193,7 +193,7 @@
     for (const L of levels) if (L % 2 === 0) shapes.push({ type: 'rect', xref: 'x', yref: 'paper', x0: L - 0.5, x1: L + 0.5, y0: 0, y1: 1, fillcolor: c.BAND, line: { width: 0 }, layer: 'below' });
     const layout = { legend: { orientation: 'v', x: 1.02, xanchor: 'left', y: 1, yanchor: 'top', font: { size: 11 } } };
     let height = 440;
-    const yaxis = { ...yaxisStyle(c), title: { text: 'Mistakes (wrong checks)' }, range: [0, top(traces)] };
+    const yaxis = { ...yaxisStyle(c), title: { text: AXES.mistakes_object.y }, range: [0, top(traces)] };
     if (strip) {
       const g = { legend: 'legend2' };
       for (const [kind, name, color, symbol] of [['corner', 'Checked a corner first', CHOICE_COL.corner, 'triangle-up'], ['face', 'Checked a face first', CHOICE_COL.face, 'square'], ['none', 'No check', c.MUTED, 'x-thin-open']]) {
@@ -328,7 +328,18 @@
   const PLOTS = { mistakes_level: 'Mistakes per level', mistakes_object: 'Mistakes per object + first checks', timeline: 'Object timeline',
     trials: 'Trials per level', first_choice: 'First check on first sighting, per level', duration: 'Trial duration', chain: 'Chain progression',
     scatter: 'Custom scatter / line', histogram: 'Distribution / histogram', hr_summary: 'Mean heart rate',
-    turn_participant: 'How the objects were turned: one participant', turn_cells: 'How the objects were turned: group (object × round cells)', turn_matrix: 'How the objects were turned: participants × levels' };
+    turn_participant: 'Rotation Strategy: one participant', turn_cells: 'Rotation Strategy: group (object × round cells)', turn_matrix: 'Rotation Strategy: participants × levels' };
+  // The axes of each plot that the explorer's X / Y selects cannot change (shown there by name).
+  const OBJECT_AXIS = 'Object in each level (corner / face)';
+  const AXES = {
+    mistakes_level: { x: 'Level', y: 'Mistakes per level (wrong checks)' }, trials: { x: 'Level', y: 'Trials per level' },
+    mistakes_object: { x: 'Level', y: 'Mistakes (wrong checks)' }, timeline: { x: OBJECT_AXIS, y: 'Round' },
+    first_choice: { x: 'Level', y: 'First checks on first sighting (%)' }, duration: { y: LABELS.clock__trial_duration }, chain: { y: LABELS.chain__step },
+    histogram: { density: 'Probability density' }, hr_summary: { y: 'Mean heart rate (bpm)' },
+    // make_MAIN_sampling_figures.py (drawn on the server)
+    turn_participant: { x: OBJECT_AXIS, y: 'Round (= times the object was played in the level)' }, turn_cells: { x: OBJECT_AXIS, y: 'Round' },
+    turn_matrix: { x: 'Round, within each level', y: 'Participant (ordered by progress)' },
+  };
   function colourOf(d, o) {
     const by = o.color || 'participant_id';
     if (by === 'participant_id') { const i = new Map(d.participants.map((p, k) => [p, k])); return t => ({ key: t.participant_id, name: label(t.participant_id), color: COLORS[i.get(t.participant_id) % 8], dash: i.get(t.participant_id) < 8 ? 'solid' : DASH, symbol: i.get(t.participant_id) < 8 ? 'circle' : 'diamond' }); }
@@ -368,11 +379,12 @@
       traces.push({ type: 'bar', name: k === '' ? 'No check' : byPosition ? `Position ${k} (${k % 2 ? 'face' : 'corner'})` : `Checked a ${k} first`, x: levels, y,
         marker: { color: k === '' ? c.MUTED : byPosition ? COLORS[i % 8] : CHOICE_COL[k] } });
     });
-    return { traces, rows, x: 'Level', y: 'First checks on first sighting (%)', layout: { barmode: 'stack' }, axis: xaxisStyle(c), yaxis: yaxisStyle(c),
+    return { traces, rows, x: AXES.first_choice.x, y: AXES.first_choice.y, layout: { barmode: 'stack' }, axis: xaxisStyle(c), yaxis: yaxisStyle(c),
       note: 'First check on the first presentation of each object in the level; shares are computed per participant, then averaged.' };
   }
   function distribution(d, o) {
-    const c = palette(o.theme), field = o.y || 'clock__trial_duration', col = colourOf(d, o), traces = [], boxed = ['box', 'violin'].includes(o.style);
+    // The measured value is on x in a histogram, on y in a box / violin plot (one per colour group).
+    const boxed = ['box', 'violin'].includes(o.style), c = palette(o.theme), field = (boxed ? o.y : o.x) || 'clock__trial_duration', col = colourOf(d, o), traces = [];
     const all = d.T.map(t => t[field]).filter(finite), lo = Math.min(...all), hi = Math.max(...all);
     const size = all.every(Number.isInteger) ? Math.max(1, Math.ceil((hi - lo + 1) / 30)) : (hi - lo) / 30 || 1;
     const xbins = { start: all.every(Number.isInteger) ? lo - 0.5 : lo, end: hi + size, size };
@@ -382,7 +394,7 @@
         ? { type: o.style, name: escaped(s.name), y: v, line: { color: s.color }, [o.style === 'box' ? 'boxpoints' : 'points']: o.individual !== false ? 'all' : false, jitter: 0.5, pointpos: -1.6, marker: { color: s.color, size: 4, opacity: 0.6 }, ...(o.style === 'violin' ? { box: { visible: true } } : {}) }
         : { type: 'histogram', name: escaped(s.name), x: v, histnorm: 'probability density', opacity: 0.6, marker: { color: s.color }, xbins, autobinx: false });
     }
-    return { traces, rows: d.T.map(t => ({ participant_id: t.participant_id, level_nr: t.level_nr, [field]: t[field] })), x: boxed ? '' : LABELS[field], y: boxed ? LABELS[field] : 'Probability density',
+    return { traces, rows: d.T.map(t => ({ participant_id: t.participant_id, level_nr: t.level_nr, [field]: t[field] })), x: boxed ? LABELS[o.color || 'participant_id'] : LABELS[field], y: boxed ? LABELS[field] : AXES.histogram.density,
       layout: boxed ? {} : { barmode: 'overlay' }, axis: { ...xaxisStyle(c), ...(boxed ? { type: 'category' } : {}) }, yaxis: yaxisStyle(c) };
   }
   function hrSummary(d, o) {
@@ -405,7 +417,7 @@
     traces.push({ type: 'scatter', mode: 'lines+markers', name: 'Mean ± SD', x: xs.map(x => xkey === 'level_nr' ? x + 0.2 : x), y: st.map(s => s.mean), line: { color: c.INK, width: 2.4 },
       marker: { size: 8, color: c.INK, line: { color: c.SURF, width: 1.2 } }, error_y: { type: 'data', array: st.map(s => s.sd), visible: true, color: c.INK, thickness: 1.4, width: 4 },
       customdata: st.map(s => s.n), hovertemplate: '%{y:.1f} bpm<br>n = %{customdata}<extra>Mean ± SD</extra>' });
-    return { traces, rows: obs, x: LABELS[xkey], y: 'Mean heart rate (bpm)', axis: xaxisStyle(c), yaxis: { ...yaxisStyle(c), rangemode: 'normal' },
+    return { traces, rows: obs, x: LABELS[xkey], y: AXES.hr_summary.y, axis: xaxisStyle(c), yaxis: { ...yaxisStyle(c), rangemode: 'normal' },
       note: 'Each point is the mean of valid heart-rate readings within the trial or level (recorded trial boundaries; older files: file membership). Missing readings stay blank. Mean ± SD across participants.' };
   }
 
@@ -455,7 +467,7 @@
   function meta(dataset) {
     return { levels: [...new Set(dataset.T.map(t => t.level_nr))].sort((a, b) => a - b), participants: dataset.participants };
   }
-  const api = { load, figure, meta, palette, objects, progressOrder, timelineLayout, short, label, mean, std, PLOTS, LABELS, COLORS };
+  const api = { load, figure, meta, palette, objects, progressOrder, timelineLayout, short, label, mean, std, PLOTS, LABELS, AXES, COLORS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.AdminAnalysis = api;
 })(typeof self !== 'undefined' ? self : globalThis);

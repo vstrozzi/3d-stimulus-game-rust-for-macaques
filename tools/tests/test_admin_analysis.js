@@ -109,6 +109,19 @@ assert.equal(f.panels[0].layout.showlegend, false, 'one legend, right of panel B
 // How the objects were turned: drawn on the server by make_MAIN_sampling_figures.py, not here.
 assert.throws(() => A.figure(d, { ...base, plot: 'turn_cells' }), /Unknown plot/);
 
+// Distribution: the value is on x in a histogram, on y in a box plot (one box per colour group).
+f = A.figure(d, { ...base, plot: 'histogram', style: 'histogram', x: 'wrong' });
+assert.deepEqual([f.panels[0].x, f.panels[0].y], [A.LABELS.wrong, 'Probability density']);
+f = A.figure(d, { ...base, plot: 'histogram', style: 'box', y: 'wrong', color: 'level_nr' });
+assert.deepEqual([f.panels[0].x, f.panels[0].y], ['Level', A.LABELS.wrong]);
+// The axis names the explorer shows for fixed axes are the figures' own.
+for (const plot of ['mistakes_level', 'trials', 'first_choice', 'hr_summary', 'duration', 'chain']) {
+  const fixed = A.AXES[plot], panel = A.figure(d, { ...base, plot }).panels[0];
+  if (fixed.x) assert.equal(panel.x, fixed.x, plot + ': x');
+  if (fixed.y) assert.equal(panel.y, fixed.y, plot + ': y');
+}
+assert.match(A.PLOTS.turn_cells, /^Rotation Strategy/);
+
 // Every plot draws, exports rows and survives an empty selection.
 for (const plot of Object.keys(A.PLOTS).filter(p => !p.startsWith('turn_'))) {
   for (const o of [{ ...base, plot }, { ...base, plot, theme: 'dark', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s'] }]) {

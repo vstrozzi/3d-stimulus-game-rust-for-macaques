@@ -111,19 +111,29 @@
   // Compare mode plots exactly the two groups, whatever the session filters currently show.
   const plotIds = () => $('compare').checked ? [...new Set([...groups.a, ...groups.b])] : selected($('sessions'));
   const NUMERIC = ['y', 'trial_nr_global', 'level_nr', 'chain__step', 'clock__trial_duration', 'wrong', 'nr_attempts', 'object_rep_nr', 'pos_in_round', 'clock__trial_start_time'];
+  // X / Y selects: the choices a plot offers, or the name of its fixed axis.
   function axes() {
-    const p = $('plot').value, labels = AdminAnalysis.LABELS;
+    const p = $('plot').value, labels = AdminAnalysis.LABELS, fixed = { ...AdminAnalysis.AXES[p] };
     const entries = keys => keys.map(k => [k, labels[k] || k]);
+    const keep = { x: $('x').value, y: $('y').value, style: $('style').value };
     let x = [], y = [], style = [['points', 'Points'], ['line', 'Lines + points']];
     if (p === 'first_choice') y = [['kind', 'Corner or face'], ['position', 'Position (0–5)']];
     if (p === 'duration') x = entries(['y', 'trial_nr_global', 'level_nr', 'chain__step', 'pos_in_round']);
     if (p === 'chain') x = entries(['trial_nr_global', 'y']);
     if (p === 'scatter') { x = entries(NUMERIC); y = entries(['clock__trial_duration', ...NUMERIC.filter(k => k !== 'clock__trial_duration')]); }
-    if (p === 'histogram') { y = entries(['clock__trial_duration', 'wrong', 'nr_attempts']); style = [['histogram', 'Histogram'], ['box', 'Box plot'], ['violin', 'Violin plot']]; }
+    if (p === 'histogram') {                         // the value is on x in a histogram, on y in a box / violin plot
+      style = [['histogram', 'Histogram'], ['box', 'Box plot'], ['violin', 'Violin plot']];
+      const values = entries(['clock__trial_duration', 'wrong', 'nr_attempts']);
+      if (['box', 'violin'].includes(keep.style)) { y = values; fixed.x = labels[$('color').value] || 'Participant'; }
+      else { x = values; fixed.y = fixed.density; }
+    }
     if (p === 'hr_summary') x = [['level_nr', 'Level'], ['trial', 'Trial']];
-    single($('x'), x.length ? x : [['', 'As in the figure']]);
-    single($('y'), y.length ? y : [['', 'As in the figure']]);
-    single($('style'), style);
+    const has = (list, v) => !!v && list.some(([k]) => k === v);
+    // Keep the chosen values; a histogram's value moves between X and Y with the style.
+    const pick = (list, own, other) => has(list, own) ? own : p === 'histogram' && has(list, other) ? other : undefined;
+    single($('x'), x.length ? x : [['', fixed.x || 'Fixed by the plot']], pick(x, keep.x, keep.y));
+    single($('y'), y.length ? y : [['', fixed.y || 'Fixed by the plot']], pick(y, keep.y, keep.x));
+    single($('style'), style, has(style, keep.style) ? keep.style : undefined);
     $('x').disabled = x.length <= 1; $('y').disabled = y.length <= 1;
     $('style-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram'].includes(p);
     $('color-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram'].includes(p);
@@ -180,7 +190,7 @@
     } catch (error) { status(error.message, true); }
     finally { if (run === generation) $('draw').disabled = false; }
   }
-  // How the objects were turned: drawn on the server by make_MAIN_sampling_figures.py itself
+  // Rotation Strategy (how the objects were turned): drawn on the server by make_MAIN_sampling_figures.py itself
   // (deploy_backend/analysis/sampling.py), so the figures are the script's PNGs (300 dpi).
   const TURN_FILES = { participant: 'MAIN_sampling_participant', cells: 'MAIN_sampling_group_cells', matrix: 'MAIN_sampling_group_matrix' };
   async function drawTurns(o, ids, run) {
@@ -210,7 +220,7 @@
     made.forEach((m, i) => {
       const outer = document.createElement('div'); outer.className = 'plot-panel';
       if (m.letter) { const title = document.createElement('h3'); title.innerHTML = `<b class="panel-letter">${m.letter}</b> `; title.append(m.name); outer.append(title); }
-      const img = new Image(); img.className = 'plot-image'; img.src = figureUrls[i]; img.alt = 'How the objects were turned: ' + m.name;
+      const img = new Image(); img.className = 'plot-image'; img.src = figureUrls[i]; img.alt = 'Rotation Strategy: ' + m.name;
       img.title = 'Open full size'; img.onclick = () => window.open(figureUrls[i], '_blank');
       const tools = document.createElement('div'); tools.className = 'plot-tools';
       const save = document.createElement('a'); save.href = figureUrls[i]; save.download = file(m.name); save.textContent = 'Download PNG (300 dpi)'; save.className = 'button-link';
@@ -400,6 +410,8 @@
     $('search').addEventListener('input', updateSessions);
     $('sessions').addEventListener('change', () => { generation++; loadedKey = ''; $('draw').disabled = false; });
     $('plot').addEventListener('change', axes);
+    $('style').addEventListener('change', () => { if ($('plot').value === 'histogram') axes(); });   // the value changes axis
+    $('color').addEventListener('change', () => { if ($('plot').value === 'histogram') axes(); });   // box / violin: one per colour group
     for (const g of ['a', 'b']) {
       $('find-' + g).addEventListener('input', renderGroups);
       $('group-' + g).addEventListener('change', e => toggleGroup(g, e.target.value, e.target.checked));

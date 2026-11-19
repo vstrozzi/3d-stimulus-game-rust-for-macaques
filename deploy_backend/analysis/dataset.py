@@ -32,6 +32,10 @@ _PATCH_LOCK = threading.Lock()
 NSTEPS = {0: 5, 1: 5, 2: 5, 3: 5, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4}
 REMOVE_COMPLETED = {6, 8}
 
+# Part of every cached build's key: bump when build_dataset.py or this wrapper changes
+# what a session's tables contain, so cached sessions (and cached errors) are rebuilt.
+BUILD_VERSION = "2"   # 2: server patches for any reward door and other level 4 objects
+
 # Extra keys carried next to the script's columns (never written to the CSVs).
 EXTRA = ("session", "trial_run_counter")
 

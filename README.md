@@ -144,7 +144,14 @@ group (they stay in their group through any filter change until unticked). The p
 
 All numbers come from the analysis team's scripts in `deploy_backend/analysis/`:
 
-- `build_dataset.py` is kept unchanged. The server runs it once per session
+- `build_dataset.py` is the analysis team's script with two server patches,
+  marked `# server patch` (send them to the team when they update the script):
+  the face at each position follows the trial's actual reward door (the script
+  assumed door 2 for corner and door 5 for face objects; results for those doors
+  are byte-identical), and a level 4 with other objects than the standard ones is
+  ordered as in the trial file instead of failing the participant.
+  `make_MAIN_sampling_figures.py` takes the face from the same function (one
+  marked line). The server runs `build_dataset.py` once per session
   (game version detected per session instead of `--legacy-game`; a session that
   crosses midnight is read from both day folders) and caches the result in
   `out/server_logs/.explorer/catalog.sqlite3` until a file of that session
@@ -156,12 +163,13 @@ All numbers come from the analysis team's scripts in `deploy_backend/analysis/`:
 - Congruency is the script's `features_congruent` (colour rule vs. shape rule);
   nothing has to be labelled by hand.
 - A participant with several sessions appears once per session (`name #1`, `#2`).
-- `make_MAIN_figures.py` and `make_MAIN_sampling_figures.py` are kept unchanged.
+- `make_MAIN_figures.py` is kept unchanged.
   `sampling.py` replaces only the sampling script's `load()` (which reads
   `<project>/out_rebuilt` and `<project>/data`): it gives the script's drawing
   functions the table above, the level status and the script's `trajectory()` of
   every trial file. The PNGs are cached in the same database (the newest 40)
-  until a file of those sessions changes. To update the figures, replace the
+  until a file of those sessions changes. Changing what a session's tables contain
+  means bumping `BUILD_VERSION` in `dataset.py`, so cached sessions are rebuilt. To update the figures, replace the
   script file. The Docker image installs matplotlib and Liberation Sans (Arial's
   metrics; the script asks for Arial).
 

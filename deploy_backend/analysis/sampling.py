@@ -21,7 +21,7 @@ import threading
 import pandas as pd
 
 PLOTS = ("participant", "cells", "matrix")
-VERSION = "sampling1"          # part of the figure cache key: bump when the drawing changes
+VERSION = "sampling2"          # part of the figure cache key: bump when the drawing changes
 _LOCK = threading.Lock()       # pyplot keeps global state
 _scripts = None
 

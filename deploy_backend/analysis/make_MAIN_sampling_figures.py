@@ -189,7 +189,7 @@ def participant_figure(proj, pid, D, out):
             if B.is_corner_position(p):
                 ax.plot(mx, my, "o", ms=1.2, color=M.GREEN if k == 0 else "#c4c4bf", mec="none", zorder=2)
             else:
-                f = B.FACE_AT_POSITION[p]
+                f = B.face_at_position(p, tr["cfg"]["target_door"])   # server patch: any reward door
                 mk, sc = SHAPE_MK[tr["cfg"]["decorations_shape"][f]]
                 ax.plot(mx, my, ls="", marker=mk, ms=FACE_MS * sc, mfc=tuple(tr["cfg"]["colors"][f][:3]),
                         mec="none", alpha=FAINT, zorder=2)

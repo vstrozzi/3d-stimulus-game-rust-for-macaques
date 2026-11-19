@@ -167,12 +167,24 @@ def loaded_feature_for(level_nr):
     return "shape" if level_nr <= 6 else "color"
 
 
-def face_of_position(p):
-    return FACE_AT_POSITION[p]
+# server patch: FACE_AT_POSITION holds for the standard reward doors (2 corner, 5 face)
+# only. In pyramid.rs face k is centred on door 2k - 1 (mod 6), and position p is the
+# door (target_door - (p - reward_position)) mod 6, so for any reward door:
+FACE_ON_DOOR = {5: 0, 1: 1, 3: 2}
 
 
-def position_of_face(face):
-    return {f: p for p, f in FACE_AT_POSITION.items()}[face]
+def face_at_position(p, target_door=5):
+    """Prism face at an odd position. Equals FACE_AT_POSITION[p] for doors 2 and 5."""
+    reward = reward_position_for(object_type_from_door(target_door))
+    return FACE_ON_DOOR[(target_door - (p - reward)) % N_POS]
+
+
+def face_of_position(p, target_door=5):
+    return face_at_position(p, target_door)
+
+
+def position_of_face(face, target_door=5):
+    return next(p for p in (1, 3, 5) if face_at_position(p, target_door) == face)
 
 
 def train_test_for(level_nr):
@@ -190,7 +202,7 @@ def match_or_none(a, b):
     return None if a is None or b is None else int(a == b)
 
 
-def numeric_columns(row, shapes):
+def numeric_columns(row, shapes, chain=0):
     """
     Numeric codes built from one finished trial row. Types are 1 corner, 2 face.
     The loaded feature predicts the object's true type. The other feature predicts
@@ -225,7 +237,9 @@ def numeric_columns(row, shapes):
         "object_type_by_shape":  by_shape,
         "object_type_by_color":  by_color,
         "object_type_by_shape_x_object_type_by_color": by_shape_x_by_color,
-        "object_id_order_by_type": (LEVEL4_OBJECT_ORDER[tuple(shapes)] if row["level_nr"] == 4
+        # server patch: a level 4 with other objects than the standard ones is
+        # ordered as in the trial file instead of failing the whole participant.
+        "object_id_order_by_type": (LEVEL4_OBJECT_ORDER.get(tuple(shapes), chain + 1) if row["level_nr"] == 4
                                     else by_shape_x_by_color),
         "correct_position_by_shape": position_by_shape,
         "correct_position_by_color": position_by_color,
@@ -348,7 +362,7 @@ def compute_classifications(level_objects, colors):
     return result
 
 
-def rule_position(tokens, pool):
+def rule_position(tokens, pool, target_door=5):
     """
     Position a feature points at when read on its own (None = no rule).
       two faces match, one differs -> the odd face's own position
@@ -360,9 +374,9 @@ def rule_position(tokens, pool):
         return None
     if len(counts) == 2:
         odd = next(i for i, v in enumerate(tokens) if counts[v] == 1)
-        return position_of_face(odd)
+        return position_of_face(odd, target_door)
     shared = [i for i, v in enumerate(tokens) if all(v in o for o in pool)]
-    return (position_of_face(shared[0]) + 3) % N_POS if shared else None
+    return (position_of_face(shared[0], target_door) + 3) % N_POS if shared else None
 
 
 # ── Loading ─────────────────────────────────────────────────────────────────────
@@ -545,8 +559,8 @@ class TrialContext:
             "shape":   classifications.get((self.level_nr, self.active_chain, "shape"),   [None] * 3),
             "texture": classifications.get((self.level_nr, self.active_chain, "texture"), [None] * 3),
         }
-        self.rule_color = rule_position(tuple(self.color_tokens), rule_pool["color"])
-        self.rule_shape = rule_position(tuple(self.shape_vals), rule_pool["shape"])
+        self.rule_color = rule_position(tuple(self.color_tokens), rule_pool["color"], self.target_door)   # server patch: door
+        self.rule_shape = rule_position(tuple(self.shape_vals), rule_pool["shape"], self.target_door)
 
         self.visits = build_visits(trial_data, self.object_type)
         self.checks = collect_checks(self.visits, self.align_threshold)
@@ -687,7 +701,7 @@ def build_trial_row(ctx, trial_nr, object_rep_nr, object_rep_nr_x_level, reveale
         "chain__time_to_retroceed": ctx.chain_cfg.get("elapsed_time_to_retroceed"),
         "chain__reveals_on_wrong":  not ctx.chain_cfg.get("show_all", False),
     }
-    row.update(numeric_columns(row, ctx.shape_vals))
+    row.update(numeric_columns(row, ctx.shape_vals, ctx.active_chain))   # server patch: chain
     return row
 
 
@@ -730,8 +744,8 @@ def build_position_rows(ctx, trial_row, pstate):
         })
 
         if is_corner_position(p):
-            lf = FACE_AT_POSITION[screen_left_neighbor(p)]
-            rf = FACE_AT_POSITION[screen_right_neighbor(p)]
+            lf = face_at_position(screen_left_neighbor(p), ctx.target_door)   # server patch: door
+            rf = face_at_position(screen_right_neighbor(p), ctx.target_door)
             row.update({
                 "color_left":  ctx.color_tokens[lf], "shape_left":  ctx.shape_vals[lf],
                 "texture_left": ctx.texture_vals[lf],
@@ -741,7 +755,7 @@ def build_position_rows(ctx, trial_row, pstate):
                 "color_role_right": ctx.cls["color"][rf], "shape_role_right": ctx.cls["shape"][rf],
             })
         else:
-            f = FACE_AT_POSITION[p]
+            f = face_at_position(p, ctx.target_door)   # server patch: door
             ctok, sval = ctx.color_tokens[f], ctx.shape_vals[f]
             row.update({
                 "color": ctok, "shape": sval, "texture": ctx.texture_vals[f],

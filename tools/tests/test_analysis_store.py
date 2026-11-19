@@ -188,6 +188,34 @@ def test_turn_figures_are_drawn_by_the_sampling_script(tmp_path, monkeypatch):
         store.turn_figure(ids, "participant", "kjpp", "Nobody")
 
 
+def test_any_reward_door_and_other_level_4_objects(tmp_path):
+    """Server patches of build_dataset.py: faces follow the actual reward door (pyramid.rs: face k
+    centred on door 2k - 1), unchanged for doors 2 and 5; an unknown level 4 is ordered as in the
+    trial file instead of failing the participant."""
+    from deploy_backend.analysis import build_dataset as B
+    assert all(B.face_at_position(p, d) == B.FACE_AT_POSITION[p] for d in (2, 5) for p in (1, 3, 5))
+    assert [B.face_at_position(p, 3) for p in (1, 3, 5)] == [0, 2, 1]
+    assert [B.face_at_position(p, 4) for p in (1, 3, 5)] == [2, 1, 0]
+    custom = [{**OBJECTS[0], "target_door": 4, "decorations_shape": [4, 4, 5]},
+              {**OBJECTS[1], "target_door": 3, "decorations_shape": [6, 5, 4]}]
+    root = tmp_path / "logs"
+    original = list(OBJECTS)
+    OBJECTS[:] = custom
+    try:
+        session(root, "2026-11-19", "Cara", "Cara_2026-11-19_10-00-00_cccc", [4], "2026-11-19T10:00:00Z")
+    finally:
+        OBJECTS[:] = original
+    store = AnalysisStore(root)
+    ids = [s["id"] for s in store.catalog()["sessions"]]
+    trials, positions, errors = store.tables(ids)
+    assert errors == {} and sorted({t["object_id_order_by_type"] for t in trials}) == [1, 2]
+    shape_at = {(p["object_type"], p["position"]): p["shape"] for p in positions if p["position"] % 2}
+    assert shape_at.get(("face", 3), 4) == 4, "door 3: the reward is face D2"
+    assert all(shape_at[k] == v for k, v in {("face", 1): 6, ("face", 5): 5, ("corner", 1): 5, ("corner", 3): 4}.items() if k in shape_at)
+    png, notes = store.turn_figure(ids, "participant", "custom", "Cara")
+    assert png.startswith(b"\x89PNG") and notes == []
+
+
 def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
     from importlib import import_module
     from fastapi.testclient import TestClient

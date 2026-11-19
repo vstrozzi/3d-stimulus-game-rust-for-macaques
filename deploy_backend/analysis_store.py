@@ -195,8 +195,9 @@ class AnalysisStore:
 
     @staticmethod
     def _stamp(docs, session):
-        """Changes whenever a file of the session or its participant label changes."""
-        return hashlib.sha1("\n".join(f"{d['path']}:{d['stamp']}" for d in docs).encode()).hexdigest() + ":" + session["label"]
+        """Changes whenever a file of the session, its participant label or the build code changes."""
+        return (hashlib.sha1("\n".join(f"{d['path']}:{d['stamp']}" for d in docs).encode()).hexdigest()
+                + ":" + session["label"] + ":v" + dataset.BUILD_VERSION)
 
     def turn_figure(self, sessions, plot, name, participant=None, filters=None):
         """PNG of a make_MAIN_sampling_figures.py figure for these sessions, drawn by the script

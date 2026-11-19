@@ -3,6 +3,8 @@ import math
 import shutil
 from pathlib import Path
 
+import pytest
+
 from deploy_backend.analysis import build_dataset as bd
 from deploy_backend.analysis_store import AnalysisStore
 
@@ -138,6 +140,54 @@ def test_bad_files_symlinks_and_midnight(tmp_path):
     assert any(e["path"].endswith("broken.json") for e in result["errors"])
 
 
+def test_turn_figures_are_drawn_by_the_sampling_script(tmp_path, monkeypatch):
+    """The script's own drawing functions get the store's table, level status and the script's
+    trajectory() of every trial; the PNG is cached until a file changes."""
+    from deploy_backend.analysis import sampling
+    root = tmp_path / "logs"
+    session(root, "2026-11-15", "Alice", "Alice_2026-11-15_10-00-00_aaaa", [0, 5], "2026-11-15T10:00:00Z")
+    session(root, "2026-11-15", "Bob", "Bob_2026-11-15_11-00-00_bbbb", [0], "2026-11-15T11:00:00Z")
+    store = AnalysisStore(root)
+    ids = [s["id"] for s in store.catalog()["sessions"]]
+    M, S = sampling.scripts()
+    seen = {}
+    for name in ("participant_figure", "group_cells_figure", "group_matrix_figure"):
+        real = getattr(S, name)
+
+        def spy(*args, real=real, name=name):
+            seen[name] = args[-2]                               # D, as the script's load() returns it
+            return real(*args)
+        monkeypatch.setattr(S, name, spy)
+    for plot in sampling.PLOTS:
+        png, notes = store.turn_figure(ids, plot, "kjpp", "Alice" if plot == "participant" else None)
+        assert png.startswith(b"\x89PNG") and notes == []
+    D = seen["group_cells_figure"]
+    assert len(D["T"]) == 12 and D["order"] == ["Alice", "Bob"] and D["stopped"] == {}
+    assert D["status"][("Alice", 5)] == "completed"
+    for r in D["T"].itertuples():                               # every trial: the script's trajectory() of its file
+        path = next(root.rglob(f"{r.participant_id}_level_{r.level_nr:03d}_*_run_{r.trial_run_counter:04d}_*.json"))
+        assert len(D["traj"][r.Index]["checks"]) == len(S.trajectory(path)["checks"]) == r.trial_run_counter % 3 + 1
+        assert r.slot == (r.object_type_nr, r.cong_key, r.object_id_order_by_type)
+    # Filters as in the explorer; cached; a changed file draws again.
+    store.turn_figure(ids, "matrix", "kjpp", filters={"levels": [5]})
+    assert set(seen["group_matrix_figure"]["T"].level_nr) == {5}
+    seen.clear()
+    store.turn_figure(ids, "cells", "kjpp")
+    assert seen == {}, "cached"
+    trial = next(root.rglob("Bob_level_000_*_run_0001_*.json"))
+    trial.write_text(json.dumps({**json.loads(trial.read_text()), "note": "changed"}))
+    store.catalog()                                             # the explorer's Refresh
+    store.turn_figure(ids, "cells", "kjpp")
+    assert "group_cells_figure" in seen, "drawn again after a change"
+    real_trajectory = S.trajectory
+    monkeypatch.setattr(S, "trajectory", lambda path: real_trajectory(path) if "run_0001" not in str(path) else {}["frames"])
+    png, notes = store.turn_figure(ids, "matrix", "other name")
+    assert png.startswith(b"\x89PNG") and len(seen["group_matrix_figure"]["T"]) == 10
+    assert len(notes) == 2 and all("trial 1: not drawn" in n for n in notes)
+    with pytest.raises(ValueError, match="participant"):
+        store.turn_figure(ids, "participant", "kjpp", "Nobody")
+
+
 def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
     from importlib import import_module
     from fastapi.testclient import TestClient
@@ -157,6 +207,7 @@ def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
         client.cookies.set("auth", server._signer.dumps({"role": "player"}))
         assert client.get("/admin/analysis/catalog").status_code == 403
         assert client.post("/admin/analysis/data", json={"sessions": []}).status_code == 403
+        assert client.post("/admin/analysis/turn_figure", json={"sessions": [], "plot": "cells"}).status_code == 403
         client.cookies.set("auth", server._signer.dumps({"role": "admin"}))
         session_id = client.get("/admin/analysis/catalog").json()["sessions"][0]["id"]
         assert len(client.post("/admin/analysis/data", json={"sessions": [session_id]}).json()["rows"]) == 4
@@ -165,8 +216,57 @@ def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
         assert client.post("/admin/analysis/data", content="{").status_code == 400
         tables = zipfile.ZipFile(io.BytesIO(client.post("/admin/analysis/tables", json={"sessions": [session_id]}).content))
         assert sorted(tables.namelist()) == ["positions.csv", "trials.csv"]
+        figure = client.post("/admin/analysis/turn_figure", json={"sessions": [session_id], "plot": "cells", "name": "kjpp"})
+        assert figure.status_code == 200 and figure.content.startswith(b"\x89PNG") and json.loads(figure.headers["x-figure-notes"]) == []
+        for body in [{"sessions": [session_id], "plot": "bad"}, {"sessions": [session_id], "plot": "cells", "levels": ["1"]},
+                     {"sessions": [session_id], "plot": "cells", "kind": "x"}]:
+            assert client.post("/admin/analysis/turn_figure", json=body).status_code == 400
+        assert client.post("/admin/analysis/turn_figure", json={"sessions": [session_id], "plot": "participant", "participant": "Nobody"}).status_code == 400
         assert ".explorer" not in client.get("/admin/list").json()["dirs"]
         plain = zipfile.ZipFile(io.BytesIO(client.get("/admin/zip").content)).namelist()
         assert not any(".explorer" in name or name.startswith("out_rebuilt/") for name in plain)
         parsed = zipfile.ZipFile(io.BytesIO(client.get("/admin/zip?path=2026-11-16&parsed=1").content)).namelist()
         assert "out_rebuilt/trials.csv" in parsed and "out_rebuilt/positions.csv" in parsed
+
+
+def test_viewer_reads_but_cannot_change(tmp_path, monkeypatch):
+    from importlib import import_module
+    from fastapi.testclient import TestClient
+    from passlib.hash import argon2
+
+    monkeypatch.setenv("SECRET_KEY", "analysis-test-secret")
+    monkeypatch.setenv("PLAYER_PW_HASH", argon2.hash("player"))
+    monkeypatch.setenv("ADMIN_PW_HASH", argon2.hash("admin"))
+    server = import_module("deploy_backend.log_server")
+    trials = tmp_path / "trials"
+    trials.mkdir()
+    (trials / "trials.jsonl").write_text("{}\n")
+    (trials / "other.jsonl").write_text("{}\n")
+    monkeypatch.setattr(server, "LOG_ROOT", str(tmp_path / "logs"))
+    monkeypatch.setattr(server, "TRIALS_DIR", str(trials))
+    monkeypatch.setattr(server, "VIEWER_PW_HASH", argon2.hash("viewer"))
+    monkeypatch.setattr(server, "analysis_store", AnalysisStore(tmp_path / "logs"))
+    session(tmp_path / "logs", "2026-11-16", "Alice", "Alice_2026-11-16_12-00-00_aaaa", [0], "2026-11-16T12:00:00Z")
+    with TestClient(server.app) as client:
+        login = client.post("/login", data={"password": "viewer"}, follow_redirects=False)
+        assert login.status_code == 303 and login.headers["location"] == "/?admin=1"
+        assert client.get("/me").json() == {"role": "viewer"}
+        session_id = client.get("/admin/analysis/catalog").json()["sessions"][0]["id"]
+        assert len(client.post("/admin/analysis/data", json={"sessions": [session_id]}).json()["rows"]) == 4
+        assert client.post("/admin/analysis/tables", json={"sessions": [session_id]}).status_code == 200
+        assert client.post("/admin/analysis/turn_figure", json={"sessions": [session_id], "plot": "matrix"}).status_code == 200
+        assert client.get("/admin/list").json()["dirs"] == ["2026-11-16"]
+        assert client.get("/admin/zip").status_code == 200
+        assert client.get("/admin/trials/list").status_code == 200
+        assert client.get("/admin/presence?id=v").json() == {"count": 0}
+        refused = [
+            ("/admin/rmdir", {"password": "admin", "path": "2026-11-16"}),
+            ("/admin/trials/save", {"name": "new.jsonl", "content": "{}"}),
+            ("/admin/trials/delete", {"name": "other.jsonl"}),
+            ("/admin/trials/rename", {"old": "other.jsonl", "new": "x.jsonl"}),
+            ("/admin/trials/make_default", {"name": "other.jsonl"}),
+        ]
+        for url, body in refused:
+            assert client.post(url, json=body).status_code == 403, url
+        assert (tmp_path / "logs" / "2026-11-16").is_dir()
+        assert sorted(p.name for p in trials.iterdir()) == ["other.jsonl", "trials.jsonl"]

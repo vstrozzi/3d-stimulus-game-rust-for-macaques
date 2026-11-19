@@ -2,6 +2,7 @@
   'use strict';
   const $ = id => document.getElementById('explorer-' + id);
   let mounted = false, catalog = [], worker, serial = 0, initialized, loadedKey = '', pending = new Map(), generation = 0;
+  let sessionPid = {}, figureUrls = [];   // session → participant of the loaded data; object URLs of the script figures
   let timezone = 'Europe/Zurich', catalogErrors = [], lastFigures = null, lastOptions = null;
   // Comparison groups are kept apart from the filters: a session stays in its group until it is unticked.
   const groups = { a: new Set(), b: new Set() };
@@ -127,14 +128,15 @@
     $('style-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram'].includes(p);
     $('color-wrap').hidden = !['duration', 'chain', 'scatter', 'histogram'].includes(p);
     $('matrix-wrap').hidden = p !== 'mistakes_object';
-    $('swap-wrap').hidden = ['mistakes_object', 'timeline'].includes(p);
+    $('swap-wrap').hidden = ['mistakes_object', 'timeline'].includes(p) || p.startsWith('turn_');
+    $('person-wrap').hidden = p !== 'turn_participant';
   }
   function settings() {
     return { plot: $('plot').value, x: $('x').value || undefined, y: $('y').value || undefined, style: $('style').value, color: $('color').value,
       kind: $('kind').value, congruency: $('congruency').value, completion: $('completion').value,
       levels: selected($('levels')).map(Number), individual: $('individual').checked, matrix: $('matrix').checked,
       compare: $('compare').checked, groupA: [...groups.a], groupB: [...groups.b],
-      nameA: $('name-a').value.trim(), nameB: $('name-b').value.trim(), swap: $('swap').checked, theme };
+      nameA: $('name-a').value.trim(), nameB: $('name-b').value.trim(), swap: $('swap').checked, participant: $('person').value || undefined, theme };
   }
   async function plot() {
     const run = ++generation;
@@ -150,11 +152,14 @@
         if (!response.ok) throw new Error('Could not load data (' + response.status + '). Refresh and try again.');
         const payload = await response.json();
         if (run !== generation) return;
+        sessionPid = payload.sessions || {};
         status('Preparing plot data…');
         const meta = await request({ type: 'load', payload });
         if (run !== generation) return;
         const old = selected($('levels')).filter(v => v !== ''), keep = old.filter(v => meta.levels.includes(Number(v)));
         options($('levels'), meta.levels, keep.length ? keep : undefined);
+        const person = $('person').value;
+        single($('person'), meta.participants.map(p => [p, AdminAnalysis.label(p)]), meta.participants.includes(person) ? person : meta.participants[0]);
         loadedKey = key;
       }
       const o = settings();
@@ -165,6 +170,7 @@
         if (!o.groupA.length || !o.groupB.length) throw new Error('Choose sessions for both comparison groups.');
         if (o.groupA.some(s => o.groupB.includes(s))) throw new Error('A session cannot belong to both comparison groups.');
       }
+      if (o.plot.startsWith('turn_')) { await drawTurns(o, ids, run); return; }
       status('Rendering…');
       const result = await request({ type: 'figure', options: o });
       if (run !== generation) return;
@@ -173,6 +179,54 @@
       showNotes([...catalogErrors.map(e => e.path + ': ' + e.error), ...result.warnings]);
     } catch (error) { status(error.message, true); }
     finally { if (run === generation) $('draw').disabled = false; }
+  }
+  // How the objects were turned: drawn on the server by make_MAIN_sampling_figures.py itself
+  // (deploy_backend/analysis/sampling.py), so the figures are the script's PNGs (300 dpi).
+  const TURN_FILES = { participant: 'MAIN_sampling_participant', cells: 'MAIN_sampling_group_cells', matrix: 'MAIN_sampling_group_matrix' };
+  async function drawTurns(o, ids, run) {
+    const plot = o.plot.slice('turn_'.length), nameOf = g => o['name' + g] || 'Group ' + g;
+    let figures;
+    if (o.compare && plot !== 'participant') figures = [['A', nameOf('A'), o.groupA], ['B', nameOf('B'), o.groupB]];
+    else {
+      const of = sessions => sessions.some(s => sessionPid[s] === o.participant);
+      const g = o.compare && plot === 'participant' ? (of(o.groupA) ? 'A' : of(o.groupB) ? 'B' : '') : '';
+      figures = [['', g ? nameOf(g) : 'Selection', g ? o['group' + g] : ids]];
+    }
+    status('Drawing with make_MAIN_sampling_figures.py (a large selection can take a minute the first time)…');
+    const made = await Promise.all(figures.map(async ([letter, name, sessions]) => {
+      const response = await fetch('/admin/analysis/turn_figure', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessions, plot, name, participant: plot === 'participant' ? o.participant : undefined,
+          levels: o.levels, kind: o.kind, congruency: o.congruency, completion: o.completion }) });
+      if (!response.ok) { const j = await response.json().catch(() => ({})); throw new Error(j.detail || 'Could not draw the figure (' + response.status + ').'); }
+      let notes = [];
+      try { notes = JSON.parse(response.headers.get('X-Figure-Notes') || '[]'); } catch (_) {}
+      return { letter, name, blob: await response.blob(), notes };
+    }));
+    if (run !== generation) return;
+    const file = name => (TURN_FILES[plot] + '_' + (plot === 'participant' ? AdminAnalysis.label(o.participant) : name)).replace(/[^A-Za-z0-9_.-]+/g, '_') + '.png';
+    clearPlots();
+    figureUrls = made.map(m => URL.createObjectURL(m.blob));
+    lastFigures = null; lastOptions = null;                 // the script's figures are white: a theme change does not redraw them
+    made.forEach((m, i) => {
+      const outer = document.createElement('div'); outer.className = 'plot-panel';
+      if (m.letter) { const title = document.createElement('h3'); title.innerHTML = `<b class="panel-letter">${m.letter}</b> `; title.append(m.name); outer.append(title); }
+      const img = new Image(); img.className = 'plot-image'; img.src = figureUrls[i]; img.alt = 'How the objects were turned: ' + m.name;
+      img.title = 'Open full size'; img.onclick = () => window.open(figureUrls[i], '_blank');
+      const tools = document.createElement('div'); tools.className = 'plot-tools';
+      const save = document.createElement('a'); save.href = figureUrls[i]; save.download = file(m.name); save.textContent = 'Download PNG (300 dpi)'; save.className = 'button-link';
+      const full = document.createElement('button'); full.textContent = 'Open full size'; full.onclick = img.onclick;
+      tools.append(save, full);
+      outer.append(img, tools); $('plots').append(outer);
+    });
+    $('export-settings').hidden = false;
+    status(`Drawn by make_MAIN_sampling_figures.py · ${new Set(figures.flatMap(f => f[2])).size} sessions.`);
+    showNotes([...catalogErrors.map(e => e.path + ': ' + e.error), ...made.flatMap(m => m.notes)]);
+  }
+  function clearPlots() {
+    if (window.Plotly) for (const node of $('plots').querySelectorAll('.plot')) Plotly.purge(node);
+    for (const url of figureUrls) URL.revokeObjectURL(url);
+    figureUrls = [];
+    $('plots').replaceChildren(); $('plots').classList.remove('compare');
   }
   function showNotes(notes) {
     $('notes-text').textContent = [...new Set(notes)].join('\n'); $('notes').hidden = !notes.length;
@@ -187,7 +241,16 @@
       if (sizes[t.meta]) { markers.push(i); markerSizes.push(+sizes[t.meta].toFixed(1)); }
       if (t.meta === 'num') { texts.push(i); textSizes.push(+Math.max(4, dot * 0.58).toFixed(1)); opacity.push(dot >= 9 ? 1 : 0); }
     });
+    const tl = [], tlw = [], td = [], tds = [], tn = [], tns = [], tno = [];
+    plot.data.forEach((t, i) => {
+      if (t.meta === 'tline') { tl.push(i); tlw.push(+Math.max(0.25, Math.min(4, px * t.fitw)).toFixed(2)); }
+      if (t.meta === 'tdot') { td.push(i); tds.push(+Math.max(1, Math.min(60, px * t.fitw)).toFixed(1)); }
+      if (t.meta === 'tnum') { tn.push(i); const size = px * t.fitw; tns.push(+Math.max(4, Math.min(14, size)).toFixed(1)); tno.push(size >= 5 ? 1 : 0); }
+    });
     const jobs = [];
+    if (tl.length && tl.some((i, k) => plot.data[i].line.width !== tlw[k])) jobs.push(Plotly.restyle(plot, { 'line.width': tlw }, tl));
+    if (td.length && td.some((i, k) => plot.data[i].marker.size !== tds[k])) jobs.push(Plotly.restyle(plot, { 'marker.size': tds }, td));
+    if (tn.length && tn.some((i, k) => plot.data[i].textfont.size !== tns[k] || plot.data[i].opacity !== tno[k])) jobs.push(Plotly.restyle(plot, { 'textfont.size': tns, opacity: tno }, tn));
     if (markers.length && markers.some((i, k) => plot.data[i].marker.size !== markerSizes[k])) jobs.push(Plotly.restyle(plot, { 'marker.size': markerSizes }, markers));
     if (texts.length && texts.some((i, k) => plot.data[i].textfont.size !== textSizes[k] || plot.data[i].opacity !== opacity[k])) jobs.push(Plotly.restyle(plot, { 'textfont.size': textSizes, opacity }, texts));
     return Promise.all(jobs);
@@ -195,8 +258,7 @@
   async function render(result, o) {
     lastFigures = result; lastOptions = o;
     const c = AdminAnalysis.palette(o.theme);
-    for (const node of $('plots').querySelectorAll('.plot')) Plotly.purge(node);
-    $('plots').replaceChildren(); $('plots').classList.toggle('compare', !!o.compare && !result.panels.some(p => p.stacked));
+    clearPlots(); $('plots').classList.toggle('compare', !!o.compare && !result.panels.some(p => p.stacked));
     for (const panel of result.panels) {
       const outer = document.createElement('div'); outer.className = 'plot-panel';
       const title = document.createElement('h3');
@@ -311,6 +373,7 @@
         <label class="wide">Plot<select id="explorer-plot"></select></label><label>X axis<select id="explorer-x"></select></label><label>Y axis<select id="explorer-y"></select></label>
         <label id="explorer-style-wrap">Style<select id="explorer-style"></select></label>
         <label id="explorer-color-wrap">Colour by<select id="explorer-color"><option value="participant_id">Participant</option><option value="level_nr">Level</option><option value="object_type">Object type</option><option value="features_congruent">Congruency</option><option value="first">First-check outcome</option></select></label>
+        <label id="explorer-person-wrap" class="wide">Participant<select id="explorer-person"><option value="">Press Plot to load the sessions</option></select></label>
       </div>
       <details><summary>Filter by level, object type, congruency or level status</summary><div class="explorer-controls">
         <label>Levels<select id="explorer-levels" multiple size="3" aria-label="Levels"><option value="" disabled>Load sessions first</option></select><button data-all="levels" type="button">All levels</button></label>

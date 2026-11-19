@@ -106,8 +106,11 @@ assert.deepEqual(f.panels[0].yaxis.range, f.panels[1].yaxis.range);
 assert.equal(f.panels[0].layout.yaxis2.range[1], f.panels[1].layout.yaxis2.range[1]);
 assert.equal(f.panels[0].layout.showlegend, false, 'one legend, right of panel B');
 
+// How the objects were turned: drawn on the server by make_MAIN_sampling_figures.py, not here.
+assert.throws(() => A.figure(d, { ...base, plot: 'turn_cells' }), /Unknown plot/);
+
 // Every plot draws, exports rows and survives an empty selection.
-for (const plot of Object.keys(A.PLOTS)) {
+for (const plot of Object.keys(A.PLOTS).filter(p => !p.startsWith('turn_'))) {
   for (const o of [{ ...base, plot }, { ...base, plot, theme: 'dark', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s'] }]) {
     const fig = A.figure(d, o);
     for (const panel of fig.panels) {

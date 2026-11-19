@@ -5,9 +5,12 @@ needs) behind a single password gate, and receives one POST per trial that it
 writes to disk in the exact same folder format `controller.py` produces — so
 `tools/verify_trial_logs.py` reads it with no changes.
 
-Two passwords (hashed, in env) map to two roles:
+Passwords (hashed, in env) map to roles:
   - player → name / instructions / play flow + POST /log
   - admin  → the normal landing (editor) + a file browser to download data
+  - viewer → optional (VIEWER_PW_HASH): the admin landing, read-only. It can
+             browse, download and plot data, but cannot delete data or upload,
+             select, rename, delete or promote trials.
 
 Run (local dev — http://localhost is a secure context, no TLS needed):
     pip install fastapi uvicorn "passlib[argon2]" itsdangerous
@@ -19,6 +22,7 @@ Run (local dev — http://localhost is a secure context, no TLS needed):
 Production puts Caddy in front for HTTPS (see Caddyfile).
 """
 import io
+import json
 import os
 import re
 import shutil
@@ -31,6 +35,7 @@ from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from passlib.hash import argon2
+from deploy_backend.analysis import sampling
 from deploy_backend.analysis_store import AnalysisStore
 
 # ── Config (env) ────────────────────────────────────────────────────────────
@@ -48,6 +53,7 @@ TRIALS_DIR = os.path.realpath(os.path.join(REPO_ROOT, "trials_config", "trials")
 SECRET_KEY = os.environ.get("SECRET_KEY", "")
 PLAYER_PW_HASH = os.environ.get("PLAYER_PW_HASH", "")
 ADMIN_PW_HASH = os.environ.get("ADMIN_PW_HASH", "")
+VIEWER_PW_HASH = os.environ.get("VIEWER_PW_HASH", "")  # optional read-only admin
 COOKIE_NAME = "auth"
 COOKIE_MAX_AGE = 24 * 3600  # seconds
 # Brute-force throttle: at most LOGIN_MAX attempts per IP per LOGIN_WINDOW s.
@@ -63,6 +69,8 @@ _login_hits = defaultdict(deque)  # ip -> deque[timestamp]
 
 # Paths reachable without a valid cookie. Everything else is gated.
 _PUBLIC_PATHS = {"/login", "/favicon.ico"}
+# The only POSTs under /admin a viewer may make: they read data, never change it.
+_VIEWER_POSTS = {"/admin/analysis/data", "/admin/analysis/turn_figure", "/admin/analysis/tables"}
 # Validates both the per-trial relpath and admin browser paths.
 _SAFE_REL = re.compile(r"^[A-Za-z0-9_\-/. ]*$")
 
@@ -83,6 +91,14 @@ def _role(request: Request):
     return data.get("role")
 
 
+def _admin_allowed(role, method, path):
+    """Admins reach every /admin route; viewers only those that read (GETs and
+    the analysis POSTs), so deleting data or changing trials is refused."""
+    if role == "admin":
+        return True
+    return role == "viewer" and (method in ("GET", "HEAD") or (method == "POST" and path in _VIEWER_POSTS))
+
+
 @app.middleware("http")
 async def gate(request: Request, call_next):
     """Cookie gate on every path + COOP/COEP on every response. This is what
@@ -95,7 +111,7 @@ async def gate(request: Request, call_next):
             resp = RedirectResponse("/login")
         else:
             resp = JSONResponse({"detail": "unauthorized"}, status_code=401)
-    elif path.startswith("/admin") and role != "admin":
+    elif path.startswith("/admin") and not _admin_allowed(role, request.method, path):
         resp = JSONResponse({"detail": "forbidden"}, status_code=403)
     else:
         resp = await call_next(request)
@@ -124,6 +140,8 @@ def login(request: Request, password: str = Form(...)):
         role, dest = "player", "/"
     elif argon2.verify(password, ADMIN_PW_HASH):
         role, dest = "admin", "/?admin=1"
+    elif VIEWER_PW_HASH and argon2.verify(password, VIEWER_PW_HASH):
+        role, dest = "viewer", "/?admin=1"
     else:
         raise HTTPException(401, "Wrong password.")
 
@@ -210,11 +228,15 @@ def analysis_catalog():
     return analysis_store.catalog()
 
 
-async def _session_selection(request: Request):
+async def _json_body(request: Request):
     try:
-        body = await request.json()
+        return await request.json()
     except ValueError:
         raise HTTPException(400, "Invalid JSON")
+
+
+async def _session_selection(request: Request, body=None):
+    body = await _json_body(request) if body is None else body
     sessions = body.get("sessions") if isinstance(body, dict) else None
     if (not isinstance(sessions, list) or len(sessions) > 5000
             or any(not isinstance(s, str) or len(s) > 1024 for s in sessions)):
@@ -229,6 +251,32 @@ async def analysis_data(request: Request):
     from starlette.concurrency import run_in_threadpool
     sessions = await _session_selection(request)
     return await run_in_threadpool(analysis_store.data, sessions)
+
+
+@app.post("/admin/analysis/turn_figure")
+async def analysis_turn_figure(request: Request):
+    """One figure of make_MAIN_sampling_figures.py (how the objects were turned), drawn by the
+    script itself as a 300 dpi PNG. Notes on trials it could not draw are in X-Figure-Notes."""
+    from starlette.concurrency import run_in_threadpool
+    body = await _json_body(request)
+    sessions = await _session_selection(request, body)
+    plot, name, participant = body.get("plot"), body.get("name", ""), body.get("participant")
+    levels = body.get("levels") or []
+    filters = {"levels": levels, "kind": body.get("kind") or "", "congruency": body.get("congruency") or "",
+               "completion": body.get("completion") or ""}
+    if (plot not in sampling.PLOTS or not isinstance(name, str) or len(name) > 120
+            or (participant is not None and (not isinstance(participant, str) or len(participant) > 300))
+            or not isinstance(levels, list) or any(not isinstance(v, int) or isinstance(v, bool) for v in levels)
+            or filters["kind"] not in ("", "corner", "face")
+            or filters["congruency"] not in ("", "congruent", "incongruent", "no rule")
+            or filters["completion"] not in ("", "complete", "incomplete")):
+        raise HTTPException(400, "Invalid figure request")
+    try:
+        png, notes = await run_in_threadpool(analysis_store.turn_figure, sessions, plot, name, participant, filters)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return Response(png, media_type="image/png", headers={
+        "Cache-Control": "no-store", "X-Figure-Notes": json.dumps(notes[:200], ensure_ascii=True)})
 
 
 def _parsed_tables_zip(zf, sessions, prefix=""):
@@ -320,9 +368,9 @@ PRESENCE_TTL = 15
 
 
 @app.get("/admin/presence")
-def admin_presence(id: str = ""):
+def admin_presence(request: Request, id: str = ""):
     now = time.time()
-    if id:
+    if id and _role(request) == "admin":  # viewers cannot edit, so they are not counted
         _admin_presence[id] = now
     for k in [k for k, t in _admin_presence.items() if now - t > PRESENCE_TTL]:
         _admin_presence.pop(k, None)

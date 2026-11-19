@@ -133,9 +133,14 @@ Open **Data Explorer** on the admin landing page. Select participants and dates
 figures are drawn as `make_MAIN_figures.py` draws them: **Mistakes per level**,
 **Mistakes per object + first checks** and the **Object timeline**. Further views:
 trials per level, first check on first sighting, duration, chain progression,
-custom scatter, distributions and mean heart rate. **Compare two groups** shows
-panels A and B with their own names (e.g. pilot_Gymer and kjpp) on a shared y
-axis. The page is white like the figures; **Dark page** switches it.
+custom scatter, distributions and mean heart rate. **How the objects were turned**
+shows the figures of `make_MAIN_sampling_figures.py`, drawn on the server by the
+script itself (300 dpi PNG; click to open full size, **Download PNG** saves it):
+one participant (every trial as a spiral, rotated so the reward points up), the
+group as object × round cells, and participants × levels. The name in their title
+is the group name in compare mode, otherwise "Selection". **Compare two groups** shows panels A and B with their
+own names (e.g. pilot_Gymer and kjpp) on a shared y axis; tick sessions into each
+group (they stay in their group through any filter change until unticked). The page is white like the figures; **Dark page** switches it.
 
 All numbers come from the analysis team's scripts in `deploy_backend/analysis/`:
 
@@ -151,14 +156,22 @@ All numbers come from the analysis team's scripts in `deploy_backend/analysis/`:
 - Congruency is the script's `features_congruent` (colour rule vs. shape rule);
   nothing has to be labelled by hand.
 - A participant with several sessions appears once per session (`name #1`, `#2`).
+- `make_MAIN_figures.py` and `make_MAIN_sampling_figures.py` are kept unchanged.
+  `sampling.py` replaces only the sampling script's `load()` (which reads
+  `<project>/out_rebuilt` and `<project>/data`): it gives the script's drawing
+  functions the table above, the level status and the script's `trajectory()` of
+  every trial file. The PNGs are cached in the same database (the newest 40)
+  until a file of those sessions changes. To update the figures, replace the
+  script file. The Docker image installs matplotlib and Liberation Sans (Arial's
+  metrics; the script asks for Arial).
 
 **Download parsed tables** (explorer) and the **Include parsed tables**
 checkbox in the data browser's folder download give `trials.csv` and
 `positions.csv` exactly as `build_dataset.py` writes them (ids are relative to
 the sessions included, as when running the script on one project folder).
 
-`/admin/analysis/catalog`, `/admin/analysis/data` and `/admin/analysis/tables`
-require the admin role. The server needs numpy and pandas. The only HR plot is
+`/admin/analysis/catalog`, `/admin/analysis/data`, `/admin/analysis/turn_figure` and
+`/admin/analysis/tables` require the admin or viewer role. The server needs numpy, pandas and matplotlib. The only HR plot is
 mean heart rate per trial or level: valid readings within recorded trial
 boundaries (file membership for older logs; chest-strap readings without RR are
 dropped). No RR, HRV or waveform metrics; raw ECG/optical samples are never
@@ -247,7 +260,11 @@ The stack:
   (FastAPI is just a library; uvicorn is the process listening on a port.)
 * **Caddy** — reverse proxy (server of servers)in front, terminates **HTTPS** (auto Let's Encrypt
   cert) and provides individual http request to uvicor per user. HTTPS is mandatory because `SharedArrayBuffer` needs a secure context.
-* **passlib[argon2]** — hashes the two passwords (player / admin); only hashes are stored.
+* **passlib[argon2]** — hashes the passwords (player / admin / optional viewer); only hashes are stored.
+  The **viewer** password (`VIEWER_PW_HASH`, leave empty to disable) opens the admin
+  landing read-only: Play, the trial editor, the data browser, downloads and the Data
+  Explorer work, but deleting data and uploading, selecting, renaming, deleting or
+  promoting trials are hidden and refused by the server (403).
 * **itsdangerous** — signs the auth cookie so it can't be forged (needs `SECRET_KEY`).
 
 Auth is a single cookie gate: log in once → signed `{role}` cookie → every path is
@@ -287,6 +304,7 @@ cp .env.example .env
 docker compose run --rm app python -c "import secrets;print(secrets.token_hex(32))"                                   # → SECRET_KEY (no '$', paste as-is)
 docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOUR_PLAYER_PW').replace('\$','\$\$'))"   # → PLAYER_PW_HASH
 docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOUR_ADMIN_PW').replace('\$','\$\$'))"    # → ADMIN_PW_HASH
+docker compose run --rm app python -c "from passlib.hash import argon2;print(argon2.hash('YOUR_VIEWER_PW').replace('\$','\$\$'))"   # → VIEWER_PW_HASH (optional, read-only admin)
 nano .env && chmod 600 .env
 
 # 4. domain for HTTPS

@@ -12,7 +12,8 @@ only feeds it server sessions and reuses its functions:
   are mapped onto shared ones in first-seen order (identical to one shared
   registry); the ranked ids are then filled by the script's `add_ranked_ids()`.
 - figure_table(): the data preparation of `make_MAIN_figures.py` (`add_rounds()`
-  and `load()`), without matplotlib. The browser draws the figures from it.
+  and `load()`), without matplotlib. The browser draws most figures from it;
+  sampling.py hands it to `make_MAIN_sampling_figures.py`, which draws on the server.
 """
 import csv
 import io
@@ -208,3 +209,19 @@ def _plain(v):
 
 def dumps(result):
     return json.dumps(result, separators=(",", ":"), allow_nan=False)
+
+
+# ── make_MAIN_sampling_figures.py: which raw file holds each trial ──────────────
+def session_trial_paths(dirs):
+    """{trial_run_counter: trial JSON path} for one session, matched to the level summaries as
+    build_session() and make_MAIN_sampling_figures.file_index() match them."""
+    dirs = [str(d) for d in dirs]
+    summaries = _multi(bd.find_summaries, dirs)(None)
+    by_name, by_run = _multi(bd.build_file_index, dirs)(None)
+    out = {}
+    for s in summaries:
+        for run in s["trials_runs"]:
+            path = by_name.get(run.get("file")) or by_run.get(run.get("trial_run_counter"))
+            if path:
+                out[run.get("trial_run_counter")] = path
+    return out

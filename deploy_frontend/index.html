@@ -211,7 +211,7 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.8);
   }
-  #browse-modal[hidden], #trials-modal[hidden] { display: none !important; }
+  #browse-modal[hidden], #trials-modal[hidden], .action-btn[hidden] { display: none !important; }
   #pw-modal {
     display: flex; position: fixed; inset: 0; z-index: 140;
     align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.85);
@@ -600,7 +600,6 @@
         <li data-i18n="r3">Play on your main monitor — not on an external / attached display</li>
         <li data-i18n="r4">Close all other apps and browser tabs</li>
         <li data-i18n="r5">The session lasts at most 20 minutes (it may end sooner)</li>
-        <li data-i18n="r5b">The game can be solved fully in less than 20 minutes. Think about a strategy</li>
         <li data-i18n="r6">Between levels the screen goes black and a clock at the top shows the time left in the session</li>
         <li data-i18n="r7">Your data is saved automatically after every trial</li>
       </ul>
@@ -844,7 +843,7 @@
   // is HttpOnly, so JS can't read it directly — ask /me.
   fetch('/me').then(r => r.json()).then(({ role }) => {
     if (returnFromTutorial && showInstructions()) return;
-    if (role === 'admin') { adminFlow.hidden = false; setupAdmin(); }
+    if (role === 'admin' || role === 'viewer') { adminFlow.hidden = false; setupAdmin(role === 'viewer'); }
     else { playerFlow.hidden = false; }
   }).catch(() => { playerFlow.hidden = false; });
 
@@ -1381,7 +1380,6 @@
     r3: 'Spielen Sie auf Ihrem Hauptbildschirm \u2014 nicht auf einem externen Monitor',
     r4: 'Schlie\u00dfen Sie alle anderen Apps und Browser-Tabs',
     r5: 'Die Sitzung dauert h\u00f6chstens 20 Minuten (sie kann fr\u00fcher enden)',
-    r5b: 'Das Spiel l\u00e4sst sich in weniger als 20 Minuten vollst\u00e4ndig l\u00f6sen. \u00dcberlegen Sie sich eine Strategie',
     r6: 'Zwischen den Leveln wird der Bildschirm schwarz und eine Uhr oben zeigt die verbleibende Zeit der Sitzung',
     r7: 'Ihre Daten werden nach jedem Durchgang automatisch gespeichert',
 
@@ -1553,7 +1551,11 @@
   applyLang();
 
   // ── Admin landing ────────────────────────────────────────────────────────
-  function setupAdmin() {
+  // Viewer login: the same landing, read-only. The server refuses every change
+  // anyway; the page only hides the controls that would make one.
+  let adminReadOnly = false;
+  function setupAdmin(readOnly = false) {
+    adminReadOnly = readOnly;
     const fileInput = document.getElementById('file-input');
     const loadedInfo = document.getElementById('loaded-info');
     // Name field, for testing a play session as admin. Shares session_name.
@@ -1564,6 +1566,15 @@
     // How many admins are connected right now (heartbeat). Warns about
     // concurrent edits, which can collide on important settings.
     const presenceEl = document.getElementById('admin-presence');
+    if (readOnly) {
+      // No trial choice: play the server default, never a stale selection.
+      sessionStorage.removeItem('custom_trials_jsonl');
+      sessionStorage.removeItem('custom_trials_name');
+      for (const id of ['btn-load', 'btn-select']) document.getElementById(id).hidden = true;
+      document.getElementById('btn-edit').querySelector('.action-desc').textContent =
+        'Open the trial editor with the default trials (files are saved to your computer only)';
+      presenceEl.textContent = 'Read-only access';
+    }
     const clientId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
     async function pollPresence() {
       try {
@@ -1573,8 +1584,10 @@
         presenceEl.style.color = count > 1 ? '#e6a64d' : 'rgba(255,255,255,0.4)';
       } catch (_) {}
     }
-    pollPresence();
-    setInterval(pollPresence, 5000);
+    if (!readOnly) {
+      pollPresence();
+      setInterval(pollPresence, 5000);
+    }
     document.getElementById('btn-load').addEventListener('click', () => fileInput.click());
 
     // Admin Play uses the same required tutorial and instructions as players.
@@ -1783,7 +1796,9 @@
         const ok = await adminPost('/admin/rmdir', { password: pw, path: full });
         if (ok) renderBrowse(path); else alert('Deletion failed — wrong password?');
       };
-      row.appendChild(a); row.appendChild(trash); el.appendChild(row);
+      row.appendChild(a);
+      if (!adminReadOnly) row.appendChild(trash);
+      el.appendChild(row);
     }
     for (const f of data.files) {
       const row = document.createElement('div'); row.className = 'row';

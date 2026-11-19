@@ -236,6 +236,27 @@
   function roundedRect(x0, y0, x1, y1, r) {
     return `M${x0 + r},${y0} L${x1 - r},${y0} Q${x1},${y0} ${x1},${y0 + r} L${x1},${y1 - r} Q${x1},${y1} ${x1 - r},${y1} L${x0 + r},${y1} Q${x0},${y1} ${x0},${y1 - r} L${x0},${y0 + r} Q${x0},${y0} ${x0 + r},${y0} Z`;
   }
+  /** Participant key (timeline, turning cells): each participant's fixed spot inside a cell, left edge at kx0, top at ky1.
+   * Long names are shortened (start…end, full id on hover). Returns the key's width. */
+  function participantKey({ order, spot, stopped, g, kx0, ky1, c, traces, shapes, annotations, title = 'Participant<br>position in a cell' }) {
+    // The key's columns and rows grow to fit the names (pilot names on two lines).
+    const keyLines = new Map(order.map(p => [p, short(p).startsWith('pilot ') ? short(p).split(' ') : [label(p)]]));
+    const longest = Math.max(3, ...[...keyLines.values()].flat().map(l => l.length)), lines = Math.max(1, ...[...keyLines.values()].map(l => l.length));
+    const cw = Math.max(1, Math.min(3.4, 0.18 * longest)), kh = Math.max(1, 0.3 * (lines + (stopped.size ? 1 : 0)));
+    const ky0 = ky1 - g * kh;
+    shapes.push({ type: 'path', path: roundedRect(kx0, ky0, kx0 + g * cw, ky1, 0.25), fillcolor: c.TILE, line: { width: 0 }, layer: 'below' });
+    const keyX = p => kx0 + (spot.get(p)[0] + 0.5) * cw, keyY = p => ky0 + (spot.get(p)[1] + 0.5) * kh;
+    const keyText = p => keyLines.get(p).map(escaped).join('<br>') + (stopped.has(p) ? `<br><span style="font-size:8px">stop L${stopped.get(p).level_nr}</span>` : '');
+    const done = order.filter(p => !stopped.has(p)), stop = order.filter(p => stopped.has(p));
+    const keySize = lines > 2 || longest > 12 ? 9 : 10;
+    if (done.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: done.map(keyX), y: done.map(keyY),
+      text: done.map(p => `<b>${keyText(p)}</b>`), textfont: { size: keySize, color: c.INK } });
+    if (stop.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: stop.map(keyX), y: stop.map(keyY),
+      text: stop.map(keyText), textfont: { size: keySize, color: c.MUTED } });
+    annotations.push({ x: kx0 + g * cw / 2, y: ky1 + 0.1, yanchor: 'bottom', showarrow: false, text: title, font: { size: 10, color: c.INK } },
+      { x: kx0 + g * cw / 2, y: ky0 - 0.15, yanchor: 'top', showarrow: false, text: 'furthest progress bottom left<br>bold = finished all levels<br>grey = stopped by time limit', font: { size: 9, color: c.MUTED } });
+    return g * cw;
+  }
   function timeline(d, o) {
     const c = palette(o.theme), T = d.T, traces = [], shapes = [], annotations = [];
     const { slots, x, bounds, xmax } = timelineLayout(T);
@@ -287,23 +308,8 @@
       annotations.push({ x: (a + b) / 2, y: CAP + 1.85, yanchor: 'bottom', showarrow: false, text: `<b>Level ${L}</b>`, font: { size: 12, color: c.INK } });
     }
     // Key: position of each participant inside a cell, to the right of the levels.
-    // Long session names wrap at '_' (at most 3 lines); the key's columns and rows grow to fit them.
-    const keyLines = new Map(order.map(p => [p, short(p).startsWith('pilot ') ? short(p).split(' ') : [label(p)]]));
-    const longest = Math.max(3, ...[...keyLines.values()].flat().map(l => l.length)), lines = Math.max(1, ...[...keyLines.values()].map(l => l.length));
-    const cw = Math.max(1, Math.min(3.4, 0.18 * longest)), kh = Math.max(1, 0.3 * (lines + (stopped.size ? 1 : 0)));
-    const kx0 = xmax + 0.9, ky1 = CAP + 1.5, ky0 = ky1 - g * kh;
-    shapes.push({ type: 'path', path: roundedRect(kx0, ky0, kx0 + g * cw, ky1, 0.25), fillcolor: c.TILE, line: { width: 0 }, layer: 'below' });
-    const keyX = p => kx0 + (spot.get(p)[0] + 0.5) * cw, keyY = p => ky0 + (spot.get(p)[1] + 0.5) * kh;
-    const keyText = p => keyLines.get(p).map(escaped).join('<br>') + (stopped.has(p) ? `<br><span style="font-size:8px">stop L${stopped.get(p).level_nr}</span>` : '');
-    const done = order.filter(p => !stopped.has(p)), stop = order.filter(p => stopped.has(p));
-    const keySize = lines > 2 || longest > 12 ? 9 : 10;
-    if (done.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: done.map(keyX), y: done.map(keyY),
-      text: done.map(p => `<b>${keyText(p)}</b>`), textfont: { size: keySize, color: c.INK } });
-    if (stop.length) traces.push({ type: 'scatter', mode: 'text', showlegend: false, hoverinfo: 'skip', x: stop.map(keyX), y: stop.map(keyY),
-      text: stop.map(keyText), textfont: { size: keySize, color: c.MUTED } });
-    annotations.push({ x: kx0 + g * cw / 2, y: ky1 + 0.1, yanchor: 'bottom', showarrow: false, text: 'Participant<br>position in a cell', font: { size: 10, color: c.INK } },
-      { x: kx0 + g * cw / 2, y: ky0 - 0.15, yanchor: 'top', showarrow: false, text: 'furthest progress bottom left<br>bold = finished all levels<br>grey = stopped by time limit', font: { size: 9, color: c.MUTED } });
-    const xr = [-0.2, kx0 + g * cw + 0.3], yr = [0.45, CAP + 2.6];
+    const kx0 = xmax + 0.9, kw = participantKey({ order, spot, stopped, g, kx0, ky1: CAP + 1.5, c, traces, shapes, annotations });
+    const xr = [-0.2, kx0 + kw + 0.3], yr = [0.45, CAP + 2.6];
     return { traces, rows: T.map(({ slot, slotKey, id, ...t }) => t), x: '', y: 'Round', noSwap: true, shapes,
       layout: { annotations, legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: 1.0, yanchor: 'bottom' } },
       fit: { step }, aspect: (yr[1] - yr[0]) / (xr[1] - xr[0]), margin: { t: 40, l: 55, r: 10, b: 75 },
@@ -321,7 +327,8 @@
     participant_id: 'Participant', object_type: 'Object type', features_congruent: 'Congruency', first: 'First-check outcome' };
   const PLOTS = { mistakes_level: 'Mistakes per level', mistakes_object: 'Mistakes per object + first checks', timeline: 'Object timeline',
     trials: 'Trials per level', first_choice: 'First check on first sighting, per level', duration: 'Trial duration', chain: 'Chain progression',
-    scatter: 'Custom scatter / line', histogram: 'Distribution / histogram', hr_summary: 'Mean heart rate' };
+    scatter: 'Custom scatter / line', histogram: 'Distribution / histogram', hr_summary: 'Mean heart rate',
+    turn_participant: 'How the objects were turned: one participant', turn_cells: 'How the objects were turned: group (object × round cells)', turn_matrix: 'How the objects were turned: participants × levels' };
   function colourOf(d, o) {
     const by = o.color || 'participant_id';
     if (by === 'participant_id') { const i = new Map(d.participants.map((p, k) => [p, k])); return t => ({ key: t.participant_id, name: label(t.participant_id), color: COLORS[i.get(t.participant_id) % 8], dash: i.get(t.participant_id) < 8 ? 'solid' : DASH, symbol: i.get(t.participant_id) < 8 ? 'circle' : 'diamond' }); }
@@ -421,11 +428,12 @@
         case 'scatter': return scatter(g, o);
         case 'histogram': return distribution(g, o);
         case 'hr_summary': return hrSummary(g, o);
+        // turn_*: drawn on the server by make_MAIN_sampling_figures.py (admin_explorer.js drawTurns)
         default: throw new Error('Unknown plot');
       }
     };
-    const panels = groups.map(g => ({ ...make(g.data), letter: g.letter, title: `${escaped(g.name)}  (n = ${g.data.participants.length})`,
-      names: Object.fromEntries(g.data.participants.map(p => [label(p), p])) }));   // shown name → full id, for hover
+    const panels = groups.map(g => { const made = make(g.data); return { ...made, letter: g.letter, title: made.title || `${escaped(g.name)}  (n = ${g.data.participants.length})`,
+      names: Object.fromEntries(g.data.participants.map(p => [label(p), p])) }; });   // shown name → full id, for hover
     if (o.compare && o.plot === 'mistakes_object') {                     // one legend, right of panel B
       panels[0].layout = { ...panels[0].layout, showlegend: false };
       panels[0].margin = { ...panels[0].margin, r: 20 };

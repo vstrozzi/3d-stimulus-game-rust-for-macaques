@@ -476,9 +476,11 @@
     border: 1px solid rgba(255,255,255,.12);
     box-shadow: inset 0 0 12px rgba(0,0,0,.18);
   }
+  /* Faces go round as in the game: facing D0, D1 is on the left and D2 on the
+     right (spawn_pyramid() steps the corners by +120° in Bevy's x→z sense). */
   .preview-prism-face:nth-child(1) { transform: rotateY(0deg) translateZ(31px); }
-  .preview-prism-face:nth-child(2) { transform: rotateY(120deg) translateZ(31px); filter: brightness(.84); }
-  .preview-prism-face:nth-child(3) { transform: rotateY(240deg) translateZ(31px); filter: brightness(.68); }
+  .preview-prism-face:nth-child(2) { transform: rotateY(-120deg) translateZ(31px); filter: brightness(.84); }
+  .preview-prism-face:nth-child(3) { transform: rotateY(-240deg) translateZ(31px); filter: brightness(.68); }
   .preview-top-lid {
     position: absolute;
     left: 50%; top: -47px;
@@ -1083,30 +1085,30 @@ function pushFace0ToShared(sourceCi) {
   const srcObj = lv.objects[sourceCi];
   for (let i = 0; i < lv.objects.length; i++) {
     if (i === sourceCi) continue;
-    const isOtherCustom = lv.objects[i].target_door !== EDITOR_TYPE1_DOOR && lv.objects[i].target_door !== EDITOR_TYPE2_DOOR;
-    if (!isOtherCustom) {
+    if (lv.objects[i]._type !== 'custom') {
       copyFace(srcObj, lv.objects[i], 0, 0);
     }
   }
 }
 
 /**
- * Maps the 6 hexagonal doors to a triangular footprint:
- * Door 5: Top Vertex (Over Face 0)
- * Door 0: Right Edge (Between Face 0 and 1)
- * Door 1: Bottom-Right Vertex
- * Door 2: Bottom Edge
- * Door 3: Bottom-Left Vertex
- * Door 4: Left Edge
+ * Top view of the prism for the table's "Target door" cell, drawn with face D0
+ * at the bottom (towards the viewer), so D1 is the left edge and D2 the right
+ * edge, as in the game. spawn_pyramid_base() puts door i at 60°·i + 150°
+ * (after the 30° offset) and face k's centre at 90° + 120°·k, so odd doors are
+ * face centres and even doors are corners:
+ * Door 0: corner D0/D1 (bottom-left)    Door 1: centre of D1 (left edge)
+ * Door 2: corner D1/D2 (top)            Door 3: centre of D2 (right edge)
+ * Door 4: corner D2/D0 (bottom-right)   Door 5: centre of D0 (bottom edge)
  */
 function getDoorStyle(doorIdx) {
   const coords = [
-    { x: '18px',  y: '26px' },   // Door 0 (Bottom-Right Vertex)
-    { x: '9px',   y: '15px' },   // Door 1 (Mid-Right Edge)
-    { x: '0px',   y: '0px' },    // Door 2 (Top Vertex)
-    { x: '-9px',  y: '15px' },   // Door 3 (Mid-Left Edge)
-    { x: '-18px', y: '26px' },   // Door 4 (Bottom-Left Vertex)
-    { x: '0px',   y: '26px' },   // Door 5 (Bottom-Mid Edge)
+    { x: '-18px', y: '26px' },   // Door 0 (bottom-left corner, D0/D1)
+    { x: '-9px',  y: '15px' },   // Door 1 (left edge, D1)
+    { x: '0px',   y: '0px' },    // Door 2 (top corner, D1/D2)
+    { x: '9px',   y: '15px' },   // Door 3 (right edge, D2)
+    { x: '18px',  y: '26px' },   // Door 4 (bottom-right corner, D2/D0)
+    { x: '0px',   y: '26px' },   // Door 5 (bottom edge, D0)
   ];
   const pos = coords[doorIdx] || { x: '0px', y: '15px' };
   return `left: ${pos.x}; top: ${pos.y};`;
@@ -1416,7 +1418,8 @@ function renderPreviewReward(targetDoor) {
   const door = Math.max(0, Math.min(N_DOORS - 1, Math.round(Number(targetDoor) || 0)));
   // spawn_pyramid_base() places door i at the midpoint of the two vertices
   // starting at orientation + 90°. The preview prism includes the game's 30°
-  // orientation offset, giving side-centre angles 150°, 210°, …, 90°.
+  // orientation offset, giving side-centre angles 150°, 210°, …, 90°. Face k
+  // sits at rotateY(-120°·k), so door 1 lands on D1, door 3 on D2, door 5 on D0.
   const doorAngle = door * (360 / N_DOORS) + 150;
   const markerRotation = 90 - doorAngle;
   return `<span class="preview-reward-marker" data-preview-reward-door="${door}"
@@ -1811,8 +1814,8 @@ function renderFaceRow(obj, ci, fi) {
       <div class="tri-mini">
         <div class="golden-dot" style="${getDoorStyle(obj.target_door)}"></div>
         <span class="tri-label" style="top: 30px; left: -5px; color: var(--accent);">D0</span>
-        <span class="tri-label" style="top: 5px; left: 10px;">D1</span>
-        <span class="tri-label" style="top: 5px; left: -18px;">D2</span>
+        <span class="tri-label" style="top: 5px; left: -18px;">D1</span>
+        <span class="tri-label" style="top: 5px; left: 10px;">D2</span>
       </div>
     </div>
   `;

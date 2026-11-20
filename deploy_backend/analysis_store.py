@@ -15,16 +15,11 @@ from pathlib import Path
 import re
 import sqlite3
 import threading
-import time
 import zlib
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import pandas as pd
-
-from deploy_backend.analysis import dataset, sampling
-
-FIGURES_KEPT = 40   # rendered figures cached in .explorer/catalog.sqlite3 (a few MB each)
+from deploy_backend.analysis import dataset
 
 
 class AnalysisStore:
@@ -46,8 +41,8 @@ class AnalysisStore:
             participant TEXT, started TEXT, payload TEXT, error TEXT)""")
         db.execute("CREATE INDEX IF NOT EXISTS by_session ON documents(session, path)")
         db.execute("CREATE TABLE IF NOT EXISTS builds (session TEXT PRIMARY KEY, stamp TEXT, result BLOB, error TEXT)")
-        db.execute("DROP TABLE IF EXISTS turns")   # thinned trajectories of an earlier version
-        db.execute("CREATE TABLE IF NOT EXISTS figures (key TEXT PRIMARY KEY, created REAL, png BLOB, notes TEXT)")
+        db.execute("DROP TABLE IF EXISTS figures")   # server-drawn PNGs of an earlier version
+        db.execute("CREATE TABLE IF NOT EXISTS turns (session TEXT PRIMARY KEY, stamp TEXT, result BLOB)")
         try:
             with db:
                 yield db
@@ -199,38 +194,30 @@ class AnalysisStore:
         return (hashlib.sha1("\n".join(f"{d['path']}:{d['stamp']}" for d in docs).encode()).hexdigest()
                 + ":" + session["label"] + ":v" + dataset.BUILD_VERSION)
 
-    def turn_figure(self, sessions, plot, name, participant=None, filters=None):
-        """PNG of a make_MAIN_sampling_figures.py figure for these sessions, drawn by the script
-        (deploy_backend/analysis/sampling.py), and notes on what could not be drawn. Cached until
-        a file of these sessions changes; the newest FIGURES_KEPT figures are kept."""
-        filters = filters or {}
+    def turns(self, sessions):
+        """How each trial's object was turned (make_MAIN_sampling_figures.trajectory()), thinned
+        for drawing: {"session|trial_run_counter": trajectory}. Read from the raw trial files on
+        first use and cached per session like the builds; sessions the script cannot analyse are
+        left out."""
         sessions = self._ordered(sessions)
-        results, errors = self._build(sessions)
-        built = [results[s] for s in sessions if s in results]
-        if not built:
-            raise ValueError("None of these sessions could be analysed.")
-        with self._connect() as db:
+        _, errors = self._build(sessions)
+        out = {}
+        with self.build_lock, self._connect() as db:
             known = {r["session"]: r for r in self._sessions(db)}
-            docs = {r["session"]: db.execute("SELECT path, stamp FROM documents WHERE session = ? AND kind IN ('trial', 'level') ORDER BY path",
-                                             (r["session"],)).fetchall() for r in built}
-            key = hashlib.sha1(json.dumps([sampling.VERSION, plot, name, participant, filters,
-                                           [self._stamp(docs[r["session"]], known[r["session"]]) for r in built]]).encode()).hexdigest()
-            cached = db.execute("SELECT png, notes FROM figures WHERE key = ?", (key,)).fetchone()
-        if cached:
-            return cached["png"], json.loads(cached["notes"])
-        trials, _ = dataset.assemble(built)
-        levels = {(r["pid"], int(level)): info for r in built for level, info in r["levels"].items()}
-        columns, rows, notes = dataset.figure_table(trials, levels)
-        T = sampling.apply_filters(pd.DataFrame(rows, columns=columns), **filters)
-        paths = {(r["session"], int(counter)): path for r in built
-                 for counter, path in dataset.session_trial_paths(self._dirs(docs[r["session"]])).items()}
-        D, missing = sampling.figure_input(T, levels, paths)
-        png = sampling.render(plot, D, name, participant)
-        notes = notes + missing + [f"{s}: not analysed ({e})" for s, e in errors.items()]
-        with self._connect() as db:
-            db.execute("INSERT OR REPLACE INTO figures VALUES (?, ?, ?, ?)", (key, time.time(), png, json.dumps(notes)))
-            db.execute("DELETE FROM figures WHERE key NOT IN (SELECT key FROM figures ORDER BY created DESC LIMIT ?)", (FIGURES_KEPT,))
-        return png, notes
+            for session in sessions:
+                if session in errors or session not in known:
+                    continue
+                docs = db.execute("SELECT path, stamp FROM documents WHERE session = ? AND kind IN ('trial', 'level') ORDER BY path",
+                                  (session,)).fetchall()
+                stamp = "turns2:" + self._stamp(docs, known[session])
+                cached = db.execute("SELECT stamp, result FROM turns WHERE session = ?", (session,)).fetchone()
+                if cached and cached["stamp"] == stamp:
+                    result = json.loads(zlib.decompress(cached["result"]))
+                else:
+                    result = dataset.session_turns(self._dirs(docs))
+                    db.execute("INSERT OR REPLACE INTO turns VALUES (?, ?, ?)", (session, stamp, zlib.compress(dataset.dumps(result).encode())))
+                out.update({f"{session}|{k}": v for k, v in result.items()})
+        return {"turns": out}
 
     def _dirs(self, docs):
         """The folders holding these files of one session (several when it crosses midnight)."""

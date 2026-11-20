@@ -134,11 +134,11 @@ figures are drawn as `make_MAIN_figures.py` draws them: **Mistakes per level**,
 **Mistakes per object + first checks** and the **Object timeline**. Further views:
 trials per level, first check on first sighting, duration, chain progression,
 custom scatter, distributions and mean heart rate. **Rotation Strategy** (how the
-objects were turned) shows the figures of `make_MAIN_sampling_figures.py`, drawn on the server by the
-script itself (300 dpi PNG; click to open full size, **Download PNG** saves it):
-one participant (every trial as a spiral, rotated so the reward points up), the
-group as object × round cells, and participants × levels. The name in their title
-is the group name in compare mode, otherwise "Selection". Where a plot has a fixed axis, the X / Y selects show its name. **Compare two groups** shows panels A and B with their
+objects were turned) shows the figures of `make_MAIN_sampling_figures.py`, drawn in
+the browser like the other plots: one participant (every trial as a spiral, rotated
+so the reward points up), the group as object × round cells, and participants ×
+levels. The name in their title is the group name in compare mode, otherwise
+"Selection". Where a plot has a fixed axis, the X / Y selects show its name. **Compare two groups** shows panels A and B with their
 own names (e.g. pilot_Gymer and kjpp) on a shared y axis; tick sessions into each
 group (they stay in their group through any filter change until unticked). The page is white like the figures; **Dark page** switches it.
 
@@ -163,23 +163,27 @@ All numbers come from the analysis team's scripts in `deploy_backend/analysis/`:
 - Congruency is the script's `features_congruent` (colour rule vs. shape rule);
   nothing has to be labelled by hand.
 - A participant with several sessions appears once per session (`name #1`, `#2`).
-- `make_MAIN_figures.py` is kept unchanged.
-  `sampling.py` replaces only the sampling script's `load()` (which reads
-  `<project>/out_rebuilt` and `<project>/data`): it gives the script's drawing
-  functions the table above, the level status and the script's `trajectory()` of
-  every trial file. The PNGs are cached in the same database (the newest 40)
-  until a file of those sessions changes. Changing what a session's tables contain
-  means bumping `BUILD_VERSION` in `dataset.py`, so cached sessions are rebuilt. To update the figures, replace the
-  script file. The Docker image installs matplotlib and Liberation Sans (Arial's
-  metrics; the script asks for Arial).
+- Rotation Strategy: the server sends each trial's `trajectory()` of
+  `make_MAIN_sampling_figures.py` (a point every 3° of turning, every check, every
+  change of direction), cached per session. `admin_analysis.js` ports the script's
+  three drawing functions: the same figure size in inches, every size in points
+  (1 pt = plot width / (inches × 72) px), the axes placed as matplotlib's
+  `tight_layout` / `subplots_adjust` with the equal aspect, Arial's text metrics,
+  matplotlib's legend layout and marker shapes, strokes in time order. Lines and
+  markers keep their size relative to the data when zooming. The scripts
+  (`make_MAIN_figures.py`, `make_MAIN_sampling_figures.py`) are kept next to
+  `build_dataset.py` as the reference; the tests check the server's trajectories
+  against the script. Changing the drawing in the script means changing the port.
+- Changing what a session's tables contain means bumping `BUILD_VERSION` in
+  `dataset.py`, so cached sessions are rebuilt.
 
 **Download parsed tables** (explorer) and the **Include parsed tables**
 checkbox in the data browser's folder download give `trials.csv` and
 `positions.csv` exactly as `build_dataset.py` writes them (ids are relative to
 the sessions included, as when running the script on one project folder).
 
-`/admin/analysis/catalog`, `/admin/analysis/data`, `/admin/analysis/turn_figure` and
-`/admin/analysis/tables` require the admin or viewer role. The server needs numpy, pandas and matplotlib. The only HR plot is
+`/admin/analysis/catalog`, `/admin/analysis/data`, `/admin/analysis/turns` and
+`/admin/analysis/tables` require the admin or viewer role. The server needs numpy and pandas. The only HR plot is
 mean heart rate per trial or level: valid readings within recorded trial
 boundaries (file membership for older logs; chest-strap readings without RR are
 dropped). No RR, HRV or waveform metrics; raw ECG/optical samples are never

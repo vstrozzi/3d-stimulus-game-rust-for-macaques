@@ -140,52 +140,36 @@ def test_bad_files_symlinks_and_midnight(tmp_path):
     assert any(e["path"].endswith("broken.json") for e in result["errors"])
 
 
-def test_turn_figures_are_drawn_by_the_sampling_script(tmp_path, monkeypatch):
-    """The script's own drawing functions get the store's table, level status and the script's
-    trajectory() of every trial; the PNG is cached until a file changes."""
-    from deploy_backend.analysis import sampling
+def test_turns_follow_the_sampling_script(tmp_path):
+    """make_MAIN_sampling_figures.py's trajectory(), thinned: every kept point is a frame of the
+    script's trajectory, every check is kept, directions follow turn_colours(); cached per session."""
+    import numpy as np
+    from deploy_backend.analysis import dataset
+    pytest.importorskip("matplotlib")
+    import sys
+    sys.path.append(str(Path(dataset.__file__).parent))     # the script imports build_dataset by file name
+    import make_MAIN_sampling_figures as S
     root = tmp_path / "logs"
     session(root, "2026-11-15", "Alice", "Alice_2026-11-15_10-00-00_aaaa", [0, 5], "2026-11-15T10:00:00Z")
-    session(root, "2026-11-15", "Bob", "Bob_2026-11-15_11-00-00_bbbb", [0], "2026-11-15T11:00:00Z")
     store = AnalysisStore(root)
     ids = [s["id"] for s in store.catalog()["sessions"]]
-    M, S = sampling.scripts()
-    seen = {}
-    for name in ("participant_figure", "group_cells_figure", "group_matrix_figure"):
-        real = getattr(S, name)
-
-        def spy(*args, real=real, name=name):
-            seen[name] = args[-2]                               # D, as the script's load() returns it
-            return real(*args)
-        monkeypatch.setattr(S, name, spy)
-    for plot in sampling.PLOTS:
-        png, notes = store.turn_figure(ids, plot, "kjpp", "Alice" if plot == "participant" else None)
-        assert png.startswith(b"\x89PNG") and notes == []
-    D = seen["group_cells_figure"]
-    assert len(D["T"]) == 12 and D["order"] == ["Alice", "Bob"] and D["stopped"] == {}
-    assert D["status"][("Alice", 5)] == "completed"
-    for r in D["T"].itertuples():                               # every trial: the script's trajectory() of its file
-        path = next(root.rglob(f"{r.participant_id}_level_{r.level_nr:03d}_*_run_{r.trial_run_counter:04d}_*.json"))
-        assert len(D["traj"][r.Index]["checks"]) == len(S.trajectory(path)["checks"]) == r.trial_run_counter % 3 + 1
-        assert r.slot == (r.object_type_nr, r.cong_key, r.object_id_order_by_type)
-    # Filters as in the explorer; cached; a changed file draws again.
-    store.turn_figure(ids, "matrix", "kjpp", filters={"levels": [5]})
-    assert set(seen["group_matrix_figure"]["T"].level_nr) == {5}
-    seen.clear()
-    store.turn_figure(ids, "cells", "kjpp")
-    assert seen == {}, "cached"
-    trial = next(root.rglob("Bob_level_000_*_run_0001_*.json"))
-    trial.write_text(json.dumps({**json.loads(trial.read_text()), "note": "changed"}))
-    store.catalog()                                             # the explorer's Refresh
-    store.turn_figure(ids, "cells", "kjpp")
-    assert "group_cells_figure" in seen, "drawn again after a change"
-    real_trajectory = S.trajectory
-    monkeypatch.setattr(S, "trajectory", lambda path: real_trajectory(path) if "run_0001" not in str(path) else {}["frames"])
-    png, notes = store.turn_figure(ids, "matrix", "other name")
-    assert png.startswith(b"\x89PNG") and len(seen["group_matrix_figure"]["T"]) == 10
-    assert len(notes) == 2 and all("trial 1: not drawn" in n for n in notes)
-    with pytest.raises(ValueError, match="participant"):
-        store.turn_figure(ids, "participant", "kjpp", "Nobody")
+    turns = store.turns(ids)["turns"]
+    assert sorted(turns) == sorted(f"{ids[0]}|{k}" for k in range(8))
+    for path in sorted(root.rglob("*_run_*.json")):
+        run = json.loads(path.read_text())["trial_run_counter"]
+        full, thin = S.trajectory(path), turns[f"{ids[0]}|{run}"]
+        assert len(thin["chk"]) == len(full["checks"]) == (run % 3) + 1
+        assert [k for _, _, k in thin["chk"]] == [{"ok": 0, "type_ok": 1, "wrong": 2}[k] for _, _, k in full["checks"]]
+        assert len(thin["dir"]) == len(thin["th"]) - 1 and thin["f"][0] == 0 and thin["f"][-1] == 1
+        assert all(np.isclose(full["th"], a, atol=6e-5).any() for a in thin["th"])
+        colours = S.turn_colours(full["th"])
+        assert set(thin["dir"]) == {"l"} and set(colours) == {S.LEFT_C}, "the fixture only presses rotate_left"
+        assert thin["door"] == json.loads(path.read_text())["trial_config"]["target_door"]
+    with store._connect() as db:
+        stamp = db.execute("SELECT stamp FROM turns").fetchone()["stamp"]
+    assert store.turns(ids)["turns"] == turns
+    with store._connect() as db:
+        assert db.execute("SELECT stamp FROM turns").fetchone()["stamp"] == stamp
 
 
 def test_any_reward_door_and_other_level_4_objects(tmp_path):
@@ -212,8 +196,8 @@ def test_any_reward_door_and_other_level_4_objects(tmp_path):
     shape_at = {(p["object_type"], p["position"]): p["shape"] for p in positions if p["position"] % 2}
     assert shape_at.get(("face", 3), 4) == 4, "door 3: the reward is face D2"
     assert all(shape_at[k] == v for k, v in {("face", 1): 6, ("face", 5): 5, ("corner", 1): 5, ("corner", 3): 4}.items() if k in shape_at)
-    png, notes = store.turn_figure(ids, "participant", "custom", "Cara")
-    assert png.startswith(b"\x89PNG") and notes == []
+    turns = store.turns(ids)["turns"]
+    assert len(turns) == 4 and {t["door"] for t in turns.values()} == {3, 4}
 
 
 def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
@@ -235,7 +219,7 @@ def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
         client.cookies.set("auth", server._signer.dumps({"role": "player"}))
         assert client.get("/admin/analysis/catalog").status_code == 403
         assert client.post("/admin/analysis/data", json={"sessions": []}).status_code == 403
-        assert client.post("/admin/analysis/turn_figure", json={"sessions": [], "plot": "cells"}).status_code == 403
+        assert client.post("/admin/analysis/turns", json={"sessions": []}).status_code == 403
         client.cookies.set("auth", server._signer.dumps({"role": "admin"}))
         session_id = client.get("/admin/analysis/catalog").json()["sessions"][0]["id"]
         assert len(client.post("/admin/analysis/data", json={"sessions": [session_id]}).json()["rows"]) == 4
@@ -244,12 +228,7 @@ def test_api_authentication_validation_and_download(tmp_path, monkeypatch):
         assert client.post("/admin/analysis/data", content="{").status_code == 400
         tables = zipfile.ZipFile(io.BytesIO(client.post("/admin/analysis/tables", json={"sessions": [session_id]}).content))
         assert sorted(tables.namelist()) == ["positions.csv", "trials.csv"]
-        figure = client.post("/admin/analysis/turn_figure", json={"sessions": [session_id], "plot": "cells", "name": "kjpp"})
-        assert figure.status_code == 200 and figure.content.startswith(b"\x89PNG") and json.loads(figure.headers["x-figure-notes"]) == []
-        for body in [{"sessions": [session_id], "plot": "bad"}, {"sessions": [session_id], "plot": "cells", "levels": ["1"]},
-                     {"sessions": [session_id], "plot": "cells", "kind": "x"}]:
-            assert client.post("/admin/analysis/turn_figure", json=body).status_code == 400
-        assert client.post("/admin/analysis/turn_figure", json={"sessions": [session_id], "plot": "participant", "participant": "Nobody"}).status_code == 400
+        assert len(client.post("/admin/analysis/turns", json={"sessions": [session_id]}).json()["turns"]) == 4
         assert ".explorer" not in client.get("/admin/list").json()["dirs"]
         plain = zipfile.ZipFile(io.BytesIO(client.get("/admin/zip").content)).namelist()
         assert not any(".explorer" in name or name.startswith("out_rebuilt/") for name in plain)
@@ -282,7 +261,7 @@ def test_viewer_reads_but_cannot_change(tmp_path, monkeypatch):
         session_id = client.get("/admin/analysis/catalog").json()["sessions"][0]["id"]
         assert len(client.post("/admin/analysis/data", json={"sessions": [session_id]}).json()["rows"]) == 4
         assert client.post("/admin/analysis/tables", json={"sessions": [session_id]}).status_code == 200
-        assert client.post("/admin/analysis/turn_figure", json={"sessions": [session_id], "plot": "matrix"}).status_code == 200
+        assert client.post("/admin/analysis/turns", json={"sessions": [session_id]}).status_code == 200
         assert client.get("/admin/list").json()["dirs"] == ["2026-11-16"]
         assert client.get("/admin/zip").status_code == 200
         assert client.get("/admin/trials/list").status_code == 200

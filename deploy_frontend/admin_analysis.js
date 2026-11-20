@@ -320,6 +320,384 @@
       note: `Each cell is one object in one round; each participant has a fixed position inside the cell (key on the right). The number in a dot is when the participant saw this object within the round (each object once per round). Row >${CAP}: participants (p.), trials (tr.) and % correct first checks after round ${CAP}; a square there marks a stop after round ${CAP} (number = round).` };
   }
 
+  // ── Rotation Strategy: make_MAIN_sampling_figures.py, drawn as matplotlib draws it ──
+  // The server sends each trial's trajectory (the script's trajectory(), a point every 3° of
+  // turning, every check). Each figure has the script's size in inches and every size is the
+  // script's, in points (1 pt = plot width / (inches · 72) px). The axes are placed as matplotlib
+  // places them (tight_layout or subplots_adjust, then the equal aspect centred in the box), and
+  // text is laid out with Arial's metrics. Lines and markers drawn in data coordinates keep their
+  // size relative to the data when zooming (fitDots in admin_explorer.js).
+  const LEFT_C = '#4d7fb3', RIGHT_C = '#cf8a55', KIND_COL = [GREEN, YELLOW, RED];   // check kinds: ok, type_ok, wrong
+  const MPL = {
+    light: { TEXT: '#000000', INK: '#222222', MUTED: '#6f6f6f', BG: '#ffffff', TILE: '#f1f1ee', CELL: '#f3f3f0', BLOCK: '#fafaf8',
+      BLOCK_EDGE: '#e4e4e0', SPOKE: '#d3d3ce', CORNER: '#c4c4bf', SEP_P: '#e2e2de', SEP_C: '#e6e6e2', NUM: '#9a9a96', AXIS: '#bdbdb8',
+      LIGHT: '#a3a39e', STOP: '#fbefc4', START: '#555555', LEG_DOT: '#a9a9a4', LEG_STAR: '#8f8f8f' },
+    dark: { TEXT: '#e6e6e6', INK: '#e6e6e6', MUTED: '#9a9a9a', BG: '#000000', TILE: '#1b1b1b', CELL: '#151515', BLOCK: '#0b0b0b',
+      BLOCK_EDGE: '#2a2a2a', SPOKE: '#3c3c3c', CORNER: '#555555', SEP_P: '#2a2a2a', SEP_C: '#2a2a2a', NUM: '#777777', AXIS: '#555555',
+      LIGHT: '#777777', STOP: '#4a3f12', START: '#aaaaaa', LEG_DOT: '#777777', LEG_STAR: '#999999' },
+  };
+  // Arial advance widths (1/1000 em) for ' '…'~'; bold is about 7 % wider. Line metrics of "lp" (matplotlib) and of the
+  // browser's text box (Plotly anchors annotations on it).
+  const ARIAL_W = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556,
+    278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667,
+    944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500,
+    278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
+  const OTHER_W = { '→': 1000, '✓': 750, '×': 584, '–': 556, '…': 1000 };
+  const ASC = 0.716, DESC = 0.21, BOX_DESC = 0.212, LINE = ASC + DESC;
+  const FONT = 'Arial, Helvetica, "Liberation Sans", sans-serif';
+  const SERIF_SPAN = n => `<span style="font-family:'DejaVu Serif','Bitstream Vera Serif',Georgia,serif">${n}</span>`;
+  const TYP = { 1: `(ty. ${SERIF_SPAN('I')})`, 2: `(ty. ${SERIF_SPAN('II')})` };   // M.TY: serif roman numerals
+  const PAD = 1.08 * 8;                                                          // tight_layout pad: 1.08 × font size (8 pt)
+  function textW(s, pt, bold = false) {
+    let w = 0;
+    for (const ch of String(s).replace(/<[^>]*>/g, '').replace(/&[a-z#0-9]+;/g, 'x')) {
+      const c = ch.codePointAt(0); w += c >= 32 && c <= 126 ? ARIAL_W[c - 32] : OTHER_W[ch] || 556;
+    }
+    return w / 1000 * pt * (bold ? 1.07 : 1);
+  }
+  const blockH = (n, size, ls) => LINE * size + (n - 1) * (ASC * ls + DESC) * size;   // height of n lines of text
+
+  /** A figure of wIn × hIn inches drawn `width` px wide. Positions are in points from the bottom left (paper). */
+  function mplFigure(wIn, hIn, width, theme) {
+    const W = wIn * 72, H = hIn * 72;
+    return { W, H, k: (width || 1200) / W, width: width || 1200, C: MPL[theme === 'dark' ? 'dark' : 'light'], annotations: [], shapes: [], layers: new Map() };
+  }
+  // ax.set_aspect('equal', adjustable='box'): the largest box with the data's aspect, centred (anchor 'C').
+  function aspectFit([x0, y0, x1, y1], xl, yl) {
+    const bw = x1 - x0, bh = y1 - y0, r = (yl[1] - yl[0]) / (xl[1] - xl[0]);
+    if (bh / bw > r) { const h = bw * r; return [x0, y0 + (bh - h) / 2, x1, y0 + (bh + h) / 2]; }
+    const w = bh / r; return [x0 + (bw - w) / 2, y0, x0 + (bw + w) / 2, y1];
+  }
+  // fig.tight_layout(rect) for one axes, as matplotlib does it (one pass): the decorations' extent around the axes drawn in
+  // the default subplot box (0.125, 0.11, 0.9, 0.88) sets the margins, then the equal aspect is applied in the new box.
+  function tightLayout(f, rect, xl, yl, decorations) {
+    const orig = [0.125 * f.W, 0.11 * f.H, 0.9 * f.W, 0.88 * f.H], act = aspectFit(orig, xl, yl), e = decorations(act);
+    const ml = Math.max(orig[0] - (act[0] - e.l), 0) + PAD, mr = Math.max(act[2] + e.r - orig[2], 0) + PAD;
+    const mb = Math.max(orig[1] - (act[1] - e.b), 0) + PAD, mt = Math.max(act[3] + e.t - orig[3], 0) + PAD;
+    return aspectFit([rect[0] * f.W + ml, rect[1] * f.H + mb, rect[2] * f.W - mr, rect[3] * f.H - mt], xl, yl);
+  }
+  // Text as matplotlib lays it out: one annotation per line, so the line pitch is matplotlib's (ascent · linespacing +
+  // descent) and va / ha are matplotlib's. x, y in points (paper) or data units (xref / yref 'x' / 'y').
+  function mtext(f, x, y, s, { size, color, bold = false, ha = 'left', va = 'baseline', ls = 1.2, xref = 'paper', yref = 'paper', angle = 0 }) {
+    const lines = String(s).split('\n'), n = lines.length, step = (ASC * ls + DESC) * size, height = blockH(n, size, ls);
+    const first = va === 'top' ? -ASC * size : va === 'bottom' ? DESC * size + (n - 1) * step
+      : va === 'center' ? height / 2 - ASC * size : va === 'center_baseline' ? -ASC * size / 2 : 0;
+    lines.forEach((line, i) => f.annotations.push({
+      x: xref === 'paper' ? x / f.W : x, y: yref === 'paper' ? y / f.H : y, xref, yref, showarrow: false, borderpad: 0, textangle: angle,
+      xanchor: ha, yanchor: angle ? 'middle' : 'bottom', yshift: angle ? 0 : (first - i * step - BOX_DESC * size) * f.k,
+      text: bold ? `<b>${line}</b>` : line, font: { family: FONT, size: size * f.k, color: color || f.C.TEXT }, captureevents: false }));
+  }
+  // matplotlib marker paths (unit size; scaled by 0.5 · ms), and the script's SHAPE_MK for the face shapes.
+  const ring = (n, a0 = Math.PI / 2, sx = 1, sy = 1, r = 1) => Array.from({ length: n }, (_, k) => [sx * r * Math.cos(a0 + 2 * Math.PI * k / n), sy * r * Math.sin(a0 + 2 * Math.PI * k / n)]);
+  const MARKERS = {
+    o: ring(32), s: [[-1, -1], [1, -1], [1, 1], [-1, 1]], '^': [[0, 1], [-1, -1], [1, -1]], p: ring(5), D: [[0, Math.SQRT2], [Math.SQRT2, 0], [0, -Math.SQRT2], [-Math.SQRT2, 0]],
+    '*': Array.from({ length: 10 }, (_, k) => { const r = k % 2 ? 0.381966 : 1, a = Math.PI / 2 + Math.PI * k / 5; return [r * Math.cos(a), r * Math.sin(a)]; }),
+    rect: [[-1, -0.45], [1, -0.45], [1, 0.45], [-1, 0.45]], oval: ring(40, 0, 1, 0.6), kite: [[0, 1], [0.6, 0.25], [0, -1], [-0.6, 0.25]],
+    trap: [[-1, -0.6], [1, -0.6], [0.5, 0.6], [-0.5, 0.6]], semi: Array.from({ length: 24 }, (_, k) => [Math.cos(Math.PI * k / 23), Math.sin(Math.PI * k / 23) - 0.4]),
+  };
+  const SHAPE_MK = { 0: ['o', 1.0], 1: ['s', 0.9], 2: ['*', 1.35], 3: ['^', 1.0], 4: ['rect', 1.05], 5: ['oval', 1.05], 6: ['p', 1.05], 7: ['kite', 1.1],
+    8: ['D', 0.85], 9: ['trap', 1.05], 10: ['semi', 1.05] };
+  const markerPoly = (code, cx, cy, ms) => MARKERS[code].map(([a, b]) => [cx + a * ms / 2, cy + b * ms / 2]);
+  // build_dataset.face_at_position(): the prism face at an odd position, for any reward door (face k is centred on door 2k - 1).
+  const FACE_ON_DOOR = { 5: 0, 1: 1, 3: 2 };
+  const faceAtPosition = (p, door) => FACE_ON_DOOR[(((door - (p - (door % 2 ? 3 : 0))) % 6) + 6) % 6];
+  // FancyBboxPatch "round,pad=0,rounding_size=r" and Rectangle, as polygons.
+  function roundBox(x0, y0, x1, y1, r) {
+    const pts = [], arc = (cx, cy, a0) => { for (let i = 0; i <= 6; i++) { const a = a0 + i * Math.PI / 12; pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]); } };
+    arc(x1 - r, y0 + r, -Math.PI / 2); arc(x1 - r, y1 - r, 0); arc(x0 + r, y1 - r, Math.PI / 2); arc(x0 + r, y0 + r, Math.PI);
+    return pts;
+  }
+  const box = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  // Drawing layers in data coordinates, drawn in zorder (then creation order): fills, lines (lw in pt), markers (ms, mew in pt).
+  function layer(f, key, spec) { if (!f.layers.has(key)) f.layers.set(key, { ...spec, x: [], y: [] }); return f.layers.get(key); }
+  function poly(l, pts, close = false) {
+    for (const [a, b] of pts) { l.x.push(a); l.y.push(b); }
+    if (close) { l.x.push(pts[0][0]); l.y.push(pts[0][1]); }
+    l.x.push(null); l.y.push(null);
+  }
+  const point = (l, a, b) => { l.x.push(a); l.y.push(b); };
+  let roundCaps = 0;
+  function layerTraces(f, dpp) {
+    return [...f.layers.values()].map((l, i) => [l, i]).sort((a, b) => a[0].z - b[0].z || a[1] - b[1]).map(([l]) => l.kind === 'fill'
+      ? { type: 'scatter', mode: 'lines', x: l.x, y: l.y, fill: 'toself', fillcolor: l.color, line: { width: 0 }, opacity: l.alpha ?? 1, hoverinfo: 'skip', showlegend: false }
+      : l.kind === 'line'
+        ? { type: 'scatter', mode: 'lines', x: l.x, y: l.y, line: { color: l.color, width: l.lw * f.k }, opacity: l.alpha ?? 1, meta: 'mline', fitw: l.lw * dpp, hoverinfo: 'skip', showlegend: false,
+          ...(l.cap === 'round' ? { uid: 'mplround' + (++roundCaps) } : {}) }   // capstyle="round": admin_explorer.css
+        : { type: 'scatter', mode: 'markers', x: l.x, y: l.y, marker: { color: l.color, size: l.ms * f.k, line: { color: l.mec || l.color, width: (l.mew || 0) * f.k } },
+          opacity: l.alpha ?? 1, meta: 'mmark', fitms: l.ms * dpp, fitmew: (l.mew || 0) * dpp, hoverinfo: 'skip', showlegend: false });
+  }
+  // One trial: spiral stretches by turning direction, check dots; returns the start (inner end). The script draws the
+  // segments in time order (later ones cover earlier ones): stretch s of every trial goes in layer s, and trials never
+  // overlap, so drawing the layers in order of s reproduces it.
+  function spiral(f, sp, tr, cx, cy, rIn, rOut) {
+    const P = tr.th.map((th, i) => { const r = rIn + (rOut - rIn) * tr.f[i], a = Math.PI / 2 - th; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; });
+    for (let i = 0, s = 0; i < P.length - 1; s++) {         // one polyline per stretch of the same direction
+      let j = i; while (j + 1 < P.length - 1 && tr.dir[j + 1] === tr.dir[i]) j++;
+      const d = tr.dir[i];
+      poly(layer(f, `spiral${s}${d}`, { kind: 'line', color: d === 'l' ? LEFT_C : RIGHT_C, lw: sp.lw, cap: sp.cap, z: sp.z + s * 1e-4 + (d === 'r' ? 5e-5 : 0) }), P.slice(i, j + 2));
+      i = j + 1;
+    }
+    for (const [th, fr, kind] of tr.chk) { const r = rIn + (rOut - rIn) * fr, a = Math.PI / 2 - th; point(f.layers.get(sp.dots[kind]), cx + r * Math.cos(a), cy + r * Math.sin(a)); }
+    return P[0] || [cx, cy];
+  }
+  // Legends (frameon=False), matplotlib's box model: borderaxespad 0.5, borderpad 0.4, handlelength 2 (em); columns as
+  // np.array_split; each row is the text's height (ascent + descent of "lp"), rows labelspacing apart; handles at 0.35 em.
+  function legendColumns(entries, ncol) {
+    const cols = [], base = Math.floor(entries.length / ncol), extra = entries.length % ncol;
+    for (let c = 0, i = 0; c < ncol; c++) { const n = base + (c < extra ? 1 : 0); if (n) cols.push(entries.slice(i, i + n)); i += n; }
+    return cols;
+  }
+  function legendSize(entries, { size, ncol = 1, handletextpad = 0.8, columnspacing = 2, labelspacing = 0.5 }) {
+    const cols = legendColumns(entries, ncol), em = size, rows = Math.max(...cols.map(c => c.length));
+    const widths = cols.map(c => Math.max(...c.map(e => (2 + handletextpad) * em + textW(e.label, size))));
+    return { w: 0.8 * em + widths.reduce((a, b) => a + b, 0) + (cols.length - 1) * columnspacing * em, h: 0.8 * em + rows * LINE * em + (rows - 1) * labelspacing * em, widths };
+  }
+  function mplLegend(f, entries, x, y, opts) {
+    const { size, ncol = 1, handletextpad = 0.8, columnspacing = 2, labelspacing = 0.5 } = opts, em = size, { widths } = legendSize(entries, opts);
+    let cx = x + 0.9 * em;
+    legendColumns(entries, ncol).forEach((col, c) => {
+      col.forEach((e, i) => {
+        const base = y - 0.9 * em - ASC * em - i * (LINE + labelspacing) * em;
+        legendHandle(f, e, cx, base + 0.35 * em, em);
+        mtext(f, cx + (2 + handletextpad) * em, base, e.label, { size });
+      });
+      cx += widths[c] + columnspacing * em;
+    });
+  }
+  const pshape = (f, s) => f.shapes.push({ xref: 'paper', yref: 'paper', layer: 'above', ...s });
+  function legendHandle(f, h, x, y, em) {                     // HandlerLine2D: the line over the handle, the marker in its middle
+    if (h.lw) pshape(f, { type: 'line', x0: (x - h.lw / 2) / f.W, x1: (x + 2 * em + h.lw / 2) / f.W, y0: y / f.H, y1: y / f.H, line: { color: h.color, width: h.lw * f.k } });
+    if (!h.marker) return;
+    const mx = x + em;
+    if (h.marker === '2') {                                   // marker "$2$": the glyph's larger side is ms, edge = face colour
+      f.annotations.push({ x: mx / f.W, y: y / f.H, xref: 'paper', yref: 'paper', showarrow: false, borderpad: 0, xanchor: 'center', yanchor: 'middle',
+        text: '<b>2</b>', font: { family: FONT, size: h.ms / 0.716 * f.k, color: h.color }, captureevents: false });
+      return;
+    }
+    const fill = h.mfc === 'none' ? 'rgba(0,0,0,0)' : h.mfc, edge = h.mec === 'none' ? 0 : (h.mew ?? 1);
+    const path = markerPoly(h.marker, mx, y, h.ms).map(([a, b], i) => `${i ? 'L' : 'M'}${a / f.W},${b / f.H}`).join(' ') + ' Z';
+    pshape(f, { type: 'path', path, fillcolor: fill, opacity: h.alpha ?? 1, line: { color: edge ? h.mec : 'rgba(0,0,0,0)', width: edge * f.k } });
+  }
+  // The script's legend_core(lw, ms): Line2D handles take mec = colour and mew = 1 unless set.
+  const legendCore = (C, lw = 1.2, ms = 3) => [
+    { label: 'Turning left', lw, color: LEFT_C }, { label: 'Turning right', lw, color: RIGHT_C }, { label: 'Rewarded direction (up)', lw: 1.0, color: GREEN },
+    ...['Check correct', 'Wrong position, right kind', 'Wrong kind'].map((label, i) => ({ label, marker: 'o', ms, mfc: KIND_COL[i], mec: KIND_COL[i] })),
+    { label: 'Chain completed', marker: 's', ms: 6, mfc: 'none', mec: C.INK, mew: 0.35 },
+    { label: 'Last trial (time limit)', marker: 's', ms: 6, mfc: C.STOP, mec: C.STOP }];
+  const needTurns = d => { if (!d.turns && d.T.length) throw new Error('The turning data is not loaded yet. Press Plot again.'); return d.turns || {}; };
+  function lastStops(T) {                                    // the script's load(): last trial of a participant stopped by the time limit
+    const last = new Map(); for (const t of T) { const l = last.get(t.participant_id); if (!l || t.trial_nr_global > l.trial_nr_global) last.set(t.participant_id, t); }
+    return new Map([...last].filter(([, r]) => !r.level_done));
+  }
+  const tileHover = t => `${escaped(t.participant_id)}<br>Level ${t.level_nr}, ${t.object_type} object, round ${t.y} (#${t.pos_in_round} in the round)<br>${t.wrong} mistakes · ${(+t.clock__trial_duration || 0).toFixed(1)} s`;
+  const hoverTrace = (pts, size, dpp, f) => ({ type: 'scatter', mode: 'markers', x: pts.map(p => p[0]), y: pts.map(p => p[1]), text: pts.map(p => p[2]),
+    marker: { size: size / dpp * f.k, opacity: 0, symbol: 'square' }, meta: 'mmark', fitms: size, fitmew: 0, hovertemplate: '%{text}<extra></extra>', showlegend: false });
+  const ytickW = (n, size) => Math.max(0, ...Array.from({ length: n }, (_, i) => textW(String(i + 1), size)));
+  const mplPanel = (f, ax, xl, yl, traces, rows, axes = {}) => ({
+    traces, rows, title: '', x: '', y: '', noSwap: true, mplWidth: f.width, aspect: f.H / f.W, margin: { t: 0, l: 0, r: 0, b: 0 }, fit: { step: 1 }, shapes: f.shapes,
+    layout: { annotations: f.annotations, showlegend: false, paper_bgcolor: f.C.BG, plot_bgcolor: f.C.BG, hovermode: 'closest' },
+    axis: { domain: [ax[0] / f.W, ax[2] / f.W], range: xl, showgrid: false, zeroline: false, showline: false, ticks: '', showticklabels: false, automargin: false, ...axes.x },
+    yaxis: { domain: [ax[1] / f.H, ax[3] / f.H], range: yl, showgrid: false, zeroline: false, showline: false, ticks: '', showticklabels: false, automargin: false, ...axes.y } });
+  const turnRows = T => T.map(({ slot, slotKey, id, ...t }) => t);
+
+  // 1. participant_figure(): one participant, every trial as a spiral, with spokes, faces, outlines and order numbers.
+  function turnParticipant(d, o) {
+    const turns = needTurns(d);
+    const pid = d.participants.includes(o.participant) ? o.participant : progressOrder(d.T)[0];
+    const T = d.T.filter(t => t.participant_id === pid).sort((a, b) => a.trial_nr_global - b.trial_nr_global);
+    if (!T.length) return { traces: [], rows: [], noSwap: true, title: 'No trials for this selection' };
+    const R_IN = 0.13, R_OUT = 0.335, R_POS = 0.40, HALF = 0.46, FACE_MS = 2.6, FAINT = 0.28;
+    const { slots, x, bounds, xmax } = timelineLayout(T), ymax = Math.max(...T.map(t => t.y));
+    const f = mplFigure(17, 1.9 + 0.5 * ymax, o.width, o.theme), C = f.C;
+    const xl = [-0.2, xmax + 0.2], yl = [0.45, ymax + 0.75], tickW = ytickW(ymax, 7), hasCong = slots.some(([L]) => L >= 5);
+    const legend = [
+      { label: 'Turning left (key)', lw: 1.3, color: LEFT_C }, { label: 'Turning right (key)', lw: 1.3, color: RIGHT_C },
+      { label: 'Start (inner end); outer end = last check', marker: 'o', ms: 3, mfc: C.START, mec: C.BG, mew: 0.3 },
+      { label: 'Rewarded position (always at the top)', lw: 1.0, color: GREEN },
+      { label: 'Other positions (dot = corner)', lw: 0.8, color: C.SPOKE, marker: 'o', ms: 1.8, mfc: C.LEG_DOT, mec: 'none' },
+      { label: 'Face: its shape in its colour (faint)', marker: '*', ms: 6.5, mfc: C.LEG_STAR, mec: 'none', alpha: FAINT + 0.15 },
+      ...['Check: correct', 'Check: wrong position, right kind', 'Check: wrong kind (corner vs. face)'].map((label, i) => ({ label, marker: 'o', ms: 5, mfc: KIND_COL[i], mec: C.BG })),
+      ...['Outline: first check correct', 'Outline: first check wrong position, right kind', 'Outline: first check wrong kind'].map((label, i) => ({ label, marker: 's', ms: 9, mfc: C.TILE, mec: KIND_COL[i], mew: 0.8 })),
+      { label: 'Outer black line: chain completed', marker: 's', ms: 10, mfc: 'none', mec: C.INK, mew: 0.85 },
+      { label: 'Last trial (time limit)', marker: 's', ms: 9, mfc: C.STOP, mec: 'none' },
+      { label: 'Order within the round', marker: '2', ms: 5, color: C.MUTED }];
+    const lopts = { size: 7.5, labelspacing: 0.9 }, lsize = legendSize(legend, lopts);
+    const ax = tightLayout(f, [0, 0.03, 1, 1], xl, yl, a => {
+      const w = a[2] - a[0], h = a[3] - a[1], ppd = w / (xl[1] - xl[0]);
+      return { l: 3 + 3.5 + tickW + 4 + LINE * 8, r: 0.005 * w + 0.5 * 7.5 + lsize.w,
+        b: Math.max(3 + blockH(2, 7, 1.25), hasCong ? 26 + LINE * 6.5 : 0, 0.5 * 7.5 + lsize.h - h),
+        t: Math.max(34 + ASC * 11, 0.03 * ppd + LINE * 8.5) };
+    });
+    const dpp = (xl[1] - xl[0]) / (ax[2] - ax[0]), mk = (key, spec) => layer(f, key, spec);
+    const sep = mk('sep', { kind: 'line', color: C.SEP_P, lw: 0.6, z: 0 });
+    for (const [, a] of bounds.slice(1)) poly(sep, [[a - 0.15, 0.5], [a - 0.15, ymax + 0.5]]);
+    const sp = { z: 3, lw: 1.15, cap: 'round', dots: [0, 1, 2].map(i => 'dot' + i) };
+    sp.dots.forEach((key, i) => mk(key, { kind: 'mark', color: KIND_COL[i], ms: 4, mec: C.BG, mew: 0.5, z: 9 }));
+    const stop = lastStops(T).get(pid), hover = [];
+    for (const t of T) {
+      const cx = x.get(t.level_nr + '/' + t.slotKey), cy = t.y, tr = turns[t.id];
+      const outline = t.noguess ? C.MUTED : t.ok ? GREEN : t.type_ok ? YELLOW : RED, tile = roundBox(cx - HALF, cy - HALF, cx + HALF, cy + HALF, 0.06);
+      poly(mk(stop && stop.id === t.id ? 'stop' : 'tile', { kind: 'fill', color: stop && stop.id === t.id ? C.STOP : C.TILE, z: 1 }), tile);
+      poly(mk('edge' + outline, { kind: 'line', color: outline, lw: 0.75, z: 1 }), tile, true);
+      if (t.completes) poly(mk('frame', { kind: 'line', color: C.INK, lw: 0.85, z: 1 }), roundBox(cx - HALF - 0.03, cy - HALF - 0.03, cx + HALF + 0.03, cy + HALF + 0.03, 0.08), true);
+      if (tr) {
+        const offset = tr.door % 2 ? 3 : 0;                   // theta = k·60° is position k (+3 for face objects)
+        for (let k = 0; k < 6; k++) {                          // spokes, faces (faint) and corners
+          const a = Math.PI / 2 - k * Math.PI / 3;
+          poly(mk(k ? 'spoke' : 'spoke0', k ? { kind: 'line', color: C.SPOKE, lw: 0.35, z: 2 } : { kind: 'line', color: GREEN, lw: 0.6, alpha: 0.7, z: 2 }),
+            [[cx, cy], [cx + R_OUT * Math.cos(a), cy + R_OUT * Math.sin(a)]]);
+          const p = (k + offset) % 6, mx = cx + R_POS * Math.cos(a), my = cy + R_POS * Math.sin(a);
+          if (p % 2 === 0) point(mk(k ? 'corner' : 'corner0', { kind: 'mark', color: k ? C.CORNER : GREEN, ms: 1.2, z: 2 }), mx, my);
+          else {
+            const face = faceAtPosition(p, tr.door), [code, sc] = SHAPE_MK[tr.shapes[face]] || SHAPE_MK[0], color = tr.faces[face] || C.MUTED;
+            poly(mk('face' + color, { kind: 'fill', color, alpha: FAINT, z: 2 }), markerPoly(code, mx, my, FACE_MS * sc * dpp));
+          }
+        }
+        const [sx, sy] = spiral(f, sp, tr, cx, cy, R_IN, R_OUT);
+        point(mk('start', { kind: 'mark', color: C.START, ms: 2.4, mec: C.BG, mew: 0.3, z: 4 }), sx, sy);
+      }
+      mtext(f, cx - 0.425, cy + 0.425, String(t.pos_in_round), { size: 5, color: C.NUM, va: 'top', xref: 'x', yref: 'y' });
+      hover.push([cx, cy, tileHover(t)]);
+    }
+    // axes: left spine and y ticks (MUTED), labels; x labels; congruency; level headers; title; legend; note
+    for (let v = 1; v <= ymax; v++) mtext(f, ax[0] - 6.5, v, String(v), { size: 7, color: C.INK, ha: 'right', va: 'center_baseline', yref: 'y' });
+    mtext(f, ax[0] - 6.5 - tickW - 4, (ax[1] + ax[3]) / 2, 'Round (= times the object was played in the level)', { size: 8, ha: 'right', angle: -90 });
+    for (const [L, s] of slots) {
+      const sx = x.get(L + '/' + s.join('|'));
+      mtext(f, sx, ax[1] - 3, (s[0] === 1 ? 'corner\n' : 'face\n') + TYP[s[0]], { size: 7, ha: 'center', va: 'top', ls: 1.25, xref: 'x' });
+      if (L >= 5) mtext(f, sx, ax[1] - 26, s[1] === 0 ? 'cong.' : 'incong.', { size: 6.5, color: C.MUTED, ha: 'center', va: 'top', xref: 'x' });
+    }
+    const done = new Map(T.map(t => [t.level_nr, t.level_done])), hdr = mk('hdr', { kind: 'line', color: C.MUTED, lw: 0.6, z: 5 });
+    for (const [L, a, b] of bounds) {
+      poly(hdr, [[a + 0.05, ymax + 0.62], [b - 0.05, ymax + 0.62]]);
+      mtext(f, (a + b) / 2, ax[1] + (ymax + 0.78 - yl[0]) / dpp, `Level ${L}` + (done.get(L) ? '' : ' (not finished)'), { size: 8.5, bold: true, ha: 'center', va: 'bottom', xref: 'x' });
+    }
+    mtext(f, ax[0], ax[3] + 34, `How the objects were turned, ${escaped(o.name || 'Selection')} participant ${escaped(short(pid))}`, { size: 11, bold: true });
+    mplLegend(f, legend, ax[2] + 0.005 * (ax[2] - ax[0]), ax[3], lopts);
+    mtext(f, 0.01 * f.W, 0.01 * f.H, 'Each cell is one trial, turned so that the rewarded position points up; the six spokes are the six positions (faces show their shape in their colour); left and right are as on the screen when the reward faces the participant (turning left runs clockwise). Radius = time within the trial, scaled per trial from start (inner end) to the last check (outer end).', { size: 6.5, color: C.MUTED });
+    const k = f.k;
+    return mplPanel(f, ax, xl, yl, [...layerTraces(f, dpp), hoverTrace(hover, 2 * HALF, dpp, f)],
+      T.map(t => ({ participant_id: t.participant_id, level_nr: t.level_nr, object_type: t.object_type, round: t.y, pos_in_round: t.pos_in_round, wrong: t.wrong,
+        ...(turns[t.id] ? { checks: turns[t.id].chk.length, duration_to_last_check: turns[t.id].dur } : {}) })),
+      { y: { showline: true, linecolor: C.MUTED, linewidth: 0.6 * k, ticks: 'outside', ticklen: 3 * k, tickwidth: 0.6 * k, tickcolor: C.MUTED, tickmode: 'array', tickvals: Array.from({ length: ymax }, (_, i) => i + 1) } });
+  }
+
+  // 2. group_cells_figure(): object × round cells, each participant at a fixed spot in the cell.
+  function turnCells(d, o) {
+    const turns = needTurns(d), TT = d.T, T = TT.filter(t => t.y <= CAP);
+    if (!T.length) return { traces: [], rows: [], noSwap: true };
+    const CELL2 = 0.94, { slots, x, bounds, xmax } = timelineLayout(TT);
+    const order = progressOrder(TT), g = Math.ceil(Math.sqrt(order.length)), step = CELL2 / g;
+    const spot = new Map(order.map((p, k) => [p, [k % g, Math.floor(k / g)]])), stopped = lastStops(TT);   // furthest first: bottom left, rows upwards
+    const rOut = 0.43 * step, rIn = 0.15 * step, ymax = Math.min(CAP, Math.max(...T.map(t => t.y)));
+    const top = ymax + (TT.some(t => t.y > CAP) ? 1.1 : 0.6), xl = [-0.2, xmax + 0.2], yl = [0.45, top];
+    const f = mplFigure(22, 1.6 + 22 * (ymax + 1.0) / (xmax + 2.2), o.width, o.theme), C = f.C;
+    const tickW = ytickW(ymax, 6.5), hasCong = slots.some(([L]) => L >= 5);
+    const ax = tightLayout(f, [0, 0.015, 1, 0.955], xl, yl, a => ({
+      l: 3 + 3.5 + tickW + 4 + LINE * 8, r: 0, b: Math.max(2 + blockH(2, 6.5, 1.2), hasCong ? 22 + LINE * 6 : 0),
+      t: 0.05 * (a[2] - a[0]) / (xl[1] - xl[0]) + LINE * 8 }));
+    const dpp = (xl[1] - xl[0]) / (ax[2] - ax[0]), mk = (key, spec) => layer(f, key, spec);
+    const sep = mk('sep', { kind: 'line', color: C.SEP_C, lw: 0.6, z: 0 });
+    for (const [, a] of bounds.slice(1)) poly(sep, [[a - 0.15, 0.5], [a - 0.15, ymax + 0.5]]);
+    const keyBg = mk('keybg', { kind: 'fill', color: C.CELL, z: 0.5 }), cellBg = mk('cell', { kind: 'fill', color: C.CELL, z: 1 });
+    for (const key of new Set(T.map(t => t.level_nr + '/' + t.slotKey + '/' + t.y))) {
+      const [L, s, y] = key.split('/'), cx = x.get(L + '/' + s);
+      poly(cellBg, roundBox(cx - CELL2 / 2, +y - CELL2 / 2, cx + CELL2 / 2, +y + CELL2 / 2, 0.04));
+    }
+    const spots = mk('spot', { kind: 'fill', color: C.BG, z: 2 }), stops = mk('stops', { kind: 'fill', color: C.STOP, z: 2 });
+    const ticks = mk('tick', { kind: 'line', color: GREEN, lw: 0.5, z: 3 });
+    const frames = mk('frame', { kind: 'line', color: C.INK, lw: 0.22, z: 5 });
+    const sp = { z: 4, lw: 0.6, dots: [0, 1, 2].map(i => 'dot' + i) };
+    sp.dots.forEach((key, i) => mk(key, { kind: 'mark', color: KIND_COL[i], ms: Math.sqrt(1.4), z: 6 }));   // scatter(s=1.4, lw=0)
+    const hover = [];
+    for (const t of T) {
+      const [i, j] = spot.get(t.participant_id), stop = stopped.get(t.participant_id);
+      const sx = x.get(t.level_nr + '/' + t.slotKey) - CELL2 / 2 + step * (i + 0.5), sy = t.y - CELL2 / 2 + step * (j + 0.5), h = step * 0.47;
+      poly(stop && stop.id === t.id ? stops : spots, box(sx - h, sy - h, sx + h, sy + h));
+      if (t.completes) poly(frames, box(sx - h, sy - h, sx + h, sy + h), true);
+      poly(ticks, [[sx, sy + rOut * 0.9], [sx, sy + rOut * 1.12]]);
+      if (turns[t.id]) spiral(f, sp, turns[t.id], sx, sy, rIn, rOut);
+      hover.push([sx, sy, tileHover(t)]);
+    }
+    for (const a of groupBy(TT.filter(t => t.y > CAP), t => t.level_nr + '/' + t.slotKey).values())
+      mtext(f, x.get(a[0].level_nr + '/' + a[0].slotKey), CAP + 0.8, `+${a.length} trials\nafter round ${CAP}`, { size: 4.5, color: C.MUTED, ha: 'center', va: 'center', ls: 1.1, xref: 'x', yref: 'y' });
+    for (let v = 1; v <= ymax; v++) mtext(f, ax[0] - 6.5, v, String(v), { size: 6.5, color: C.MUTED, ha: 'right', va: 'center_baseline', yref: 'y' });
+    mtext(f, ax[0] - 6.5 - tickW - 4, (ax[1] + ax[3]) / 2, 'Round', { size: 8, ha: 'right', angle: -90 });
+    for (const [L, s] of slots) {
+      const sx = x.get(L + '/' + s.join('|'));
+      mtext(f, sx, ax[1] - 2, (s[0] === 1 ? 'corner\n' : 'face\n') + TYP[s[0]], { size: 6.5, color: C.MUTED, ha: 'center', va: 'top', ls: 1.2, xref: 'x' });
+      if (L >= 5) mtext(f, sx, ax[1] - 22, s[1] === 0 ? 'cong.' : 'incong.', { size: 6, color: C.LIGHT, ha: 'center', va: 'top', xref: 'x' });
+    }
+    for (const [L, a, b] of bounds) mtext(f, (a + b) / 2, ax[1] + (top + 0.05 - yl[0]) / dpp, `Level ${L}`, { size: 8, bold: true, ha: 'center', va: 'bottom', xref: 'x' });
+    // key: participant spots, in the empty top of the last level
+    const ks = 0.42, Lk = bounds[bounds.length - 1], kx0 = (Lk[1] + Lk[2]) / 2 - g * ks / 2, ky0 = ymax - g * ks - 0.3;
+    poly(keyBg, roundBox(kx0, ky0, kx0 + g * ks, ky0 + g * ks, 0.08));
+    for (const [p, [i, j]] of spot) mtext(f, kx0 + ks * (i + 0.5), ky0 + ks * (j + 0.5), escaped(short(p).replace('pilot ', 'p')),
+      { size: 6, color: stopped.has(p) ? C.MUTED : C.INK, bold: !stopped.has(p), ha: 'center', va: 'center', xref: 'x', yref: 'y' });
+    mtext(f, kx0 + g * ks / 2, ky0 + g * ks + 0.08, 'Participant in each cell', { size: 6.5, ha: 'center', va: 'bottom', xref: 'x', yref: 'y' });
+    mtext(f, kx0 + g * ks / 2, ky0 - 0.08, 'bold = finished all levels', { size: 5.5, color: C.MUTED, ha: 'center', va: 'top', xref: 'x', yref: 'y' });
+    mtext(f, 0.01 * f.W, 0.98 * f.H, `How the objects were turned, ${escaped(o.name || 'Selection')} (n = ${order.length})`, { size: 10, bold: true, va: 'top' });
+    mplLegend(f, legendCore(C, 1.0), 0.01 * f.W, 0.975 * f.H, { size: 7, ncol: 8, columnspacing: 1.8, handletextpad: 0.5 });
+    mtext(f, 0.01 * f.W, 0.006 * f.H, 'Each cell is one object in one round; each participant has a fixed spot in it (key in the last level) showing how they turned the object in that trial, rotated so the rewarded position points up (left/right as on screen; turning left runs clockwise). Inner end = start, outer end = last check.', { size: 6, color: C.MUTED });
+    const k = f.k;
+    return mplPanel(f, ax, xl, yl, [...layerTraces(f, dpp), hoverTrace(hover, step * 0.94, dpp, f)], turnRows(T),
+      { y: { showline: true, linecolor: C.AXIS, linewidth: 0.6 * k, ticks: 'outside', ticklen: 3 * k, tickwidth: 0.6 * k, tickcolor: C.AXIS, tickmode: 'array', tickvals: Array.from({ length: ymax }, (_, i) => i + 1) } });
+  }
+
+  // 3. group_matrix_figure(): participants (rows, by progress) × levels (columns); rounds left to right, objects stacked.
+  function turnMatrix(d, o) {
+    const turns = needTurns(d), TT = d.T, T = TT.filter(t => t.y <= CAP);
+    if (!T.length) return { traces: [], rows: [], noSwap: true };
+    const BOX = 0.95, R_OUT = 0.42, R_IN = 0.15, GAP_L = 0.6, GAP_P = 0.35, NOBJ = 4;
+    const order = progressOrder(TT), stopped = lastStops(TT), levels = [...new Set(TT.map(t => t.level_nr))].sort((a, b) => a - b);
+    const slotsOf = new Map(levels.map(L => [L, [...new Map(TT.filter(t => t.level_nr === L).map(t => [t.slotKey, t.slot])).values()].sort(cmpTuple).map(s => s.join('|'))]));
+    const width = new Map(levels.map(L => [L, Math.min(CAP, Math.max(...TT.filter(t => t.level_nr === L).map(t => t.y)))]));
+    const lvlOff = new Map(); let pos = 0;
+    for (const L of levels) { lvlOff.set(L, pos); pos += width.get(L) + GAP_L; }
+    const lvlTotal = pos - GAP_L, pOff = new Map(order.map((p, i) => [p, i * (NOBJ + GAP_P)])), pTotal = order.length * (NOBJ + GAP_P) - GAP_P;
+    const cell = (L, s, y, pid) => { const ks = slotsOf.get(L), obj = (NOBJ - ks.length) / 2 + ks.indexOf(s); return [lvlOff.get(L) + (y - 1) + 0.5, pTotal - (pOff.get(pid) + obj + 0.5)]; };
+    const f = mplFigure(0.2 * lvlTotal + 2.2, 0.2 * pTotal + 1.6, o.width, o.theme), C = f.C;
+    const xl = [-5.0, lvlTotal + 0.8], yl = [-0.3, pTotal + 2.0];
+    const ax = aspectFit([0.005 * f.W, 0.25 * 72, 0.995 * f.W, f.H - 0.75 * 72], xl, yl);   // subplots_adjust(...)
+    const dpp = (xl[1] - xl[0]) / (ax[2] - ax[0]), mk = (key, spec) => layer(f, key, spec);
+    const blocks = mk('block', { kind: 'fill', color: C.BLOCK, z: 0 }), blockEdges = mk('blockEdge', { kind: 'line', color: C.BLOCK_EDGE, lw: 0.3, z: 0 });
+    const tiles = mk('tile', { kind: 'fill', color: C.TILE, z: 1 }), stops = mk('stops', { kind: 'fill', color: C.STOP, z: 1 });
+    const ticks = mk('tick', { kind: 'line', color: GREEN, lw: 0.45, z: 2 });
+    const frames = mk('frame', { kind: 'line', color: C.INK, lw: 0.25, z: 4 });
+    const sp = { z: 3, lw: 0.55, dots: [0, 1, 2].map(i => 'dot' + i) };
+    sp.dots.forEach((key, i) => mk(key, { kind: 'mark', color: KIND_COL[i], ms: Math.sqrt(1.3), z: 5 }));   // scatter(s=1.3, lw=0)
+    const hover = [];
+    for (const t of T) {
+      const [cx, cy] = cell(t.level_nr, t.slotKey, t.y, t.participant_id), h = BOX / 2, stop = stopped.get(t.participant_id);
+      poly(stop && stop.id === t.id ? stops : tiles, box(cx - h, cy - h, cx + h, cy + h));
+      if (t.completes) poly(frames, box(cx - h, cy - h, cx + h, cy + h), true);
+      poly(ticks, [[cx, cy + R_OUT * 0.92], [cx, cy + R_OUT * 1.12]]);
+      if (turns[t.id]) spiral(f, sp, turns[t.id], cx, cy, R_IN, R_OUT);
+      hover.push([cx, cy, tileHover(t)]);
+    }
+    for (const L of levels) for (const pid of order) {
+      const sel = TT.filter(t => t.participant_id === pid && t.level_nr === L);
+      if (!sel.length) continue;
+      const bx = lvlOff.get(L), by = pTotal - pOff.get(pid) - NOBJ, b = box(bx - 0.05, by - 0.05, bx + width.get(L) + 0.05, by + NOBJ + 0.05);
+      poly(blocks, b); poly(blockEdges, b, true);
+      const over = sel.filter(t => t.y > CAP).length;
+      if (over) mtext(f, bx + width.get(L) + 0.05, by + NOBJ / 2, `+${over}`, { size: 3.8, color: C.MUTED, va: 'center', xref: 'x', yref: 'y' });
+    }
+    for (const L of levels) {
+      mtext(f, lvlOff.get(L) + width.get(L) / 2, pTotal + 0.75, `Level ${L}`, { size: 7.5, bold: true, ha: 'center', va: 'bottom', xref: 'x', yref: 'y' });
+      mtext(f, lvlOff.get(L), pTotal + 0.15, 'round →', { size: 4.5, color: C.LIGHT, va: 'bottom', xref: 'x', yref: 'y' });
+    }
+    for (const p of order) {
+      const yc = pTotal - pOff.get(p) - NOBJ / 2;
+      mtext(f, -0.6, yc + 0.35, escaped(short(p)), { size: 7, bold: true, ha: 'right', va: 'center', xref: 'x', yref: 'y' });
+      mtext(f, -0.6, yc - 0.6, stopped.has(p) ? `time limit L${stopped.get(p).level_nr}` : '✓ all levels', { size: 4.8, color: C.MUTED, ha: 'right', va: 'center', xref: 'x', yref: 'y' });
+    }
+    mtext(f, 0.01 * f.W, f.H - 0.1 * 72, `How the objects were turned, ${escaped(o.name || 'Selection')} (n = ${order.length}): participants × levels`, { size: 10, bold: true, va: 'top' });
+    mplLegend(f, legendCore(C), 0.005 * f.W, f.H - 0.38 * 72, { size: 7, ncol: 8, columnspacing: 1.6, handletextpad: 0.5 });
+    mtext(f, 0.01 * f.W, 0.004 * f.H, `Each tile is one trial, rotated so the rewarded position points up; inner end = start, outer end = last check; left/right as on screen. Participants ordered by progress. Rounds 1–${CAP} shown (+n = later trials); objects stacked inside each band, top to bottom: corner ${TYP[1]} congruent, corner incongruent, face ${TYP[2]} congruent, face incongruent (Levels 0–4: no congruency).`, { size: 5.8, color: C.MUTED, va: 'bottom' });
+    return mplPanel(f, ax, xl, yl, [...layerTraces(f, dpp), hoverTrace(hover, BOX, dpp, f)], turnRows(T));
+  }
+
   // ── other views on the same table ──
   const LABELS = { y: 'Round (object presentation)', level_nr: 'Level', trial_nr_global: 'Trial number in session', chain__step: 'Chain step',
     clock__trial_duration: 'Trial duration (s)', wrong: 'Mistakes (wrong checks)', nr_attempts: 'Checks', object_rep_nr: 'Object repetition',
@@ -422,14 +800,21 @@
   }
 
   // ── figure ──
+  // Compare mode, one participant: the name of the group holding that participant's sessions.
+  function groupOf(d, o) {
+    if (!o.compare || !o.participant) return '';
+    const own = new Set(d.T.filter(t => t.participant_id === o.participant).map(t => t.session));
+    return ['A', 'B'].map(g => (o['group' + g] || []).some(s => own.has(s)) ? o['name' + g] || 'Group ' + g : '').find(Boolean) || '';
+  }
   function figure(dataset, options) {
     const d = filter(dataset, options);
-    const groups = options.compare
+    const groups = options.compare && options.plot !== 'turn_participant'
       ? ['A', 'B'].map(letter => ({ letter, name: options['name' + letter] || 'Group ' + letter, data: filter(d, { sessions: new Set(options['group' + letter] || []) }) }))
-      : [{ letter: '', name: options.name || 'Selection', data: d }];
+      : [{ letter: '', name: options.name || groupOf(d, options) || 'Selection', data: d }];
     // Same strip row spacing in both panels, as make_MAIN_figures.py.
     const o = { ...options, npmax: Math.max(1, ...groups.map(g => g.data.participants.length)) };
-    const make = g => {
+    const make = (g, name) => {
+      const o2 = { ...o, name };
       switch (o.plot) {
         case 'mistakes_level': case 'trials': return mistakesPerLevel(g, o);
         case 'mistakes_object': return mistakesPerObject(g, o);
@@ -440,17 +825,19 @@
         case 'scatter': return scatter(g, o);
         case 'histogram': return distribution(g, o);
         case 'hr_summary': return hrSummary(g, o);
-        // turn_*: drawn on the server by make_MAIN_sampling_figures.py (admin_explorer.js drawTurns)
+        case 'turn_participant': return turnParticipant(g, o2);   // the group name is in the script's title
+        case 'turn_cells': return turnCells(g, o2);
+        case 'turn_matrix': return turnMatrix(g, o2);
         default: throw new Error('Unknown plot');
       }
     };
-    const panels = groups.map(g => { const made = make(g.data); return { ...made, letter: g.letter, title: made.title || `${escaped(g.name)}  (n = ${g.data.participants.length})`,
+    const panels = groups.map(g => { const made = make(g.data, g.name); return { ...made, letter: g.letter, title: made.title ?? `${escaped(g.name)}  (n = ${g.data.participants.length})`,
       names: Object.fromEntries(g.data.participants.map(p => [label(p), p])) }; });   // shown name → full id, for hover
     if (o.compare && o.plot === 'mistakes_object') {                     // one legend, right of panel B
       panels[0].layout = { ...panels[0].layout, showlegend: false };
       panels[0].margin = { ...panels[0].margin, r: 20 };
     }
-    if (o.compare && o.plot === 'timeline') for (const p of panels) p.stacked = true;   // stacked, like the script's alternative
+    if (o.compare && ['timeline', 'turn_cells', 'turn_matrix'].includes(o.plot)) for (const p of panels) p.stacked = true;   // stacked, like the script's alternative
     if (o.compare && ['mistakes_level', 'trials', 'mistakes_object', 'hr_summary'].includes(o.plot)) {      // sharey=True
       const ends = sign => panels.flatMap(p => p.traces.filter(t => !t.yaxis || t.yaxis === 'y')
         .flatMap(t => (t.y || []).map((y, i) => finite(y) ? y + sign * (t.error_y?.array?.[i] || 0) : null))).filter(finite);

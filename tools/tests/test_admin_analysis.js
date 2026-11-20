@@ -106,8 +106,38 @@ assert.deepEqual(f.panels[0].yaxis.range, f.panels[1].yaxis.range);
 assert.equal(f.panels[0].layout.yaxis2.range[1], f.panels[1].layout.yaxis2.range[1]);
 assert.equal(f.panels[0].layout.showlegend, false, 'one legend, right of panel B');
 
-// How the objects were turned: drawn on the server by make_MAIN_sampling_figures.py, not here.
-assert.throws(() => A.figure(d, { ...base, plot: 'turn_cells' }), /Unknown plot/);
+// Rotation Strategy (make_MAIN_sampling_figures.py), from the server's thinned trajectories.
+d.turns = Object.fromEntries(d.T.map(t => [t.id, { th: [0.6, 0.3, 0.1, 0.3, 0], f: [0, 0.3, 0.6, 0.8, 1], dir: 'rrll', chk: [[0.3, 0.8, 1], [0, 1, 0]],
+  door: t.object_type === 'corner' ? 4 : 3, shapes: [2, 4, 10], faces: ['#ff0000', '#0000ff', '#00ff00'], dur: 3 }]));
+const texts = p => p.layout.annotations.map(a => a.text.replace(/<[^>]*>/g, ''));
+f = A.figure(d, { ...base, plot: 'turn_participant', participant: 'Bob', width: 1224 });
+let p = f.panels[0];
+assert.equal(f.panels.length, 1);
+assert.ok(texts(p).includes('How the objects were turned, Selection participant Bob'), 'the script\'s title');
+assert.equal(p.mplWidth, 1224);
+assert.equal(p.aspect, (1.9 + 0.5 * Math.max(...d.T.filter(t => t.participant_id === 'Bob').map(t => t.y))) / 17, 'figsize (17, 1.9 + 0.5 · ymax)');
+for (const label of ['Turning left (key)', 'Face: its shape in its colour (faint)', 'Outline: first check wrong kind', 'Order within the round', 'Level 5 (not finished)', 'Round (= times the object was played in the level)'])
+  assert.ok(texts(p).includes(label), label);
+const lefts = p.traces.filter(t => t.meta === 'mline' && t.line.color === '#4d7fb3');
+assert.equal(lefts.flatMap(t => t.x).filter(v => v === null).length, 2, 'Bob: one left-turn stretch per trial');
+assert.ok(lefts.every(t => Math.abs(t.line.width - 1.15) < 1e-9 && /^mplround/.test(t.uid)), 'lw 1.15 pt at 1 px per pt, round caps');
+const strokes = p.traces.filter(t => /^mplround/.test(t.uid)).map(t => t.line.color);
+assert.deepEqual(strokes, ['#cf8a55', '#4d7fb3'], 'strokes in time order: right first (dir "rrll"), then left on top');
+assert.equal(p.traces.filter(t => t.meta === 'mmark' && t.marker.color === '#f0a500')[0].x.length, 2, 'one yellow check per trial');
+const faces = p.traces.filter(t => t.fill === 'toself' && t.opacity === 0.28);
+assert.deepEqual(faces.map(t => t.fillcolor).sort(), ['#0000ff', '#00ff00', '#ff0000'], 'faint faces in their colours');
+assert.equal(A.figure(d, { ...base, plot: 'turn_participant', participant: 'Bob', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s'], nameB: 'kjpp' }).panels[0].layout.annotations
+  .some(a => a.text.includes('kjpp participant Bob')), true, 'compare: one participant, titled with its group');
+f = A.figure(d, { ...base, plot: 'turn_cells', width: 1584 });
+p = f.panels[0];
+assert.ok(texts(p).includes('How the objects were turned, Selection (n = 3)') && texts(p).includes('Participant in each cell'));
+assert.ok(texts(p).includes('p001'), 'key: kjpp_vrsafe_bl_pilot_001 → p001');
+assert.equal(p.traces.find(t => t.hovertemplate).x.length, 7, 'one spot per trial');
+f = A.figure(d, { ...base, plot: 'turn_matrix' });
+p = f.panels[0];
+assert.ok(texts(p).includes('time limit L5') && texts(p).includes('pilot 001'), 'Bob stopped in level 5; names as M.short()');
+assert.ok(A.figure(d, { ...base, plot: 'turn_matrix', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s'] }).panels.every(p => p.stacked));
+assert.throws(() => A.figure({ ...d, turns: undefined }, { ...base, plot: 'turn_cells' }), /not loaded/);
 
 // Distribution: the value is on x in a histogram, on y in a box plot (one box per colour group).
 f = A.figure(d, { ...base, plot: 'histogram', style: 'histogram', x: 'wrong' });
@@ -123,7 +153,7 @@ for (const plot of ['mistakes_level', 'trials', 'first_choice', 'hr_summary', 'd
 assert.match(A.PLOTS.turn_cells, /^Rotation Strategy/);
 
 // Every plot draws, exports rows and survives an empty selection.
-for (const plot of Object.keys(A.PLOTS).filter(p => !p.startsWith('turn_'))) {
+for (const plot of Object.keys(A.PLOTS)) {
   for (const o of [{ ...base, plot }, { ...base, plot, theme: 'dark', compare: true, groupA: ['Alice/s'], groupB: ['Bob/s'] }]) {
     const fig = A.figure(d, o);
     for (const panel of fig.panels) {

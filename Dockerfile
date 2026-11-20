@@ -1,10 +1,6 @@
 FROM python:3.12-slim
 WORKDIR /app
 
-# Liberation Sans has Arial's metrics: make_MAIN_sampling_figures.py asks for Arial.
-RUN apt-get update && apt-get install -y --no-install-recommends fonts-liberation \
-    && rm -rf /var/lib/apt/lists/*
-
 # Python deps first (layer-cached unless requirements change).
 COPY deploy_backend/requirements-server.txt ./deploy_backend/requirements-server.txt
 RUN pip install --no-cache-dir -r deploy_backend/requirements-server.txt

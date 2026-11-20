@@ -22,7 +22,6 @@ Run (local dev — http://localhost is a secure context, no TLS needed):
 Production puts Caddy in front for HTTPS (see Caddyfile).
 """
 import io
-import json
 import os
 import re
 import shutil
@@ -35,7 +34,6 @@ from fastapi import FastAPI, Form, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 from passlib.hash import argon2
-from deploy_backend.analysis import sampling
 from deploy_backend.analysis_store import AnalysisStore
 
 # ── Config (env) ────────────────────────────────────────────────────────────
@@ -70,7 +68,7 @@ _login_hits = defaultdict(deque)  # ip -> deque[timestamp]
 # Paths reachable without a valid cookie. Everything else is gated.
 _PUBLIC_PATHS = {"/login", "/favicon.ico"}
 # The only POSTs under /admin a viewer may make: they read data, never change it.
-_VIEWER_POSTS = {"/admin/analysis/data", "/admin/analysis/turn_figure", "/admin/analysis/tables"}
+_VIEWER_POSTS = {"/admin/analysis/data", "/admin/analysis/turns", "/admin/analysis/tables"}
 # Validates both the per-trial relpath and admin browser paths.
 _SAFE_REL = re.compile(r"^[A-Za-z0-9_\-/. ]*$")
 
@@ -253,30 +251,13 @@ async def analysis_data(request: Request):
     return await run_in_threadpool(analysis_store.data, sessions)
 
 
-@app.post("/admin/analysis/turn_figure")
-async def analysis_turn_figure(request: Request):
-    """One figure of make_MAIN_sampling_figures.py (how the objects were turned), drawn by the
-    script itself as a 300 dpi PNG. Notes on trials it could not draw are in X-Figure-Notes."""
+@app.post("/admin/analysis/turns")
+async def analysis_turns(request: Request):
+    """How the objects were turned in each trial (make_MAIN_sampling_figures.py), thinned for
+    drawing. Requested only by the Rotation Strategy plots."""
     from starlette.concurrency import run_in_threadpool
-    body = await _json_body(request)
-    sessions = await _session_selection(request, body)
-    plot, name, participant = body.get("plot"), body.get("name", ""), body.get("participant")
-    levels = body.get("levels") or []
-    filters = {"levels": levels, "kind": body.get("kind") or "", "congruency": body.get("congruency") or "",
-               "completion": body.get("completion") or ""}
-    if (plot not in sampling.PLOTS or not isinstance(name, str) or len(name) > 120
-            or (participant is not None and (not isinstance(participant, str) or len(participant) > 300))
-            or not isinstance(levels, list) or any(not isinstance(v, int) or isinstance(v, bool) for v in levels)
-            or filters["kind"] not in ("", "corner", "face")
-            or filters["congruency"] not in ("", "congruent", "incongruent", "no rule")
-            or filters["completion"] not in ("", "complete", "incomplete")):
-        raise HTTPException(400, "Invalid figure request")
-    try:
-        png, notes = await run_in_threadpool(analysis_store.turn_figure, sessions, plot, name, participant, filters)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    return Response(png, media_type="image/png", headers={
-        "Cache-Control": "no-store", "X-Figure-Notes": json.dumps(notes[:200], ensure_ascii=True)})
+    sessions = await _session_selection(request)
+    return await run_in_threadpool(analysis_store.turns, sessions)
 
 
 def _parsed_tables_zip(zf, sessions, prefix=""):

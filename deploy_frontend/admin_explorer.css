@@ -29,7 +29,6 @@ body.explorer-light { background: #fff; }
 #data-explorer option { padding: .2rem; }
 #data-explorer option:checked { background: var(--ex-selected); color: var(--ex-selected-text); }
 #data-explorer button { cursor: pointer; }
-#data-explorer a.button-link { color: var(--ex-field-text); background: var(--ex-field); border: 1px solid var(--ex-border); border-radius: 4px; padding: .45rem .6rem; text-decoration: none; }
 #data-explorer button:disabled { opacity: .5; cursor: default; }
 #data-explorer button.primary { background: var(--ex-primary); border-color: var(--ex-primary); color: var(--ex-primary-text); }
 #data-explorer label.check { flex-direction: row; align-items: center; min-width: auto; padding-bottom: .45rem; }
@@ -44,9 +43,9 @@ body.explorer-light { background: #fff; }
 #data-explorer .plot-panel { min-width: 0; }
 #data-explorer .plot { width: 100%; min-height: 300px; }
 #data-explorer .plot-tools { display: flex; gap: .5rem; margin: .3rem 0; }
-/* make_MAIN_sampling_figures.py PNGs: white like the script's figures, full size on click. */
-#data-explorer .plot-image { display: block; width: 100%; height: auto; background: #fff; cursor: zoom-in; }
-#data-explorer .plot-panel:fullscreen .plot-image { width: auto; max-width: none; }
+/* Rotation Strategy (matplotlib's look): round line joins; round caps where the script asks for them. */
+#data-explorer .plot.mpl path.js-line { stroke-linejoin: round; }
+#data-explorer .plot.mpl g[class*="tracemplround"] path.js-line { stroke-linecap: round; }
 #data-explorer .plot-panel:fullscreen { background: var(--ex-bg); padding: 1rem; overflow: auto; }
 #data-explorer .plot-panel:fullscreen .plot { height: 85vh; }
 #data-explorer table { border-collapse: collapse; font-size: .85rem; }
